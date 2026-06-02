@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    tools:showIn="@layout/activity_main">
+
+    <TextView
+        style="@style/DemoSectionTitle"
+        android:text="@string/demo_full_check_title" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/demo_full_check_description"
+        android:textColor="#3F4F4F"
+        android:textSize="14sp" />
+
+    <Button
+        android:id="@+id/runAllButton"
+        style="@style/DemoPrimaryButton"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="12dp"
+        android:text="@string/demo_run_all_button" />
+
+    <Button
+        android:id="@+id/copyAllReportButton"
+        style="@style/DemoSecondaryButton"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="8dp"
+        android:text="@string/demo_copy_all_report_button" />
+</LinearLayout>

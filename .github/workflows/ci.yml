@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v6.0.2
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5.2.0
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v6.1.0
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4.0.1
+
+      - name: Install Android SDK packages
+        run: sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Run library unit tests
+        run: ./gradlew :gson-safe-parser-core:testDebugUnitTest :gson-safe-parser-retrofit:testDebugUnitTest --rerun-tasks --warning-mode=fail
+
+      - name: Run demo unit tests
+        run: ./gradlew :demo-app:testDebugUnitTest --rerun-tasks --warning-mode=fail
+
+      - name: Run demo release unit tests
+        run: ./gradlew :demo-app:testReleaseUnitTest --rerun-tasks --warning-mode=fail
+
+      - name: Run Android release lint
+        run: ./gradlew :gson-safe-parser-core:lintRelease :gson-safe-parser-retrofit:lintRelease :demo-app:lintRelease --rerun-tasks --warning-mode=fail
+
+      - name: Assemble demo debug APK
+        run: ./gradlew :demo-app:assembleDebug --rerun-tasks --warning-mode=fail
+
+      - name: Assemble demo release APK
+        run: ./gradlew :demo-app:assembleRelease --rerun-tasks --warning-mode=fail
+
+      - name: Verify Maven local publication
+        run: ./gradlew publishToMavenLocal --rerun-tasks --warning-mode=fail
+
+      - name: Verify Maven Central release task graph
+        run: ./gradlew releaseToMavenCentral --dry-run --warning-mode=fail
+
+      - name: Verify Maven local publication artifacts
+        run: ./gradlew verifyMavenLocalPublicationArtifacts --warning-mode=fail

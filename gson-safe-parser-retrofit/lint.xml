@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<lint>
+    <!--
+        Retrofit and test dependency versions are pinned for the compatibility
+        test matrix. Upgrade them only with dedicated Retrofit compatibility
+        coverage and release notes.
+    -->
+    <issue
+        id="GradleDependency"
+        severity="ignore" />
+    <issue
+        id="NewerVersionAvailable"
+        severity="ignore" />
+</lint>

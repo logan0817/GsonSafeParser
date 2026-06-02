@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<lint>
+    <!--
+        demo 依赖版本跟 Retrofit 兼容层保持同一验证基线，避免示例升级到 Retrofit 3 后掩盖旧项目接入问题。
+        真正升级兼容层时，需要同步升级 gson-safe-parser-retrofit 的测试矩阵，而不是只升级 demo。
+    -->
+    <issue
+        id="GradleDependency"
+        severity="ignore" />
+    <!--
+        The demo UI is inflated through generated ViewBinding classes. Release
+        lint can still report the root layout graph as unused, so keep this
+        demo-only warning out of the publication gate.
+    -->
+    <issue
+        id="UnusedResources"
+        severity="ignore" />
+</lint>

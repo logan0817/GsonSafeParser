@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 按下状态用更深的颜色，真机点击时能看出按钮已经收到手势。 -->
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <corners android:radius="6dp" />
+            <solid android:color="#005858" />
+        </shape>
+    </item>
+
+    <!-- 禁用状态保留按钮轮廓，但降低对比度，避免误认为还能点击。 -->
+    <item android:state_enabled="false">
+        <shape android:shape="rectangle">
+            <corners android:radius="6dp" />
+            <solid android:color="#9AB8B8" />
+        </shape>
+    </item>
+
+    <!-- 默认主按钮颜色和主题色保持一致，用在运行、验证这类主动作上。 -->
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="6dp" />
+            <solid android:color="#006A6A" />
+        </shape>
+    </item>
+</selector>

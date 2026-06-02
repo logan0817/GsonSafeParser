@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 输入框最小高度：短 JSON 不会挤成一行，小白第一次打开也能看出这里支持多行编辑。 -->
+    <dimen name="demo_json_input_min_height">112dp</dimen>
+
+    <!-- 输入框最大高度：长接口返回在输入框内部滚动，不会把结果区顶到很下面。 -->
+    <dimen name="demo_json_input_max_height">220dp</dimen>
+
+    <!-- 普通输出区最大展示高度：主页面展示预览时保留更高的可见范围，减少频繁点开详情。 -->
+    <dimen name="demo_output_max_height">360dp</dimen>
+
+    <!-- 异常区最大展示高度：与普通输出区一起翻倍，长异常信息仍保持在可控范围内。 -->
+    <dimen name="demo_error_max_height">296dp</dimen>
+
+    <!-- 输出详情弹窗的正文高度：全文查看时只在弹窗内部滚动，保持和主页面相近的可视范围。 -->
+    <dimen name="demo_detail_dialog_height">360dp</dimen>
+</resources>

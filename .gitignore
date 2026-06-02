@@ -1,0 +1,70 @@
+# macOS 本地文件，不应该进入开源仓库。
+.DS_Store
+
+# Android Studio / IntelliJ 本地工程状态。
+# 这些文件包含窗口布局、索引缓存、设备选择等个人环境信息。
+.idea/
+*.iml
+
+# Gradle 和 Kotlin 本地缓存。
+# 构建时会自动生成，提交后会放大仓库体积，也容易产生无意义变更。
+.gradle/
+.kotlin/
+build/
+**/build/
+out/
+
+# Android 本地 SDK 配置。
+# local.properties 通常包含本机 Android SDK 路径，不能要求其他用户复用。
+local.properties
+
+# 本地环境变量和发布账号配置。
+# 这些文件通常包含仓库地址、账号、token 或机器私有参数。
+.env
+.env.*
+!.env.example
+*.local
+*.local.*
+signing.properties
+release.properties
+
+# Android 构建中间目录。
+.externalNativeBuild/
+.cxx/
+captures/
+
+# 构建产物和运行日志。
+*.apk
+*.aab
+*.ap_
+*.dex
+*.log
+*.hprof
+
+# 本地签名文件。
+# 允许开发者本机保留 signing/debugKey.jks 测试，但不能提交到开源仓库。
+signing/
+*.jks
+*.keystore
+*.p12
+*.pem
+private-key.asc
+
+# 本地沟通记录、外部文档导出和临时审查材料。
+# 正式文档统一放在 README、README_EN 和 docs/*.md，聊天记录或拖拽报告不进仓库。
+.obsidian/
+*.docx
+*.pages
+*.rtf
+Notes_*
+notes_*
+*_review_fixes.md
+*_review_notes.md
+open-source-review-fixes.md
+
+# 临时文件和编辑器备份。
+*.tmp
+*.temp
+*.bak
+*.orig
+*~

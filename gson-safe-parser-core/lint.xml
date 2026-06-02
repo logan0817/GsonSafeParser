@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<lint>
+    <!--
+        Version warnings are intentionally suppressed for release lint:
+        Gson, Kotlin, JUnit, Gradle, and org.json versions are pinned by the
+        compatibility matrix and publication tests. Upgrades should be handled
+        as explicit compatibility work, not as automatic release drift.
+    -->
+    <issue
+        id="AndroidGradlePluginVersion"
+        severity="ignore" />
+    <issue
+        id="GradleDependency"
+        severity="ignore" />
+    <issue
+        id="NewerVersionAvailable"
+        severity="ignore" />
+</lint>

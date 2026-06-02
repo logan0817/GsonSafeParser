@@ -1,0 +1,148 @@
+# Mismatch Capability Matrix
+
+[中文](../mismatch-capability-matrix.md)
+
+This matrix answers one question: when the backend JSON shape does not match the Android model, what does GsonSafeParser preserve, what does it report, and what is still delegated to Gson or the caller.
+
+## 1. Principles
+
+1. Field-level problems affect only the current field when the outer object can still continue parsing.
+2. Problems that cannot be isolated to a field are delegated back to native Gson adapters or thrown outward; syntax errors and unsafe-to-isolate failures such as `Error`, `ThreadDeath`, `LinkageError`, and `CancellationException` are not disguised as business defaults.
+3. Observable mismatches enter `SafeParserEvent`, and `parseSafe<T>()` can turn them into `contractReport()` with JSON path, expected shape, actual shape, fallback action, client impact, and backend fix suggestion.
+
+## 2. Default Capability Matrix
+
+Out-of-the-box defaults:
+
+| Default config expression | Meaning |
+| --- | --- |
+| `fallbackPolicy = FallbackPolicy.NullOnly` | Unexpected field shapes prefer `null` or constructed defaults. |
+| `primitiveParsingPolicy = PrimitiveParsingPolicy.DelegateToGson` | Primitive values delegate to native Gson adapters by default. |
+| `emptyResponsePolicy = EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly` | Empty Retrofit bodies return empty values only for `Unit` / `Void`. |
+| `useJdkUnsafe = false` | JDK Unsafe is not used to bypass constructors by default. |
+| `mapItemKeyPolicy = MapItemKeyPolicy.Hash` | Map item events emit stable hashes by default. |
+
+The "Default handling" rows below describe this config. Empty collections, empty maps, zero numbers, false booleans, and other legacy safe defaults are used only when callers explicitly choose `FallbackPolicy.Default` or `PrimitiveParsingPolicy.Safe`.
+
+Overview:
+
+| Type | Default handling | Main boundary |
+| --- | --- | --- |
+| Object field | Falls back for the current field and keeps the outer object parsing. | Root object mismatches cannot always be isolated at field level. |
+| Collection field | Whole-field mismatch returns `null` or keeps the constructed default. | One bad item inside the collection is skipped. |
+| Map field | Whole-field mismatch returns `null` or keeps the constructed default. | `[]` may be valid Gson complex Map key array-entry input. |
+| Primitive value | Delegates to native Gson adapters by default. | Safe primitive values require `PrimitiveParsingPolicy.Safe`. |
+| Kotlin defaults | Missing fields and recoverable mismatches keep defaults when possible. | Non-null required parameters without defaults fail hard. |
+| Empty Retrofit body | `Unit` returns `Unit`; common other targets return `null`. | HTTP status and business error codes are outside this library. |
+
+### 2.1 `data: User`
+<!-- capability-id: object-field-mismatch -->
+
+1. Backend returns: `[]`, `""`, `1`.
+2. Default handling: reads the field value as `null`; reflective field reading does not overwrite an already constructed field default with `null`.
+3. Evidence: `TypeMismatch`, `path=$.data`, `expectedJsonShape=JSON object`, `actualJsonShape=JSON array/string/number`.
+4. Boundary: root object mismatch usually returns `null`; unrecoverable exceptions are still thrown.
+
+### 2.2 `List<User>` / `Set<User>`
+<!-- capability-id: collection-field-mismatch -->
+
+1. Backend returns: `{}`, `""`, `false`.
+2. Default handling: whole-collection shape mismatches return `null`; reflective field reading does not overwrite an already constructed field default with `null`.
+3. Evidence: `TypeMismatch`, field path, and fallback action for the collection field.
+4. Boundary: one bad collection item is skipped without failing the whole collection.
+
+### 2.3 `Map<String, User>`
+<!-- capability-id: map-field-mismatch -->
+
+1. Backend returns: `""`, `false`, or bad key/value inside array-entry form.
+2. Default handling: whole-Map shape mismatches return `null`; reflective field reading does not overwrite an already constructed field default with `null`. Individual bad entries inside a Map are skipped.
+3. Evidence: `TypeMismatch`, field path, and a `sha256:` hashed `mapItemKey` for map item mismatches by default.
+4. Boundary: `[]` can be read as Gson's complex-map-key array-entry form; an empty array becomes an empty map and may not emit a mismatch event.
+
+### 2.4 `Int` / `Long` / `Short` / `Byte`
+<!-- capability-id: integer-field-mismatch -->
+
+1. Backend returns: `{}`, `[]`, invalid string, out-of-range number, or fractional number for integer fields.
+2. Default handling: field values delegate to native Gson adapters, and read failures keep the field default; root primitive values follow native Gson behavior.
+3. Evidence: `TypeMismatch`, field name, path, range reason, or rounding reason.
+4. Boundary: safe primitive values are used only with `PrimitiveParsingPolicy.Safe`.
+
+### 2.5 `BigDecimal` / `BigInteger`
+<!-- capability-id: big-number-mismatch -->
+
+1. Backend returns: `{}`, `[]`, invalid string, or fractional number for `BigInteger`.
+2. Default handling: field values delegate to native Gson adapters, and read failures keep the field default; root numeric values follow native Gson behavior.
+3. Evidence: `TypeMismatch`, with a reason explaining why the value cannot be read as the target type.
+4. Boundary: safe numeric defaults are used only with `PrimitiveParsingPolicy.Safe`; valid large integers keep exact precision and are not truncated.
+
+### 2.6 `Boolean`
+<!-- capability-id: boolean-field-mismatch -->
+
+1. Backend returns: `{}`, `[]`, invalid string.
+2. Default handling: field values delegate to native Gson adapters, and read failures keep the field default; root boolean values follow native Gson behavior.
+3. Evidence: `TypeMismatch`, field path, and actual token.
+4. Boundary: safe boolean values are used only with `PrimitiveParsingPolicy.Safe`; normal `"true"` / `"false"` values keep Gson-compatible parsing.
+
+### 2.7 `String`
+<!-- capability-id: string-field-mismatch -->
+
+1. Backend returns: `{}`, `[]`.
+2. Default handling: field values delegate to native Gson adapters, and read failures keep the field default; root string values follow native Gson behavior.
+3. Evidence: `TypeMismatch`, `expectedJsonShape=JSON string`.
+4. Boundary: number-to-string conversion remains Gson compatible.
+
+### 2.8 Kotlin data class defaults
+<!-- capability-id: kotlin-defaults -->
+
+1. Backend returns: missing field, field `null`, or unexpected field shape.
+2. Default handling: missing fields keep constructed defaults; explicit `null` is written only to nullable fields; field shape mismatches keep constructed defaults after read failures.
+3. Evidence: mismatch events and parsed value comparison can confirm this behavior.
+4. Boundary: A non-null constructor parameter without a default fails hard when it is missing, `null`, wrong-shaped, or an enum value is unknown.
+5. Boundary: if that required parameter is inside another required nested object without a default, the parent object also fails hard.
+6. Boundary: do not treat internal construction placeholders as business fallback values; that would hide an API contract problem.
+
+### 2.9 `JSONObject` / `JSONArray`
+<!-- capability-id: org-json-mismatch -->
+
+1. Backend returns: correct object or array shape.
+2. Default handling: reads through dedicated `org.json` adapters.
+3. Evidence: normal parsing does not emit mismatch events; `JSONObject` receiving an array or `JSONArray` receiving an object returns `null` and emits `TypeMismatch`, with field-level paths for model fields and `path=$` for root mismatches.
+4. Boundary: the `org.json` bridge first reads into `JsonElement` and then converts through `JSONObject` / `JSONArray`, so large fields pay one extra string-conversion cost.
+
+### 2.10 Retrofit empty body
+<!-- capability-id: retrofit-empty-response -->
+
+1. Backend returns: empty response body.
+2. Default handling: `Unit` returns `Unit`, while `Void` and normal model responses return `null`; default objects or Gson delegation require an explicit `EmptyResponsePolicy` change.
+3. Evidence: `EmptyResponse`, response type, and empty response policy.
+4. Boundary: HTTP status and business error codes are outside this library.
+
+### 2.11 Retrofit raw JSON capture
+<!-- capability-id: retrofit-raw-json-capture -->
+
+1. Backend returns: a body that is useful for diagnostics, or an explicitly enabled capture path sees an oversized or unknown-length body.
+2. Default handling: does not capture raw JSON by default and does not emit `RawJsonCaptureSkipped`; the response continues through the normal converter path.
+3. Evidence: After `captureRawJsonInCallbacks` is enabled explicitly, oversized bodies emit `RawJsonCaptureSkipped` with content length, max bytes, `skipReason`, and `captureSkipReason`.
+4. Boundary: reports do not print the raw body by default; mismatch events carry bounded raw JSON only in debug config or after capture is enabled manually.
+
+## 3. What Contract Reports Give Backend Owners
+
+```kotlin
+val result = GsonSafeParser.parseSafe<ApiResponse>("""{"code":200,"data":[]}""")
+println(result.contractReport().toBackendMarkdown())
+```
+
+The report turns "Android parsing failed" into a contract issue: `$.data` expected a JSON object but received a JSON array; GsonSafeParser skipped that field and preserved the outer object; the backend should return an object at `$.data` instead of an array.
+
+## 4. Rollout Strategy
+
+1. Use `SafeParserConfig.debug()` during integration to keep limited raw JSON and quickly locate backend payload drift.
+2. Use `SafeParserConfig.lowInterference()` during rollout to observe events with smaller behavior changes.
+3. Use `SafeParserConfig.production()` in production to disable raw JSON bodies and report only structured event and contract fields.
+
+## 5. Out of Scope
+
+1. JSON syntax errors are not field mismatches and are still thrown.
+2. Root-level parse failures cannot always be isolated to a field and still follow Gson boundaries.
+3. Business protocol errors, HTTP errors, signature failures, and semantic field errors are not judged by this library.
+4. Ordinary exceptions thrown by custom adapters become field-level events only when the read boundary can isolate them to the current field; unsafe-to-isolate failures such as `Error`, `ThreadDeath`, `LinkageError`, and `CancellationException` are still thrown.

@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <TextView
+        android:id="@+id/detailTitleView"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="#102020"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        tools:text="实际解析结果" />
+
+    <ScrollView
+        android:id="@+id/detailScrollView"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/demo_detail_dialog_height"
+        android:layout_marginTop="12dp"
+        android:background="#1E1E1E"
+        android:fillViewport="false"
+        android:overScrollMode="ifContentScrolls"
+        android:scrollbars="vertical">
+
+        <TextView
+            android:id="@+id/detailContentView"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:includeFontPadding="false"
+            android:padding="10dp"
+            android:textColor="#D7E7E7"
+            android:textIsSelectable="false"
+            android:textSize="13sp"
+            tools:text="{\n  &quot;code&quot;: 200\n}" />
+    </ScrollView>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:gravity="end"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/copySectionButton"
+            style="@style/DemoSecondaryButton"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:text="@string/demo_copy_section_button" />
+
+        <Button
+            android:id="@+id/closeDetailButton"
+            style="@style/DemoPrimaryButton"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:layout_marginStart="8dp"
+            android:text="@string/demo_close_button" />
+    </LinearLayout>
+</LinearLayout>

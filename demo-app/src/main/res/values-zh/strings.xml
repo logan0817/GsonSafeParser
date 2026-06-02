@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="demo_screen_title">GsonSafeParser 示例</string>
+    <string name="demo_screen_subtitle">先选测试场景，再运行当前场景的验证项。下面会统一展示输入、输出、事件和异常。</string>
+    <string name="demo_page_spinner_label">测试场景</string>
+    <string name="demo_page_spinner_prompt">选择测试场景</string>
+    <string name="demo_json_input_label">接口返回 JSON</string>
+    <string name="demo_json_input_hint">粘贴接口返回，或直接修改示例 JSON</string>
+    <string name="demo_output_preview_title">解析结果预览</string>
+    <string name="demo_output_preview_description">先看上面的输入和这里的解析结果是否对得上。事件、报告和异常留在下面的详情面板里看。</string>
+    <string name="demo_output_preview_placeholder">运行后这里会先显示简洁结果。</string>
+
+    <string name="demo_full_check_title">一键自检</string>
+    <string name="demo_full_check_description">第一次装到真机后建议先跑这里，快速确认示例 App 和库能力都能正常工作。</string>
+    <string name="demo_run_all_button">一键自检</string>
+    <string name="demo_copy_all_report_button">一键自检详细报告</string>
+
+    <string name="demo_case_spinner_label">选择测试用例</string>
+    <string name="demo_case_spinner_prompt">选择测试用例</string>
+    <string name="demo_run_case_button">运行此用例</string>
+    <string name="demo_reset_json_button">恢复 JSON</string>
+
+    <string name="demo_custom_json_title">接口 JSON 调试</string>
+    <string name="demo_custom_json_description">把真实接口返回粘进来，选择解析入口、Bean 类型和兜底策略，直接对比 SafeParser 和原生 Gson 的结果。</string>
+    <string name="demo_custom_entry_label">解析入口</string>
+    <string name="demo_custom_target_label">要解析成的类型</string>
+    <string name="demo_custom_policy_label">兜底策略</string>
+    <string name="demo_custom_selection_title">当前选择说明</string>
+    <string name="demo_custom_sample_button">填入示例</string>
+    <string name="demo_custom_validate_button">开始验证</string>
+
+    <string name="demo_result_title">本次验证结果</string>
+    <string name="demo_copy_result_button">复制当前面板内容</string>
+    <string name="demo_output_hint_button_desc">展开查看详情</string>
+    <string name="demo_status_title">运行结论</string>
+    <string name="demo_actual_title">实际解析结果</string>
+    <string name="demo_expected_title">期望表现</string>
+    <string name="demo_events_title">事件流</string>
+    <string name="demo_contract_report_title">契约报告</string>
+    <string name="demo_observer_report_title">日志回调异常报告</string>
+    <string name="demo_diagnostics_title">诊断信息</string>
+    <string name="demo_error_title">异常详情</string>
+
+    <string name="demo_page_quick_check_title">一键自检</string>
+    <string name="demo_page_quick_check_description">一次跑完内置用例，适合真机安装后先确认示例 App 和解析能力是否正常。</string>
+    <string name="demo_page_custom_json_title">接口 JSON 调试</string>
+    <string name="demo_page_custom_json_description">粘贴真实接口返回，选择接近的 Bean 类型和兜底策略，对比 SafeParser 与原生 Gson。</string>
+    <string name="demo_page_core_title">核心解析</string>
+    <string name="demo_page_core_description">验证对象错形、基础类型、集合、Map、Object 数字策略和兼容能力。</string>
+    <string name="demo_page_config_title">配置与接入</string>
+    <string name="demo_page_config_description">验证公开 API、Kotlin 写法、预设配置、GsonBuilder 配置透传、注解兼容和失败回退。</string>
+    <string name="demo_page_observability_title">可观测性</string>
+    <string name="demo_page_observability_description">验证错配事件、契约报告、日志回调异常隔离和低层事件桥接。</string>
+    <string name="demo_page_retrofit_title">Retrofit</string>
+    <string name="demo_page_retrofit_description">验证 Retrofit 空响应、rawJson 捕获、日志回调异常隔离和 Converter 委托。</string>
+
+    <string name="demo_action_run_full_check">一键自检</string>
+    <string name="demo_action_copy_report">复制一键自检详细报告</string>
+    <string name="demo_action_fill_sample">填入示例</string>
+    <string name="demo_action_verify_json">开始验证</string>
+    <string name="demo_action_copy_result">复制当前面板</string>
+    <string name="demo_action_run_case">运行此用例</string>
+    <string name="demo_action_restore_json">恢复 JSON</string>
+
+    <string name="demo_status_pass">通过</string>
+    <string name="demo_status_fail">失败</string>
+    <string name="demo_status_pending">尚未运行</string>
+    <string name="demo_no_exception">无未捕获运行异常；场景内捕获异常请看解析输出。</string>
+    <string name="demo_after_run_placeholder">点击“运行此用例”后会在这里展示解析结果。</string>
+    <string name="demo_run_after_placeholder">运行后展示。</string>
+    <string name="demo_full_check_expected">点击“一键自检”后，内置用例应该全部通过。</string>
+    <string name="demo_full_check_actual">这个场景不需要选择用例，也不需要手动输入 JSON。</string>
+    <string name="demo_no_cases_expected">当前场景没有固定用例。</string>
+    <string name="demo_no_cases_actual">请选择其他测试场景。</string>
+    <string name="demo_full_check_events">一键自检只展示汇总；想看单个用例细节，请切到对应测试场景。</string>
+    <string name="demo_full_check_expected_short">所有内置用例都应通过。</string>
+    <string name="demo_no_failed_cases">无失败用例。</string>
+    <string name="demo_full_report_expected">所有内置用例都应通过，并且一键自检详细报告已复制。</string>
+    <string name="demo_full_report_events">每个用例的事件细节已经放在解析输出里。</string>
+
+    <string name="demo_page_info_format">当前场景：%1$s\n主要验证：%2$s\n常用操作：%3$s</string>
+    <string name="demo_case_info_format">测试用例：%1$s\n所属场景：%2$s\n覆盖入口：%3$s\n验证重点：%4$s</string>
+    <string name="demo_custom_selection_format">解析入口：%1$s\n%2$s\n\n要解析成的类型：%3$s\n%4$s\n\n兜底策略：%5$s\n%6$s</string>
+    <string name="demo_case_label_format">%1$d. %2$s</string>
+    <string name="demo_copy_result_toast">已复制当前面板内容</string>
+    <string name="demo_copy_all_toast">已复制一键自检详细报告，失败 %1$d 个</string>
+    <string name="demo_copy_section_button">复制内容</string>
+    <string name="demo_close_button">关闭</string>
+    <string name="demo_copy_section_toast">已复制当前内容</string>
+
+    <string name="demo_problem_section">问题描述：</string>
+    <string name="demo_output_section">实际解析结果：</string>
+    <string name="demo_explanation_section">结果解释：</string>
+    <string name="demo_expected_behavior_section">预期行为：</string>
+    <string name="demo_original_case_expected_section">用例原始预期：</string>
+    <string name="demo_default_value_note_section">默认值说明：</string>
+    <string name="demo_default_value_note">DemoModels.kt 里的很多字段都有默认值。SafeParser 兜底时会把这些默认值真实展示出来，所以预期里的 User() 等价于 id=0、name=anonymous；实际输出展开成完整 JSON 是正常表现。</string>
+    <string name="demo_default_value_note_format">%1$s %2$s</string>
+    <string name="demo_expected_fixed_case_english">SafeParser 应该能兜住当前错形或边界 JSON，不让示例 App 崩溃；请结合解析输出和事件流，判断兜底值是否符合你的业务。</string>
+    <string name="demo_input_json_section">接口返回 JSON：</string>
+    <string name="demo_actual_output_section">实际解析结果：</string>
+    <string name="demo_expected_output_section">期望表现：</string>
+    <string name="demo_events_section">事件流：</string>
+    <string name="demo_contract_section">契约报告：</string>
+    <string name="demo_observer_section">日志回调异常报告：</string>
+    <string name="demo_diagnostics_section">诊断信息：</string>
+    <string name="demo_error_section">异常详情：</string>
+
+    <string name="demo_custom_sample_actual_format">示例 JSON 已填入下方输入框，你可以直接改成自己的接口返回再验证。当前类型：%1$s</string>
+    <string name="demo_custom_sample_expected">修改 JSON 后点击“开始验证”，页面会对比 SafeParser 和原生 Gson 的处理结果。</string>
+    <string name="demo_custom_title_format">接口 JSON 调试 - %1$s</string>
+    <string name="demo_unknown_target">未知解析类型</string>
+
+    <string name="demo_entry_core_title">Core fromJson</string>
+    <string name="demo_entry_core_description">直接调用 GsonSafeParser.fromJson，适合模拟项目里普通 Gson 解析的接入方式。</string>
+    <string name="demo_entry_retrofit_title">Retrofit Converter</string>
+    <string name="demo_entry_retrofit_description">通过 GsonSafeConverterFactory 模拟 Retrofit 响应体转换，适合验证接口层接入后的真实表现。</string>
+
+    <string name="demo_target_api_response_title">ApiResponse&lt;User&gt;</string>
+    <string name="demo_target_api_response_description">最常见的接口外壳：code + 非空 data 对象，适合验证后端把 data 返回成 []、{}、null 的情况。</string>
+    <string name="demo_target_nullable_api_response_title">NullableApiResponse&lt;User&gt;</string>
+    <string name="demo_target_nullable_api_response_description">data 允许为 null 的接口外壳，适合验证 NullOnly 或低误伤策略是否更贴合你的业务。</string>
+    <string name="demo_target_list_user_title">List&lt;User&gt;</string>
+    <string name="demo_target_list_user_description">接口根节点就是用户列表，适合验证列表里夹杂坏数据时，是否能跳过单个元素继续解析。</string>
+    <string name="demo_target_collection_title">CollectionResponse</string>
+    <string name="demo_target_collection_description">同时包含 List、Set、Map 和数字列表，适合验证集合字段整体错形、单个元素错形和局部跳过。</string>
+    <string name="demo_target_nullable_collection_title">NullableCollectionMapResponse</string>
+    <string name="demo_target_nullable_collection_description">集合和 Map 都允许为 null，适合判断“返回 null”是否比“返回空集合”更符合业务语义。</string>
+    <string name="demo_target_primitive_title">PrimitiveResponse</string>
+    <string name="demo_target_primitive_description">包含 Int、Long、BigDecimal、Boolean 和 String，适合验证数字、布尔、字符串这些基础字段错形时的处理。</string>
+    <string name="demo_target_map_title">MapResponse</string>
+    <string name="demo_target_map_description">包含对象字段和强类型 Map，适合验证 Map 的 key、value 解析，以及局部坏数据跳过。</string>
+    <string name="demo_target_map_edge_title">MapEdgeResponse</string>
+    <string name="demo_target_map_edge_description">包含 Int key Map 和嵌套 Map，适合验证 key 不合法、mapItemKey 事件归因和数组形式 entry。</string>
+    <string name="demo_target_any_title">AnyResponse</string>
+    <string name="demo_target_any_description">包含 Any 和 Map&lt;String, Any&gt;，适合观察动态字段和 Object 数字策略是否符合项目预期。</string>
+    <string name="demo_target_enum_title">EnumContainerResponse</string>
+    <string name="demo_target_enum_description">同时包含 EnumSet 和 EnumMap，适合验证枚举容器在真实 App 环境下能否正常构造。</string>
+    <string name="demo_target_org_json_title">OrgJsonResponse</string>
+    <string name="demo_target_org_json_description">包含 JSONObject 和 JSONArray，适合验证项目里仍在使用 org.json 类型时的兼容情况。</string>
+
+    <string name="demo_policy_default_title">默认兜底</string>
+    <string name="demo_policy_default_description">使用 SafeParser 默认配置，适合先判断当前接口能不能直接接入。</string>
+    <string name="demo_policy_low_interference_title">低误伤模式</string>
+    <string name="demo_policy_low_interference_description">字段错形时尽量返回 null，基础类型交回 Gson，适合想先小流量观察的接入方式。</string>
+    <string name="demo_policy_debug_raw_json_title">联调日志模式</string>
+    <string name="demo_policy_debug_raw_json_description">开启 rawJson 捕获，适合联调时把后端原始返回和字段错配事件一起看。</string>
+    <string name="demo_policy_primitive_delegate_title">基础类型按 Gson 处理</string>
+    <string name="demo_policy_primitive_delegate_description">基础类型完全交给 Gson 原生 Adapter，适合确认哪些基础字段异常需要暴露出来。</string>
+    <string name="demo_policy_object_number_title">Object 数字按 Long/Double</string>
+    <string name="demo_policy_object_number_description">Any/Object 里的数字按 Gson LONG_OR_DOUBLE 处理，适合验证动态字段里的数字类型。</string>
+    <string name="demo_policy_raw_json_truncate_title">rawJson 截断测试</string>
+    <string name="demo_policy_raw_json_truncate_description">开启 rawJson 捕获，并把上限降到 10 字节，适合验证日志截断和 rawJsonTruncated 标记。</string>
+</resources>

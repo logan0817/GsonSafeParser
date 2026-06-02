@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <!-- 简单 launcher 图标：外层表示 JSON 容器，内层对勾表示安全解析通过。 -->
+    <path
+        android:fillColor="#006A6A"
+        android:pathData="M10,4h28c3.31,0 6,2.69 6,6v28c0,3.31 -2.69,6 -6,6H10c-3.31,0 -6,-2.69 -6,-6V10c0,-3.31 2.69,-6 6,-6z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M15,13h6v4h-3v14h3v4h-6c-0.55,0 -1,-0.45 -1,-1V14c0,-0.55 0.45,-1 1,-1z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M33,13h-6v4h3v14h-3v4h6c0.55,0 1,-0.45 1,-1V14c0,-0.55 -0.45,-1 -1,-1z" />
+    <path
+        android:fillColor="#B8F3E6"
+        android:pathData="M22.3,30.2L16.8,24.7l2.8,-2.8 2.7,2.7 7.2,-7.2 2.8,2.8z" />
+</vector>

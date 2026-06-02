@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    tools:showIn="@layout/activity_main">
+
+    <TextView
+        style="@style/DemoSectionTitle"
+        android:text="@string/demo_output_preview_title" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/demo_output_preview_description"
+        android:textColor="#3F4F4F"
+        android:textSize="14sp" />
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp">
+
+        <TextView
+            android:id="@+id/outputPreviewView"
+            style="@style/DemoOutputBlock"
+            android:clickable="true"
+            android:ellipsize="end"
+            android:fontFamily="monospace"
+            android:focusable="true"
+            android:maxLines="12"
+            tools:text="{&quot;code&quot;:200,&quot;data&quot;:{&quot;id&quot;:0,&quot;name&quot;:&quot;anonymous&quot;}}" />
+
+        <ImageButton
+            android:id="@+id/outputPreviewHintButton"
+            style="@style/DemoOutputHintButton"
+            android:contentDescription="@string/demo_output_hint_button_desc"
+            android:layout_gravity="top|end"
+            android:layout_marginTop="4dp"
+            android:layout_marginEnd="4dp"
+            android:src="@drawable/ic_demo_open_detail"
+            android:visibility="gone"
+            tools:visibility="visible" />
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/outputPreviewNoteView"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:background="#FFF8D8"
+        android:padding="10dp"
+        android:textColor="#4F4420"
+        android:textSize="13sp"
+        android:visibility="gone"
+        tools:text="默认值说明：DemoModels.kt 里的很多字段都有默认值。"
+        tools:visibility="visible" />
+</LinearLayout>

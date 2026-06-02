@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="demo_screen_title">GsonSafeParser Demo</string>
+    <string name="demo_screen_subtitle">Choose a feature page, run the main action, then read the shared result panel below.</string>
+    <string name="demo_page_spinner_label">Feature page, tap to choose</string>
+    <string name="demo_page_spinner_prompt">Choose a feature page</string>
+    <string name="demo_json_input_label">Input JSON</string>
+    <string name="demo_json_input_hint">Paste or edit the JSON you want to test</string>
+    <string name="demo_output_preview_title">Parsed result preview</string>
+    <string name="demo_output_preview_description">Compare the input above with the parsed result here first. Events, reports, and exceptions stay in the detail panel below.</string>
+    <string name="demo_output_preview_placeholder">Run the case to see the parsed result preview.</string>
+
+    <string name="demo_full_check_title">Full check</string>
+    <string name="demo_full_check_description">Run this first after installing on a device to confirm all built-in cases still pass.</string>
+    <string name="demo_run_all_button">Run full check</string>
+    <string name="demo_copy_all_report_button">Copy detailed self-check report</string>
+
+    <string name="demo_case_spinner_label">Current case, tap to choose</string>
+    <string name="demo_case_spinner_prompt">Choose a test case</string>
+    <string name="demo_run_case_button">Run case</string>
+    <string name="demo_reset_json_button">Restore JSON</string>
+
+    <string name="demo_custom_json_title">Custom JSON verification</string>
+    <string name="demo_custom_json_description">Paste a real API response, choose an entry point, target type, and policy, then compare SafeParser with native Gson.</string>
+    <string name="demo_custom_entry_label">Entry point, tap to choose</string>
+    <string name="demo_custom_target_label">Target type, tap to choose</string>
+    <string name="demo_custom_policy_label">Parse policy, tap to choose</string>
+    <string name="demo_custom_selection_title">Current selection</string>
+    <string name="demo_custom_sample_button">Fill sample</string>
+    <string name="demo_custom_validate_button">Verify JSON</string>
+
+    <string name="demo_result_title">Result</string>
+    <string name="demo_copy_result_button">Copy current panel content</string>
+    <string name="demo_output_hint_button_desc">Open details</string>
+    <string name="demo_status_title">Pass status</string>
+    <string name="demo_actual_title">Parsed output</string>
+    <string name="demo_expected_title">Expected result</string>
+    <string name="demo_events_title">Event stream</string>
+    <string name="demo_contract_report_title">Contract report</string>
+    <string name="demo_observer_report_title">Observer failure report</string>
+    <string name="demo_diagnostics_title">Diagnostics</string>
+    <string name="demo_error_title">Exception details</string>
+
+    <string name="demo_page_quick_check_title">Quick check</string>
+    <string name="demo_page_quick_check_description">Run every default case once. Use this page first to confirm the demo app and parser features are healthy.</string>
+    <string name="demo_page_custom_json_title">Custom JSON</string>
+    <string name="demo_page_custom_json_description">Paste your own API response and compare SafeParser with native Gson.</string>
+    <string name="demo_page_core_title">Core parsing</string>
+    <string name="demo_page_core_description">Verify object fallback, primitives, collections, maps, object number policy, and compatibility behavior.</string>
+    <string name="demo_page_config_title">Configuration</string>
+    <string name="demo_page_config_description">Verify public APIs, Kotlin APIs, presets, GsonBuilder passthrough, annotations, and safe fallback behavior.</string>
+    <string name="demo_page_observability_title">Observability</string>
+    <string name="demo_page_observability_description">Verify events, contract reports, observer failure isolation, and low-level event bridging.</string>
+    <string name="demo_page_retrofit_title">Retrofit</string>
+    <string name="demo_page_retrofit_description">Verify empty responses, raw JSON capture, observer isolation, and converter delegation in Retrofit.</string>
+
+    <string name="demo_action_run_full_check">Run full check</string>
+    <string name="demo_action_copy_report">Copy detailed self-check report</string>
+    <string name="demo_action_fill_sample">Fill sample</string>
+    <string name="demo_action_verify_json">Verify JSON</string>
+    <string name="demo_action_copy_result">Copy current panel</string>
+    <string name="demo_action_run_case">Run case</string>
+    <string name="demo_action_restore_json">Restore JSON</string>
+
+    <string name="demo_status_pass">Pass</string>
+    <string name="demo_status_fail">Fail</string>
+    <string name="demo_status_pending">Not run yet</string>
+    <string name="demo_no_exception">No uncaught demo runtime exception. Scenario-captured exceptions are shown in parsed output.</string>
+    <string name="demo_after_run_placeholder">Run the case to see output.</string>
+    <string name="demo_run_after_placeholder">Displayed after running.</string>
+    <string name="demo_full_check_expected">Tap “Run full check”. All default cases are expected to pass.</string>
+    <string name="demo_full_check_actual">This page does not need case selection or JSON input.</string>
+    <string name="demo_no_cases_expected">This feature page has no fixed cases.</string>
+    <string name="demo_no_cases_actual">Please choose another feature page.</string>
+    <string name="demo_full_check_events">Quick check only shows a summary. Switch to a feature page to inspect one case.</string>
+    <string name="demo_full_check_expected_short">All demo cases pass.</string>
+    <string name="demo_no_failed_cases">No failed cases.</string>
+    <string name="demo_full_report_expected">All demo cases pass and the detailed self-check report is copied.</string>
+    <string name="demo_full_report_events">Detailed events are shown inside each case block in the parsed output.</string>
+
+    <string name="demo_page_info_format">Current page: %1$s\nWhat it verifies: %2$s\nMain actions: %3$s</string>
+    <string name="demo_case_info_format">Case: %1$s\nFeature page: %2$s\nCovered API: %3$s\nWhat this checks: %4$s</string>
+    <string name="demo_custom_selection_format">Entry point: %1$s\n%2$s\n\nTarget type: %3$s\n%4$s\n\nParse policy: %5$s\n%6$s</string>
+    <string name="demo_case_label_format">%1$d. %2$s</string>
+    <string name="demo_copy_result_toast">Current panel content copied</string>
+    <string name="demo_copy_all_toast">Detailed self-check report copied. Failed cases: %1$d</string>
+    <string name="demo_copy_section_button">Copy</string>
+    <string name="demo_close_button">Close</string>
+    <string name="demo_copy_section_toast">Copied section content</string>
+
+    <string name="demo_problem_section">Problem description:</string>
+    <string name="demo_output_section">Parsed output:</string>
+    <string name="demo_explanation_section">Explanation:</string>
+    <string name="demo_expected_behavior_section">Expected behavior:</string>
+    <string name="demo_original_case_expected_section">Original case expectation:</string>
+    <string name="demo_default_value_note_section">Default value note:</string>
+    <string name="demo_default_value_note">Many demo model fields in DemoModels.kt define default values. When SafeParser falls back, the parsed JSON shows the concrete default fields, so a short expectation such as User() means id=0 and name=anonymous.</string>
+    <string name="demo_default_value_note_format">%1$s %2$s</string>
+    <string name="demo_expected_fixed_case_english">SafeParser should handle this malformed or edge-case JSON without crashing the demo app. Inspect the parsed output and event stream to decide whether the fallback value matches your project.</string>
+    <string name="demo_input_json_section">Input JSON:</string>
+    <string name="demo_actual_output_section">Actual output:</string>
+    <string name="demo_expected_output_section">Expected result:</string>
+    <string name="demo_events_section">Event stream:</string>
+    <string name="demo_contract_section">Contract report:</string>
+    <string name="demo_observer_section">Observer failure report:</string>
+    <string name="demo_diagnostics_section">Diagnostics:</string>
+    <string name="demo_error_section">Exception details:</string>
+
+    <string name="demo_custom_sample_actual_format">Sample JSON has been written into the shared input box. You can edit it before verifying. Target type: %1$s</string>
+    <string name="demo_custom_sample_expected">Edit the JSON and tap “Verify JSON”. The page compares SafeParser with native Gson.</string>
+    <string name="demo_custom_title_format">Custom JSON - %1$s</string>
+    <string name="demo_unknown_target">Unknown target type</string>
+
+    <string name="demo_entry_core_title">Core fromJson</string>
+    <string name="demo_entry_core_description">Calls GsonSafeParser.fromJson directly. Use this when your app integrates through Gson itself.</string>
+    <string name="demo_entry_retrofit_title">Retrofit Converter</string>
+    <string name="demo_entry_retrofit_description">Runs through GsonSafeConverterFactory. Use this when your app receives the JSON from Retrofit.</string>
+
+    <string name="demo_target_api_response_title">ApiResponse&lt;User&gt;</string>
+    <string name="demo_target_api_response_description">A common response wrapper with code and non-null data object. Good for testing data=[] or data=null.</string>
+    <string name="demo_target_nullable_api_response_title">NullableApiResponse&lt;User&gt;</string>
+    <string name="demo_target_nullable_api_response_description">A response wrapper whose data field can be null. Good for low-interference or NullOnly policies.</string>
+    <string name="demo_target_list_user_title">List&lt;User&gt;</string>
+    <string name="demo_target_list_user_description">A root list of users. Good for checking whether bad list items can be skipped safely.</string>
+    <string name="demo_target_collection_title">CollectionResponse</string>
+    <string name="demo_target_collection_description">Contains List, Set, Map, and number lists. Good for collection shape mismatches and item skipping.</string>
+    <string name="demo_target_nullable_collection_title">NullableCollectionMapResponse</string>
+    <string name="demo_target_nullable_collection_description">Collections and maps are nullable. Good for comparing null fallback with empty collection fallback.</string>
+    <string name="demo_target_primitive_title">PrimitiveResponse</string>
+    <string name="demo_target_primitive_description">Contains Int, Long, BigDecimal, Boolean, and String. Good for primitive type mismatches.</string>
+    <string name="demo_target_map_title">MapResponse</string>
+    <string name="demo_target_map_description">Contains an object field and strongly typed Map. Good for map key/value parsing and partial skipping.</string>
+    <string name="demo_target_map_edge_title">MapEdgeResponse</string>
+    <string name="demo_target_map_edge_description">Contains Int-key maps and nested maps. Good for bad key skipping and map item event attribution.</string>
+    <string name="demo_target_any_title">AnyResponse</string>
+    <string name="demo_target_any_description">Contains Any and Map&lt;String, Any&gt;. Good for observing object number strategies and dynamic fields.</string>
+    <string name="demo_target_enum_title">EnumContainerResponse</string>
+    <string name="demo_target_enum_description">Contains EnumSet and EnumMap. Good for checking enum container construction in a real app.</string>
+    <string name="demo_target_org_json_title">OrgJsonResponse</string>
+    <string name="demo_target_org_json_description">Contains JSONObject and JSONArray. Good for checking org.json adapters.</string>
+
+    <string name="demo_policy_default_title">Contract-first default</string>
+    <string name="demo_policy_default_description">Uses the SafeParser 1.0.0 default config. Start here to observe mismatch evidence and default return boundaries.</string>
+    <string name="demo_policy_low_interference_title">Low-interference NullOnly</string>
+    <string name="demo_policy_low_interference_description">Returns null for many mismatched fields and delegates primitives to Gson, staying closer to native Gson.</string>
+    <string name="demo_policy_debug_raw_json_title">Debug raw JSON</string>
+    <string name="demo_policy_debug_raw_json_description">Captures raw JSON with mismatch events. Useful while debugging backend contract problems.</string>
+    <string name="demo_policy_primitive_delegate_title">Primitive delegate to Gson</string>
+    <string name="demo_policy_primitive_delegate_description">Primitive adapters are delegated to native Gson. Useful for checking which primitive errors resurface.</string>
+    <string name="demo_policy_object_number_title">Object numbers Long/Double</string>
+    <string name="demo_policy_object_number_description">Uses Gson LONG_OR_DOUBLE for Any/Object numbers. Useful for dynamic field number expectations.</string>
+    <string name="demo_policy_raw_json_truncate_title">Raw JSON 10-byte truncation</string>
+    <string name="demo_policy_raw_json_truncate_description">Enables raw JSON capture with a 10-byte limit. Useful for checking log truncation behavior.</string>
+</resources>

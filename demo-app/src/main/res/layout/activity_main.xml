@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/rootScrollView"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:clipToPadding="false"
+    android:fillViewport="true"
+    android:fitsSystemWindows="true"
+    tools:context=".MainActivity">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <TextView
+            android:id="@+id/screenTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/demo_screen_title"
+            android:textColor="#102020"
+            android:textSize="22sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="@string/demo_screen_subtitle"
+            android:textColor="#3F4F4F"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/pageSpinnerLabel"
+            style="@style/DemoSectionTitle"
+            android:labelFor="@id/pageSpinner"
+            android:text="@string/demo_page_spinner_label" />
+
+        <Spinner
+            android:id="@+id/pageSpinner"
+            style="@style/DemoSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:prompt="@string/demo_page_spinner_prompt"
+            android:spinnerMode="dropdown" />
+
+        <TextView
+            android:id="@+id/pageInfoView"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="#FFFFFF"
+            android:padding="12dp"
+            android:textColor="#243333"
+            android:textSize="14sp"
+            tools:text="当前页说明会显示在这里。" />
+
+        <include
+            android:id="@+id/fullCheckPanel"
+            layout="@layout/include_full_check_panel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:visibility="gone"
+            tools:visibility="gone" />
+
+        <include
+            android:id="@+id/fixedCasePanel"
+            layout="@layout/include_fixed_case_panel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            tools:visibility="visible" />
+
+        <include
+            android:id="@+id/customJsonPanel"
+            layout="@layout/include_custom_json_panel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:visibility="gone"
+            tools:visibility="gone" />
+
+        <LinearLayout
+            android:id="@+id/jsonPanel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/jsonInputLabel"
+                style="@style/DemoSectionTitle"
+                android:text="@string/demo_json_input_label" />
+
+            <EditText
+                android:id="@+id/jsonInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="#1E1E1E"
+                android:fontFamily="monospace"
+                android:gravity="top|start"
+                android:hint="@string/demo_json_input_hint"
+                android:textColorHint="#8FA3A3"
+                android:importantForAutofill="no"
+                android:inputType="textMultiLine|textNoSuggestions"
+                android:maxHeight="@dimen/demo_json_input_max_height"
+                android:maxLines="12"
+                android:minHeight="@dimen/demo_json_input_min_height"
+                android:minLines="5"
+                android:overScrollMode="always"
+                android:padding="12dp"
+                android:scrollbars="vertical"
+                android:textColor="#D7E7E7"
+                android:textSize="13sp"
+                tools:text="{&quot;code&quot;:200,&quot;data&quot;:[]}" />
+        </LinearLayout>
+
+        <include
+            android:id="@+id/outputPreviewPanel"
+            layout="@layout/include_output_preview_panel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <include
+            android:id="@+id/resultPanel"
+            layout="@layout/include_result_panel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+    </LinearLayout>
+</ScrollView>

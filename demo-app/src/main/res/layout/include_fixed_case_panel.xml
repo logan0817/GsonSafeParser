@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    tools:showIn="@layout/activity_main">
+
+    <TextView
+            android:id="@+id/caseSpinnerLabel"
+            style="@style/DemoSectionTitle"
+            android:labelFor="@id/caseSpinner"
+            android:text="@string/demo_case_spinner_label" />
+
+    <Spinner
+        android:id="@+id/caseSpinner"
+        style="@style/DemoSpinner"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:prompt="@string/demo_case_spinner_prompt"
+        android:spinnerMode="dropdown" />
+
+    <TextView
+        android:id="@+id/caseInfoView"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:background="#FFFFFF"
+        android:padding="12dp"
+        android:textColor="#243333"
+        android:textSize="14sp"
+        tools:text="当前固定用例说明会显示在这里。" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/runButton"
+            style="@style/DemoPrimaryButton"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:text="@string/demo_run_case_button" />
+
+        <Button
+            android:id="@+id/resetButton"
+            style="@style/DemoSecondaryButton"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:text="@string/demo_reset_json_button" />
+    </LinearLayout>
+</LinearLayout>

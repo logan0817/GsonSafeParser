@@ -1,0 +1,240 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    tools:showIn="@layout/activity_main">
+
+    <TextView
+        style="@style/DemoSectionTitle"
+        android:text="@string/demo_result_title" />
+
+    <Button
+        android:id="@+id/copyResultButton"
+        style="@style/DemoSecondaryButton"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:text="@string/demo_copy_result_button" />
+
+    <TextView
+        style="@style/DemoSectionTitle"
+        android:text="@string/demo_status_title" />
+
+    <TextView
+        android:id="@+id/statusView"
+        style="@style/DemoOutputBlock"
+        android:textStyle="bold"
+        tools:text="尚未运行" />
+
+    <TextView
+        style="@style/DemoSectionTitle"
+        android:text="@string/demo_actual_title" />
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <TextView
+            android:id="@+id/actualView"
+            style="@style/DemoOutputBlock"
+            android:clickable="true"
+            android:ellipsize="end"
+            android:fontFamily="monospace"
+            android:foreground="?android:attr/selectableItemBackground"
+            android:focusable="true"
+            android:maxLines="16"
+            tools:text="运行后显示实际输出。" />
+
+        <ImageButton
+            android:id="@+id/actualHintButton"
+            style="@style/DemoOutputHintButton"
+            android:contentDescription="@string/demo_output_hint_button_desc"
+            android:layout_gravity="top|end"
+            android:layout_marginTop="4dp"
+            android:layout_marginEnd="4dp"
+            android:src="@drawable/ic_demo_open_detail"
+            android:visibility="gone"
+            tools:visibility="visible" />
+    </FrameLayout>
+
+    <TextView
+        style="@style/DemoSectionTitle"
+        android:text="@string/demo_expected_title" />
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <TextView
+            android:id="@+id/expectedView"
+            style="@style/DemoOutputBlock"
+            android:clickable="true"
+            android:ellipsize="end"
+            android:focusable="true"
+            android:maxLines="16"
+            tools:text="运行前显示当前用例预期。" />
+
+        <ImageButton
+            android:id="@+id/expectedHintButton"
+            style="@style/DemoOutputHintButton"
+            android:contentDescription="@string/demo_output_hint_button_desc"
+            android:layout_gravity="top|end"
+            android:layout_marginTop="4dp"
+            android:layout_marginEnd="4dp"
+            android:src="@drawable/ic_demo_open_detail"
+            android:visibility="gone"
+            tools:visibility="visible" />
+    </FrameLayout>
+
+    <TextView
+        style="@style/DemoSectionTitle"
+        android:text="@string/demo_events_title" />
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <TextView
+            android:id="@+id/eventsView"
+            style="@style/DemoOutputBlock"
+            android:clickable="true"
+            android:ellipsize="end"
+            android:fontFamily="monospace"
+            android:focusable="true"
+            android:maxLines="16"
+            tools:text="无事件" />
+
+        <ImageButton
+            android:id="@+id/eventsHintButton"
+            style="@style/DemoOutputHintButton"
+            android:contentDescription="@string/demo_output_hint_button_desc"
+            android:layout_gravity="top|end"
+            android:layout_marginTop="4dp"
+            android:layout_marginEnd="4dp"
+            android:src="@drawable/ic_demo_open_detail"
+            android:visibility="gone"
+            tools:visibility="visible" />
+    </FrameLayout>
+
+    <TextView
+        style="@style/DemoSectionTitle"
+        android:text="@string/demo_contract_report_title" />
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <TextView
+            android:id="@+id/contractReportView"
+            style="@style/DemoOutputBlock"
+            android:clickable="true"
+            android:ellipsize="end"
+            android:fontFamily="monospace"
+            android:focusable="true"
+            android:maxLines="16"
+            tools:text="未生成契约报告" />
+
+        <ImageButton
+            android:id="@+id/contractReportHintButton"
+            style="@style/DemoOutputHintButton"
+            android:contentDescription="@string/demo_output_hint_button_desc"
+            android:layout_gravity="top|end"
+            android:layout_marginTop="4dp"
+            android:layout_marginEnd="4dp"
+            android:src="@drawable/ic_demo_open_detail"
+            android:visibility="gone"
+            tools:visibility="visible" />
+    </FrameLayout>
+
+    <TextView
+        style="@style/DemoSectionTitle"
+        android:text="@string/demo_observer_report_title" />
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <TextView
+            android:id="@+id/observerReportView"
+            style="@style/DemoOutputBlock"
+            android:clickable="true"
+            android:ellipsize="end"
+            android:fontFamily="monospace"
+            android:focusable="true"
+            android:maxLines="16"
+            tools:text="未生成观察者失败报告" />
+
+        <ImageButton
+            android:id="@+id/observerReportHintButton"
+            style="@style/DemoOutputHintButton"
+            android:contentDescription="@string/demo_output_hint_button_desc"
+            android:layout_gravity="top|end"
+            android:layout_marginTop="4dp"
+            android:layout_marginEnd="4dp"
+            android:src="@drawable/ic_demo_open_detail"
+            android:visibility="gone"
+            tools:visibility="visible" />
+    </FrameLayout>
+
+    <TextView
+        style="@style/DemoSectionTitle"
+        android:text="@string/demo_diagnostics_title" />
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <TextView
+            android:id="@+id/diagnosticsView"
+            style="@style/DemoOutputBlock"
+            android:clickable="true"
+            android:ellipsize="end"
+            android:fontFamily="monospace"
+            android:focusable="true"
+            android:maxLines="16"
+            tools:text="未运行诊断" />
+
+        <ImageButton
+            android:id="@+id/diagnosticsHintButton"
+            style="@style/DemoOutputHintButton"
+            android:contentDescription="@string/demo_output_hint_button_desc"
+            android:layout_gravity="top|end"
+            android:layout_marginTop="4dp"
+            android:layout_marginEnd="4dp"
+            android:src="@drawable/ic_demo_open_detail"
+            android:visibility="gone"
+            tools:visibility="visible" />
+    </FrameLayout>
+
+    <TextView
+        style="@style/DemoSectionTitle"
+        android:text="@string/demo_error_title" />
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <TextView
+            android:id="@+id/errorView"
+            style="@style/DemoOutputBlock"
+            android:clickable="true"
+            android:ellipsize="end"
+            android:fontFamily="monospace"
+            android:focusable="true"
+            android:maxHeight="@dimen/demo_error_max_height"
+            android:maxLines="16"
+            tools:text="无异常" />
+
+        <ImageButton
+            android:id="@+id/errorHintButton"
+            style="@style/DemoOutputHintButton"
+            android:contentDescription="@string/demo_output_hint_button_desc"
+            android:layout_gravity="top|end"
+            android:layout_marginTop="4dp"
+            android:layout_marginEnd="4dp"
+            android:src="@drawable/ic_demo_open_detail"
+            android:visibility="gone"
+            tools:visibility="visible" />
+    </FrameLayout>
+</LinearLayout>

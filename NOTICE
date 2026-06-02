@@ -1,0 +1,36 @@
+GsonSafeParser
+Copyright 2026 logan
+
+This project is licensed under the Apache License, Version 2.0.
+See the LICENSE file for the full license text.
+
+Acknowledgements
+
+GsonSafeParser is an independent Kotlin implementation of a defensive
+Gson parsing library. During the design, problem-scenario review, README
+review, and issue review stages, the project referred to the public
+getActivity/GsonFactory repository:
+
+https://github.com/getActivity/GsonFactory
+
+GsonFactory is licensed under the Apache License, Version 2.0.
+Original copyright notice:
+
+Copyright 2020 Huang JinQun
+
+The implementation in this repository is maintained as a separate project
+with Kotlin source code, additional tests, Demo App verification, Retrofit
+integration, parse event observation, contract reports, and diagnostics.
+
+AI Transparency
+
+AI assistance was used during refactoring, test writing, documentation
+organization, and review. The specific model usage is disclosed below:
+
+1. ChatGPT Codex: used for refactoring, test writing, documentation
+organization, and review support.
+2. DeepSeek DeepSeek-V4-Pro: used for refactoring assistance,
+documentation polishing, and issue cross-checking.
+
+The maintainer reviewed, adjusted, and verified the final source code,
+tests, and documentation before publication.

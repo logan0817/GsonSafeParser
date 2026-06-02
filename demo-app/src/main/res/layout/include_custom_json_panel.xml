@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    tools:showIn="@layout/activity_main">
+
+    <TextView
+        style="@style/DemoSectionTitle"
+        android:text="@string/demo_custom_json_title" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/demo_custom_json_description"
+        android:textColor="#3F4F4F"
+        android:textSize="14sp" />
+
+    <TextView
+        style="@style/DemoSectionTitle"
+        android:text="@string/demo_custom_entry_label" />
+
+    <Spinner
+        android:id="@+id/customEntrySpinner"
+        style="@style/DemoSpinner"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:spinnerMode="dropdown" />
+
+    <TextView
+        style="@style/DemoSectionTitle"
+        android:text="@string/demo_custom_target_label" />
+
+    <Spinner
+        android:id="@+id/customTargetSpinner"
+        style="@style/DemoSpinner"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:spinnerMode="dropdown" />
+
+    <TextView
+        style="@style/DemoSectionTitle"
+        android:text="@string/demo_custom_policy_label" />
+
+    <Spinner
+        android:id="@+id/customPolicySpinner"
+        style="@style/DemoSpinner"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:spinnerMode="dropdown" />
+
+    <TextView
+        style="@style/DemoSectionTitle"
+        android:text="@string/demo_custom_selection_title" />
+
+    <TextView
+        android:id="@+id/customSelectionInfoView"
+        style="@style/DemoInfoBlock"
+        tools:text="当前选择说明会显示在这里。" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/customSampleButton"
+            style="@style/DemoSecondaryButton"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:text="@string/demo_custom_sample_button" />
+
+        <Button
+            android:id="@+id/customValidateButton"
+            style="@style/DemoPrimaryButton"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:text="@string/demo_custom_validate_button" />
+    </LinearLayout>
+</LinearLayout>

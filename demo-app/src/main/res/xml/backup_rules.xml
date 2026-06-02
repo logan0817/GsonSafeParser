@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- demo app 不保存业务账号、缓存或用户隐私数据，关闭备份时这里仍给低版本系统一个明确规则。 -->
+    <exclude
+        domain="file"
+        path="." />
+</full-backup-content>
