@@ -24,6 +24,7 @@ import io.github.logan.gsonsafeparser.GsonSafeParser
 import io.github.logan.gsonsafeparser.ObserverFailureEvent
 import io.github.logan.gsonsafeparser.ParseExceptionKind
 import io.github.logan.gsonsafeparser.PrimitiveParsingPolicy
+import io.github.logan.gsonsafeparser.RequiredConstructorParameterPolicy
 import io.github.logan.gsonsafeparser.SafeObserverPolicy
 import io.github.logan.gsonsafeparser.SafeParseResult
 import io.github.logan.gsonsafeparser.SafeParserConfig
@@ -391,10 +392,10 @@ internal fun instanceCreatorCase(): DemoCase = DemoCase(
 internal fun reflectionAccessAndUnsafeCase(): DemoCase = DemoCase(
     title = "ReflectionAccessFilter + useJdkUnsafe",
     category = "安全回退",
-    entryPoint = "reflectionAccessFilters / useJdkUnsafe=false",
-    description = "验证用户禁止反射或关闭 Unsafe 时，SafeParser 不会强行绕过限制，而是回到 Gson 异常语义。",
+    entryPoint = "reflectionAccessFilters / useJdkUnsafe / RequiredConstructorParameterPolicy.Strict",
+    description = "验证禁止反射时仍回到 Gson 异常语义；默认兼容模式下，SafeParser 无法安全构造时会回到 Gson 原生 Unsafe 行为。",
     defaultJson = """{"value":"remote"}""",
-    expected = "BLOCK_ALL 和 useJdkUnsafe=false 都得到 JsonIOException。"
+    expected = "BLOCK_ALL 得到 JsonIOException；默认兼容模式可回到 Gson 解析；Strict 模式会覆盖 useJdkUnsafe=true。"
 ) { json ->
     val blockAllFilter = ReflectionAccessFilter { rawType ->
         if (rawType == ReflectionBlockedResponse::class.java) {
@@ -410,18 +411,34 @@ internal fun reflectionAccessAndUnsafeCase(): DemoCase = DemoCase(
             config = SafeParserConfig(reflectionAccessFilters = listOf(blockAllFilter))
         )
     }.exceptionOrNull()
-    val unsafeError = runCatching {
+    val compatibleUnsafeValue = runCatching {
         GsonSafeParser.fromJson(
             json = json,
             type = OnlyParameterizedConstructor::class.java,
             config = SafeParserConfig(useJdkUnsafe = false)
         )
+    }.getOrNull()
+    val strictUnsafeError = runCatching {
+        GsonSafeParser.fromJson(
+            json = json,
+            type = OnlyParameterizedConstructor::class.java,
+            config = SafeParserConfig(
+                useJdkUnsafe = true,
+                requiredConstructorParameterPolicy = RequiredConstructorParameterPolicy.Strict
+            )
+        )
     }.exceptionOrNull()
-    val pass = reflectionError is JsonIOException && unsafeError is JsonIOException
+    val pass = reflectionError is JsonIOException &&
+        compatibleUnsafeValue?.value == "remote" &&
+        strictUnsafeError is JsonIOException
     DemoRunResult(
         pass = pass,
-        actual = "reflectionError=${reflectionError?.javaClass?.name}\nunsafeError=${unsafeError?.javaClass?.name}",
-        expected = "两个场景都回到 Gson 的 JsonIOException"
+        actual = """
+            reflectionError=${reflectionError?.javaClass?.name}
+            compatibleUnsafeValue=${compatibleUnsafeValue?.value}
+            strictUnsafeError=${strictUnsafeError?.javaClass?.name}
+        """.trimIndent(),
+        expected = "反射禁止仍抛错；兼容模式回到 Gson；Strict 覆盖 useJdkUnsafe=true"
     )
 }
 

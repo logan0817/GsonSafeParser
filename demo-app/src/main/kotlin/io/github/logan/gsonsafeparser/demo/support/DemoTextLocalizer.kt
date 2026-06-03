@@ -192,7 +192,7 @@ internal object DemoTextLocalizer {
         "包含 Any 和 Map<String, Any>，适合观察 Object 数字策略和动态字段。" to "Contains Any and Map<String, Any>. Good for observing Object number strategy and dynamic fields.",
         "同时包含 EnumSet 和 EnumMap，适合验证枚举容器是否能在真实 App 里正常构造。" to "Contains EnumSet and EnumMap. Good for checking whether enum containers can be built correctly in a real app.",
         "包含 JSONObject 和 JSONArray，适合验证 org.json 类型适配。" to "Contains JSONObject and JSONArray. Good for checking org.json adapter support.",
-        "使用 SafeParser 1.0.0 默认配置，适合观察错配证据和默认返回边界。" to "Uses the SafeParser 1.0.0 default config. Good for observing mismatch evidence and default return boundaries.",
+        "使用 SafeParser 1.0.1 默认配置，适合观察错配证据和默认返回边界。" to "Uses the SafeParser 1.0.1 default config. Good for observing mismatch evidence and default return boundaries.",
         "字段错形尽量给 null，基础类型交回 Gson，更接近原生 Gson。" to "Returns null for many mismatched fields and delegates primitives back to Gson, staying closer to native Gson.",
         "开启 rawJson 捕获，适合联调时把后端原始返回和错配事件一起带出来。" to "Enables rawJson capture so you can inspect the backend response together with mismatch events during integration testing.",
         "基础类型完全交回 Gson 原生 Adapter，适合验证低误伤接入时哪些异常会重新暴露出来。" to "Delegates primitive parsing completely to native Gson Adapter. Good for checking which errors reappear during low-interference rollout.",

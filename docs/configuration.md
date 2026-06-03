@@ -14,9 +14,10 @@ val config = SafeParserConfig( // 创建一份完整的安全解析配置。
     emptyResponsePolicy = EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly, // Retrofit 空响应只为 Unit/Void 返回空值。
     primitiveParsingPolicy = PrimitiveParsingPolicy.DelegateToGson, // 基础类型默认交回 Gson 原生 Adapter。
     complexMapKeySerialization = false, // 默认不启用复杂 Map key 写出。
-    useJdkUnsafe = false, // 默认不使用 Unsafe 绕过构造函数。
+    useJdkUnsafe = false, // SafeParser 自己默认不使用 Unsafe 绕过构造函数。
     skippedPlatformTypePrefixes = setOf("android."), // 跳过 Android 平台类型，避免反射系统对象；不要把业务模型包名前缀放这里。
     nullValuePolicy = NullValuePolicy.WriteExplicitNulls, // 显式 JSON null 只写入 nullable 字段。
+    requiredConstructorParameterPolicy = RequiredConstructorParameterPolicy.GsonCompatible, // Kotlin 非空必填构造参数缺失时保持 Gson 兼容。
     mapItemKeyPolicy = MapItemKeyPolicy.Hash, // Map item 事件默认输出稳定哈希。
     captureRawJsonInCallbacks = false, // 默认不在回调里携带原始 JSON。
     maxRawJsonCaptureBytes = 1024 * 1024 // 限制 raw JSON 最大捕获体积为 1 MiB。
@@ -31,9 +32,10 @@ val config = SafeParserConfig( // 创建一份完整的安全解析配置。
 | `emptyResponsePolicy` | `DefaultValueForUnitOrVoidOnly` | Retrofit 空 body 要返回默认对象、`null` 或交回 Gson 时再改。 |
 | `primitiveParsingPolicy` | `DelegateToGson` | 基础类型需要宽松兜底，例如字符串数字、空字符串、形状不一致默认值时再改成 `Safe`。 |
 | `complexMapKeySerialization` | `false` | 需要兼容 Gson 复杂 Map key 的数组 entry 写法时再打开。 |
-| `useJdkUnsafe` | `false` | 只有明确接受绕过构造函数的风险时才打开。 |
+| `useJdkUnsafe` | `false` | 只在 `GsonCompatible` 模式下控制 SafeParser 自己是否用 Unsafe 构造对象；`Strict` 会强制禁用它。 |
 | `skippedPlatformTypePrefixes` | `setOf("android.")` | 只用于跳过平台类型；不要放业务模型包名前缀。 |
 | `nullValuePolicy` | `WriteExplicitNulls` | 后端显式返回 `null` 时，需要调整 nullable 字段写入策略时再改。 |
+| `requiredConstructorParameterPolicy` | `GsonCompatible` | 已有项目希望保持 Gson 宽松行为时用默认值；新接口想强约束缺字段时改成 `Strict`。 |
 | `mapItemKeyPolicy` | `Hash` | 本地排障想看到 Map 原始 key 时，可以在 debug 配置中改。 |
 | `captureRawJsonInCallbacks` | `false` | 排障时临时打开，线上默认关闭。 |
 | `maxRawJsonCaptureBytes` | `1 MiB` | raw JSON 排障需要更小或更大的捕获上限时再改。 |
@@ -49,6 +51,12 @@ raw JSON 捕获规则：
 后续修改调用方原来的可变集合，不会影响已经创建好的配置。
 
 `enableSafeParser()` 对同一个 `GsonBuilder` 是幂等的，重复调用不会重复注册 Safe Adapter。如果需要换配置，请新建一个 `GsonBuilder`。
+
+Unsafe 回退边界：
+
+1. 默认配置优先兼容旧 Gson 项目。`GsonCompatible` 模式下，`useJdkUnsafe` 只控制 SafeParser 自己是否用 Unsafe 构造对象。
+2. 如果 SafeParser 无法安全构造当前类型，默认 `GsonCompatible` 会把它交回 Gson；这条回退路径仍遵循 Gson 自己的 Unsafe 设置。
+3. `Strict` 优先级最高。只要开启 `Strict`，SafeParser 会自动禁用自身 Unsafe，也会禁用 Gson 回退路径里的 Unsafe；即使同时传入 `useJdkUnsafe = true`，也以 `Strict` 为准。
 
 ## 2. 预设配置
 
@@ -73,7 +81,7 @@ val config = SafeParserConfig.fromPolicies( // 使用分层策略创建配置。
     readPolicy = SafeReadPolicy( // 配置读取 JSON 时的策略。
         fallbackPolicy = FallbackPolicy.NullOnly, // 字段形状不一致时只返回 null 或保留构造默认值。
         primitiveParsingPolicy = PrimitiveParsingPolicy.DelegateToGson, // 基础类型交回 Gson 原生 Adapter。
-        useJdkUnsafe = false // 不使用 Unsafe 绕过构造函数。
+        useJdkUnsafe = false // SafeParser 自己不使用 Unsafe 绕过构造函数。
     ), // 结束读取策略配置。
     writePolicy = SafeWritePolicy( // 配置写出 JSON 时的策略。
         complexMapKeySerialization = false // 默认不启用复杂 Map key 写出。
@@ -186,13 +194,15 @@ data class PageState( // 定义包含运行时状态的页面模型。
 | `primitiveParsingPolicy` | `PrimitiveParsingPolicy.DelegateToGson` |
 | `emptyResponsePolicy` | `EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly` |
 | `useJdkUnsafe` | `false` |
+| `requiredConstructorParameterPolicy` | `RequiredConstructorParameterPolicy.GsonCompatible` |
 | `mapItemKeyPolicy` | `MapItemKeyPolicy.Hash` |
 
-默认处理只记 4 点：
+默认处理重点：
 
 | 类型 | 默认行为 |
 | --- | --- |
 | 对象、集合、Map 字段整体形状不一致 | 兜底当前字段，外层对象继续解析；`NullOnly` 下优先返回 `null` 或保留构造默认值。 |
+| Kotlin 非空必填构造参数缺失 | 默认保持 Gson 兼容；引用字段为 `null`，primitive 保持 JVM 默认值。 |
 | 基础类型形状不一致 | 默认交回 Gson 原生 Adapter；只有 `PrimitiveParsingPolicy.Safe` 才使用安全基础值。 |
 | Retrofit 空 body | `Unit` 返回 `Unit`，`Void` 和普通业务模型返回 `null`。 |
 | 不可安全隔离问题 | JSON 语法错误、根级失败、`Error`、`ThreadDeath`、`LinkageError`、`CancellationException` 继续外抛。 |

@@ -28,7 +28,7 @@
 最新版本：[![Maven Central: core](https://img.shields.io/maven-central/v/io.github.logan0817/gson-safe-parser-core?label=core)](https://central.sonatype.com/artifact/io.github.logan0817/gson-safe-parser-core)
 
 ```kotlin
-implementation("io.github.logan0817:gson-safe-parser-core:1.0.0") // 接入 GsonSafeParser 核心解析能力。
+implementation("io.github.logan0817:gson-safe-parser-core:1.0.1") // 接入 GsonSafeParser 核心解析能力。
 ```
 
 如果项目使用 Retrofit，只需要：
@@ -36,7 +36,7 @@ implementation("io.github.logan0817:gson-safe-parser-core:1.0.0") // 接入 Gson
 最新版本：[![Maven Central: retrofit](https://img.shields.io/maven-central/v/io.github.logan0817/gson-safe-parser-retrofit?label=retrofit)](https://central.sonatype.com/artifact/io.github.logan0817/gson-safe-parser-retrofit)
 
 ```kotlin
-implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.0") // 接入 Retrofit Converter 扩展，并自动带上 core。
+implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.1") // 接入 Retrofit Converter 扩展，并自动带上 core。
 ```
 
 ## 2. 普通 Gson 接入

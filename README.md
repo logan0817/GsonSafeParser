@@ -31,7 +31,10 @@ GsonSafeParser 会尽量把问题隔离在当前字段，让外层对象继续�
 | `primitiveParsingPolicy` | `PrimitiveParsingPolicy.DelegateToGson` |
 | `emptyResponsePolicy` | `EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly` |
 | `useJdkUnsafe` | `false` |
+| `requiredConstructorParameterPolicy` | `RequiredConstructorParameterPolicy.GsonCompatible` |
 | `mapItemKeyPolicy` | `MapItemKeyPolicy.Hash` |
+
+`useJdkUnsafe` 只在默认 `GsonCompatible` 模式下生效，用来控制 SafeParser 自己是否允许 Unsafe 构造。开启 `Strict` 后会自动禁用 SafeParser 和 Gson 回退路径里的 Unsafe；即使同时传入 `useJdkUnsafe = true`，也以 `Strict` 为准。
 
 固定行为：
 
@@ -74,7 +77,7 @@ GsonSafeParser 会尽量把问题隔离在当前字段，让外层对象继续�
 最新版本：[![Maven Central: core](https://img.shields.io/maven-central/v/io.github.logan0817/gson-safe-parser-core?label=core)](https://central.sonatype.com/artifact/io.github.logan0817/gson-safe-parser-core)
 
 ```kotlin
-implementation("io.github.logan0817:gson-safe-parser-core:1.0.0") // 接入 GsonSafeParser 核心解析能力。
+implementation("io.github.logan0817:gson-safe-parser-core:1.0.1") // 接入 GsonSafeParser 核心解析能力。
 ```
 
 如果项目使用 Retrofit，只依赖 retrofit 模块即可；它会传递带上 core：
@@ -82,7 +85,7 @@ implementation("io.github.logan0817:gson-safe-parser-core:1.0.0") // 接入 Gson
 最新版本：[![Maven Central: retrofit](https://img.shields.io/maven-central/v/io.github.logan0817/gson-safe-parser-retrofit?label=retrofit)](https://central.sonatype.com/artifact/io.github.logan0817/gson-safe-parser-retrofit)
 
 ```kotlin
-implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.0") // 接入 Retrofit Converter 扩展，并自动带上 core。
+implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.1") // 接入 Retrofit Converter 扩展，并自动带上 core。
 ```
 
 Android release 额外要求：
@@ -232,6 +235,7 @@ val config = SafeParserConfig(
     primitiveParsingPolicy = PrimitiveParsingPolicy.DelegateToGson, // 基础类型交回 Gson 原生 Adapter。
     skippedPlatformTypePrefixes = setOf("android."), // 跳过 Android 平台类型，避免反射系统对象；不要把业务模型包名前缀放这里。
     nullValuePolicy = NullValuePolicy.WriteExplicitNulls, // 显式 JSON null 只写入 nullable 字段。
+    requiredConstructorParameterPolicy = RequiredConstructorParameterPolicy.GsonCompatible, // Kotlin 非空必填构造参数缺失时保持 Gson 兼容。
     mapItemKeyPolicy = MapItemKeyPolicy.Hash, // Map item 事件默认输出稳定哈希。
     captureRawJsonInCallbacks = false, // 线上默认不在事件中携带原始 JSON。
     maxRawJsonCaptureBytes = 1024 * 1024, // 限制 raw JSON 最大捕获体积为 1 MiB。
@@ -294,8 +298,9 @@ Demo App 支持内置用例和用户自定义 JSON。你可以把接口返回直
 5. [Android 混淆](docs/android-proguard.md)：新项目接入、老项目快速接入、R8 fullMode 选择和 release 验证。
 6. [Demo App](docs/demo-app.md)：真机测试方式、页面说明和用户 JSON 验证入口。
 7. [排障指南](docs/troubleshooting.md)：空响应、raw JSON、Adapter 创建失败、平台对象和业务协议问题。
-8. [发布清单](docs/release-checklist.md)：1.0.0 发版前的 AAR、混淆、文档版本和 Maven 本地产物检查。
-9. [1.0.0 发布说明](docs/release-notes-1.0.0.md)：首发能力、兼容边界和发布验证说明。
+8. [发布清单](docs/release-checklist.md)：1.0.1 发版前的 AAR、混淆、文档版本和 Maven 本地产物检查。
+9. [1.0.1 发布说明](docs/release-notes-1.0.1.md)：本次稳定性修正、兼容边界和发布验证说明。
+10. [1.0.0 发布说明](docs/release-notes-1.0.0.md)：首发能力、兼容边界和发布验证说明。
 
 ## 风险边界
 

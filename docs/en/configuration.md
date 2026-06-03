@@ -14,9 +14,10 @@ val config = SafeParserConfig( // Creates a complete safe parsing config.
     emptyResponsePolicy = EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly, // Returns empty values only for Unit/Void Retrofit bodies.
     primitiveParsingPolicy = PrimitiveParsingPolicy.DelegateToGson, // Delegates primitive values to native Gson adapters.
     complexMapKeySerialization = false, // Keeps complex Map key array-entry writing disabled by default.
-    useJdkUnsafe = false, // Does not bypass constructors with Unsafe by default.
+    useJdkUnsafe = false, // SafeParser itself does not bypass constructors with Unsafe by default.
     skippedPlatformTypePrefixes = setOf("android."), // Skips Android platform types to avoid reflecting system objects; do not add business model package prefixes here.
     nullValuePolicy = NullValuePolicy.WriteExplicitNulls, // Writes explicit JSON null only to nullable fields.
+    requiredConstructorParameterPolicy = RequiredConstructorParameterPolicy.GsonCompatible, // Keeps Gson-compatible behavior for missing non-null Kotlin constructor parameters.
     mapItemKeyPolicy = MapItemKeyPolicy.Hash, // Emits stable hashed map item keys in events.
     captureRawJsonInCallbacks = false, // Does not attach raw JSON to callbacks by default.
     maxRawJsonCaptureBytes = 1024 * 1024 // Limits raw JSON capture to 1 MiB.
@@ -31,9 +32,10 @@ Config fields:
 | `emptyResponsePolicy` | `DefaultValueForUnitOrVoidOnly` | Change when Retrofit empty bodies should return default objects, `null`, or native Gson behavior. |
 | `primitiveParsingPolicy` | `DelegateToGson` | Change to `Safe` only when primitive values need lenient fallback. |
 | `complexMapKeySerialization` | `false` | Enable only when Gson complex Map key array-entry format is needed. |
-| `useJdkUnsafe` | `false` | Enable only when bypassing constructors is an accepted risk. |
+| `useJdkUnsafe` | `false` | Applies only in `GsonCompatible` mode and controls whether SafeParser itself may use Unsafe construction; `Strict` forces it off. |
 | `skippedPlatformTypePrefixes` | `setOf("android.")` | Use for platform types only. Do not add business model package prefixes here. |
 | `nullValuePolicy` | `WriteExplicitNulls` | Change when explicit backend `null` needs a different nullable-field write policy. |
+| `requiredConstructorParameterPolicy` | `GsonCompatible` | Keep the default for existing Gson projects; switch to `Strict` only when missing non-null Kotlin constructor parameters should fail fast. |
 | `mapItemKeyPolicy` | `Hash` | Change in debug when raw Map keys are needed for diagnosis. |
 | `captureRawJsonInCallbacks` | `false` | Enable temporarily for troubleshooting. |
 | `maxRawJsonCaptureBytes` | `1 MiB` | Tune when raw JSON capture needs a smaller or larger bound. |
@@ -49,6 +51,12 @@ Raw JSON capture rules:
 Mutating caller-owned collections later does not affect an existing config.
 
 `enableSafeParser()` is idempotent for the same `GsonBuilder`; repeated calls do not register duplicate Safe Adapters. Create a new `GsonBuilder` if a different config is needed.
+
+Unsafe fallback boundary:
+
+1. The default config favors compatibility with existing Gson projects. In `GsonCompatible` mode, `useJdkUnsafe` controls only whether SafeParser itself may use Unsafe construction.
+2. If SafeParser cannot construct the current type safely, the default `GsonCompatible` mode delegates it back to Gson; that fallback path still follows Gson's own Unsafe setting.
+3. `Strict` has the highest priority. Once `Strict` is enabled, SafeParser disables Unsafe for itself and for the Gson fallback path; if `useJdkUnsafe = true` is passed together with `Strict`, `Strict` wins.
 
 ## 2. Presets
 
@@ -73,7 +81,7 @@ val config = SafeParserConfig.fromPolicies( // Creates config from layered polic
     readPolicy = SafeReadPolicy( // Configures JSON read behavior.
         fallbackPolicy = FallbackPolicy.NullOnly, // Returns null or keeps constructed defaults for mismatched fields.
         primitiveParsingPolicy = PrimitiveParsingPolicy.DelegateToGson, // Delegates primitive values to native Gson adapters.
-        useJdkUnsafe = false // Does not bypass constructors with Unsafe.
+        useJdkUnsafe = false // SafeParser itself does not bypass constructors with Unsafe.
     ), // Ends read policy.
     writePolicy = SafeWritePolicy( // Configures JSON write behavior.
         complexMapKeySerialization = false // Keeps complex Map key writing disabled by default.
@@ -188,14 +196,16 @@ Out-of-the-box defaults:
 | `primitiveParsingPolicy` | `PrimitiveParsingPolicy.DelegateToGson` |
 | `emptyResponsePolicy` | `EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly` |
 | `useJdkUnsafe` | `false` |
+| `requiredConstructorParameterPolicy` | `RequiredConstructorParameterPolicy.GsonCompatible` |
 | `mapItemKeyPolicy` | `MapItemKeyPolicy.Hash` |
 
-Remember 4 defaults:
+Remember these defaults:
 
 | Type | Default behavior |
 | --- | --- |
 | Object, collection, and Map field shape mismatch | Falls back for the current field and keeps the outer object parsing; `NullOnly` prefers `null` or constructed defaults. |
 | Root object mismatch | Usually returns `null`; unrecoverable Gson exceptions are still thrown. |
+| Missing non-null Kotlin constructor parameters | Keeps Gson-compatible behavior by default; reference fields stay `null`, and primitives keep JVM defaults. |
 | Primitive shape mismatch | Delegates to native Gson adapters by default; `PrimitiveParsingPolicy.Safe` enables safe primitive values. |
 | Empty Retrofit body | `Unit` returns `Unit`; `Void` and normal models return `null`. |
 | Unsafe-to-isolate problems | JSON syntax errors, root failures, `Error`, `ThreadDeath`, `LinkageError`, and `CancellationException` are still thrown. |

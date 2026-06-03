@@ -19,7 +19,8 @@ Out-of-the-box defaults:
 | `fallbackPolicy = FallbackPolicy.NullOnly` | Unexpected field shapes prefer `null` or constructed defaults. |
 | `primitiveParsingPolicy = PrimitiveParsingPolicy.DelegateToGson` | Primitive values delegate to native Gson adapters by default. |
 | `emptyResponsePolicy = EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly` | Empty Retrofit bodies return empty values only for `Unit` / `Void`. |
-| `useJdkUnsafe = false` | JDK Unsafe is not used to bypass constructors by default. |
+| `useJdkUnsafe = false` | In compatible mode, SafeParser itself does not use JDK Unsafe for object construction by default; after `Strict` is enabled, Unsafe is disabled for both SafeParser and the Gson fallback path. |
+| `requiredConstructorParameterPolicy = RequiredConstructorParameterPolicy.GsonCompatible` | Missing non-null Kotlin constructor parameters keep Gson-compatible behavior; reference fields stay `null`, and primitives keep JVM defaults. |
 | `mapItemKeyPolicy = MapItemKeyPolicy.Hash` | Map item events emit stable hashes by default. |
 
 The "Default handling" rows below describe this config. Empty collections, empty maps, zero numbers, false booleans, and other legacy safe defaults are used only when callers explicitly choose `FallbackPolicy.Default` or `PrimitiveParsingPolicy.Safe`.
@@ -32,7 +33,7 @@ Overview:
 | Collection field | Whole-field mismatch returns `null` or keeps the constructed default. | One bad item inside the collection is skipped. |
 | Map field | Whole-field mismatch returns `null` or keeps the constructed default. | `[]` may be valid Gson complex Map key array-entry input. |
 | Primitive value | Delegates to native Gson adapters by default. | Safe primitive values require `PrimitiveParsingPolicy.Safe`. |
-| Kotlin defaults | Missing fields and recoverable mismatches keep defaults when possible. | Non-null required parameters without defaults fail hard. |
+| Kotlin defaults | Missing fields and recoverable mismatches keep defaults when possible. | Non-null required parameters without defaults use Gson-compatible behavior by default; fail-fast requires explicit config. |
 | Empty Retrofit body | `Unit` returns `Unit`; common other targets return `null`. | HTTP status and business error codes are outside this library. |
 
 ### 2.1 `data: User`
@@ -97,9 +98,9 @@ Overview:
 1. Backend returns: missing field, field `null`, or unexpected field shape.
 2. Default handling: missing fields keep constructed defaults; explicit `null` is written only to nullable fields; field shape mismatches keep constructed defaults after read failures.
 3. Evidence: mismatch events and parsed value comparison can confirm this behavior.
-4. Boundary: A non-null constructor parameter without a default fails hard when it is missing, `null`, wrong-shaped, or an enum value is unknown.
-5. Boundary: if that required parameter is inside another required nested object without a default, the parent object also fails hard.
-6. Boundary: do not treat internal construction placeholders as business fallback values; that would hide an API contract problem.
+4. Boundary: A non-null constructor parameter without a default uses Gson-compatible handling by default; missing reference fields stay `null`, and primitives keep JVM defaults.
+5. Boundary: switch `requiredConstructorParameterPolicy` to `Strict` when missing fields, `null`, wrong shapes, or unknown enum values should be treated as API contract errors.
+6. Boundary: strict mode throws `JsonIOException` and also prevents the Gson delegate from continuing through Unsafe construction; if `useJdkUnsafe = true` is passed together with `Strict`, `Strict` wins.
 
 ### 2.9 `JSONObject` / `JSONArray`
 <!-- capability-id: org-json-mismatch -->

@@ -17,6 +17,7 @@ import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonToken
 import com.google.gson.stream.JsonWriter
 import io.github.logan.gsonsafeparser.NullValuePolicy
+import io.github.logan.gsonsafeparser.RequiredConstructorParameterPolicy
 import io.github.logan.gsonsafeparser.SafeParseSkip
 import io.github.logan.gsonsafeparser.SafeParserConfig
 import io.github.logan.gsonsafeparser.internal.GsonBuiltInTypes
@@ -66,6 +67,12 @@ internal object SafeReflectiveAdapterFactory {
             constructorReadRequirements(rawType)
         }
         val fields = collectFields(type, gson, config, constructorReadRequirements)
+        if (
+            config.requiredConstructorParameterPolicy == RequiredConstructorParameterPolicy.GsonCompatible &&
+            constructorReadRequirements.hasUntrackedRequiredParameters(fields.values)
+        ) {
+            return delegateAdapter(gson, type, delegateSkipPast)
+        }
 
         return object : TypeAdapter<T>(), ReflectiveRuntimeTypeAdapter {
             /**
@@ -111,8 +118,14 @@ internal object SafeReflectiveAdapterFactory {
                 }
 
                 // instance 是先构造出来的目标对象。后面字段读取成功才逐个写进去，失败字段保留默认值。
-                val instance = SafeObjectConstructor.construct<T>(type.type, rawType, config)
-                    ?: return readWithDelegate(gson, type, reader, config, delegateSkipPast)
+                val instance = runRecovering {
+                    SafeObjectConstructor.construct<T>(type.type, rawType, config)
+                }.getOrElse {
+                    if (config.requiredConstructorParameterPolicy == RequiredConstructorParameterPolicy.Strict) {
+                        throw it
+                    }
+                    return readWithDelegate(gson, type, reader, config, delegateSkipPast)
+                } ?: return readWithDelegate(gson, type, reader, config, delegateSkipPast)
                 val requiredConstructorBindings = fields.values
                     .filter { binding -> binding.requiresExplicitConstructorValue }
                     .distinctBy { binding -> binding.field }
@@ -182,19 +195,25 @@ internal object SafeReflectiveAdapterFactory {
                         }
                 }
                 reader.endObject()
-                requireExplicitEnumValues(
+                handleRequiredEnumValues(
+                    config = config,
+                    instance = instance as Any,
                     rawType = rawType,
                     requiredEnumBindings = requiredEnumBindings,
                     untrackedRequiredEnumParameters = untrackedRequiredEnumParameters,
                     assignedRequiredEnumFields = assignedRequiredEnumFields
                 )
-                requireExplicitNestedConstructorValues(
+                handleRequiredNestedConstructorValues(
+                    config = config,
+                    instance = instance as Any,
                     rawType = rawType,
                     requiredNestedConstructorBindings = requiredNestedConstructorBindings,
                     untrackedRequiredNestedConstructorParameters = untrackedRequiredNestedConstructorParameters,
                     assignedRequiredNestedConstructorFields = assignedRequiredNestedConstructorFields
                 )
-                requireExplicitConstructorValues(
+                handleRequiredConstructorValues(
+                    config = config,
+                    instance = instance as Any,
                     rawType = rawType,
                     requiredConstructorBindings = requiredConstructorBindings,
                     untrackedRequiredConstructorParameters = untrackedRequiredConstructorParameters,
@@ -231,6 +250,18 @@ internal object SafeReflectiveAdapterFactory {
                 runRecovering { reader.skipValue() }
                 null
             }
+    }
+
+    private fun <T> delegateAdapter(
+        gson: Gson,
+        type: TypeToken<T>,
+        delegateSkipPast: TypeAdapterFactory?
+    ): TypeAdapter<T> {
+        return if (delegateSkipPast != null) {
+            gson.getDelegateAdapter(delegateSkipPast, type)
+        } else {
+            gson.getAdapter(type)
+        }
     }
 
     /**
@@ -432,7 +463,9 @@ internal object SafeReflectiveAdapterFactory {
         return kotlinProperty?.returnType?.isMarkedNullable == true
     }
 
-    private fun requireExplicitEnumValues(
+    private fun handleRequiredEnumValues(
+        config: SafeParserConfig,
+        instance: Any,
         rawType: Class<*>,
         requiredEnumBindings: List<FieldBinding>,
         untrackedRequiredEnumParameters: Set<String>,
@@ -442,13 +475,19 @@ internal object SafeReflectiveAdapterFactory {
             .filterNot { binding -> binding.field in assignedRequiredEnumFields }
             .map { binding -> binding.primaryName }
         if (missing.isEmpty()) return
+        if (config.requiredConstructorParameterPolicy == RequiredConstructorParameterPolicy.GsonCompatible) {
+            clearMissingReferenceFields(instance, requiredEnumBindings, assignedRequiredEnumFields)
+            return
+        }
         throw JsonIOException(
             "Required enum constructor parameter was not read from JSON for ${rawType.name}: " +
                 missing.joinToString()
         )
     }
 
-    private fun requireExplicitNestedConstructorValues(
+    private fun handleRequiredNestedConstructorValues(
+        config: SafeParserConfig,
+        instance: Any,
         rawType: Class<*>,
         requiredNestedConstructorBindings: List<FieldBinding>,
         untrackedRequiredNestedConstructorParameters: Set<String>,
@@ -458,13 +497,19 @@ internal object SafeReflectiveAdapterFactory {
             .filterNot { binding -> binding.field in assignedRequiredNestedConstructorFields }
             .map { binding -> binding.primaryName }
         if (missing.isEmpty()) return
+        if (config.requiredConstructorParameterPolicy == RequiredConstructorParameterPolicy.GsonCompatible) {
+            clearMissingReferenceFields(instance, requiredNestedConstructorBindings, assignedRequiredNestedConstructorFields)
+            return
+        }
         throw JsonIOException(
             "Required constructor parameter was not read from JSON for ${rawType.name}: " +
                 missing.joinToString()
         )
     }
 
-    private fun requireExplicitConstructorValues(
+    private fun handleRequiredConstructorValues(
+        config: SafeParserConfig,
+        instance: Any,
         rawType: Class<*>,
         requiredConstructorBindings: List<FieldBinding>,
         untrackedRequiredConstructorParameters: Set<String>,
@@ -474,10 +519,27 @@ internal object SafeReflectiveAdapterFactory {
             .filterNot { binding -> binding.field in assignedRequiredConstructorFields }
             .map { binding -> binding.primaryName }
         if (missing.isEmpty()) return
+        if (config.requiredConstructorParameterPolicy == RequiredConstructorParameterPolicy.GsonCompatible) {
+            clearMissingReferenceFields(instance, requiredConstructorBindings, assignedRequiredConstructorFields)
+            return
+        }
         throw JsonIOException(
             "Required constructor parameter was not read from JSON for ${rawType.name}: " +
                 missing.joinToString()
         )
+    }
+
+    private fun clearMissingReferenceFields(
+        instance: Any,
+        requiredBindings: List<FieldBinding>,
+        assignedFields: Set<Field>
+    ) {
+        requiredBindings
+            .filterNot { binding -> binding.field in assignedFields }
+            .map { binding -> binding.field }
+            .distinct()
+            .filterNot { field -> field.type.isPrimitive }
+            .forEach { field -> runRecovering { field.set(instance, null) } }
     }
 
     /**
@@ -569,6 +631,13 @@ internal object SafeReflectiveAdapterFactory {
         val enumParameterNames: Set<String>,
         val nestedConstructorParameterNames: Set<String>
     ) {
+        fun hasUntrackedRequiredParameters(bindings: Collection<FieldBinding>): Boolean {
+            val trackedFieldNames = bindings.map { binding -> binding.field.name }.toSet()
+            return constructorParameterNames.any { name -> name !in trackedFieldNames } ||
+                enumParameterNames.any { name -> name !in trackedFieldNames } ||
+                nestedConstructorParameterNames.any { name -> name !in trackedFieldNames }
+        }
+
         companion object {
             val EMPTY = ConstructorReadRequirements(
                 constructorParameterNames = emptySet(),

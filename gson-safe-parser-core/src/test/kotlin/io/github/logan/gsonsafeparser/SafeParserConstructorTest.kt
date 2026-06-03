@@ -111,6 +111,35 @@ class SafeParserConstructorTest {
     }
 
     /**
+     * 测试方法说明：验证默认兼容模式不会让无无参构造的普通 Gson 模型因为 SafeParser 接入而失败。
+     */
+    @Test
+    fun `default config delegates constructor unavailable models to native gson`() {
+        val gson = GsonSafeParser.create()
+
+        val result = gson.fromJson("""{"value":"remote"}""", OnlyParameterizedConstructor::class.java)
+
+        assertEquals("remote", result.value)
+    }
+
+    /**
+     * 测试方法说明：验证 Strict 优先级高于 useJdkUnsafe，避免严格模式被 Gson delegate 的 Unsafe 绕过。
+     */
+    @Test
+    fun `strict constructor policy disables native gson unsafe even when config allows unsafe`() {
+        val gson = GsonSafeParser.create(
+            SafeParserConfig(
+                useJdkUnsafe = true,
+                requiredConstructorParameterPolicy = RequiredConstructorParameterPolicy.Strict
+            )
+        )
+
+        assertThrows(JsonIOException::class.java) {
+            gson.fromJson("""{"value":"remote"}""", OnlyParameterizedConstructor::class.java)
+        }
+    }
+
+    /**
      * 测试方法说明：验证无参构造抛出 fatal 时直接外抛，不退到普通构造失败兜底。
      */
     @Test

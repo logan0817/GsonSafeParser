@@ -31,7 +31,10 @@ Out-of-the-box defaults:
 | `primitiveParsingPolicy` | `PrimitiveParsingPolicy.DelegateToGson` |
 | `emptyResponsePolicy` | `EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly` |
 | `useJdkUnsafe` | `false` |
+| `requiredConstructorParameterPolicy` | `RequiredConstructorParameterPolicy.GsonCompatible` |
 | `mapItemKeyPolicy` | `MapItemKeyPolicy.Hash` |
+
+`useJdkUnsafe` only applies in the default `GsonCompatible` mode and controls whether SafeParser itself may use Unsafe construction. After `Strict` is enabled, Unsafe is disabled for both SafeParser and the Gson fallback path; if `useJdkUnsafe = true` is passed together with `Strict`, `Strict` wins.
 
 Fixed behavior:
 
@@ -74,7 +77,7 @@ Use the badge version below. If you use plain Gson or manage Gson yourself, depe
 [![Maven Central: core](https://img.shields.io/maven-central/v/io.github.logan0817/gson-safe-parser-core?label=core)](https://central.sonatype.com/artifact/io.github.logan0817/gson-safe-parser-core)
 
 ```kotlin
-implementation("io.github.logan0817:gson-safe-parser-core:1.0.0") // Adds the core defensive parsing library.
+implementation("io.github.logan0817:gson-safe-parser-core:1.0.1") // Adds the core defensive parsing library.
 ```
 
 If you use Retrofit, depend on the retrofit module only; it already brings core transitively:
@@ -82,7 +85,7 @@ If you use Retrofit, depend on the retrofit module only; it already brings core 
 [![Maven Central: retrofit](https://img.shields.io/maven-central/v/io.github.logan0817/gson-safe-parser-retrofit?label=retrofit)](https://central.sonatype.com/artifact/io.github.logan0817/gson-safe-parser-retrofit)
 
 ```kotlin
-implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.0") // Adds the Retrofit converter integration and transitively includes core.
+implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.1") // Adds the Retrofit converter integration and transitively includes core.
 ```
 
 Extra Android release requirements:
@@ -230,6 +233,7 @@ val config = SafeParserConfig(
     primitiveParsingPolicy = PrimitiveParsingPolicy.DelegateToGson, // Delegates primitive values to native Gson adapters.
     skippedPlatformTypePrefixes = setOf("android."), // Skips Android platform types to avoid reflecting system objects; do not add business model package prefixes here.
     nullValuePolicy = NullValuePolicy.WriteExplicitNulls, // Writes explicit JSON null only to nullable fields.
+    requiredConstructorParameterPolicy = RequiredConstructorParameterPolicy.GsonCompatible, // Keeps Gson-compatible behavior for missing non-null Kotlin constructor parameters.
     mapItemKeyPolicy = MapItemKeyPolicy.Hash, // Emits stable hashed map item keys in events.
     captureRawJsonInCallbacks = false, // Avoids attaching raw JSON to events in production.
     maxRawJsonCaptureBytes = 1024 * 1024, // Limits raw JSON capture to 1 MiB.
@@ -294,8 +298,9 @@ If you integrate into Android release builds, read [Android ProGuard](docs/en/an
 5. [Android ProGuard](docs/en/android-proguard.md): new project integration, legacy quick integration, R8 fullMode choice, and release validation.
 6. [Demo App](docs/en/demo-app.md): device testing, screen overview, and custom JSON validation.
 7. [Troubleshooting](docs/en/troubleshooting.md): empty responses, raw JSON, adapter creation failures, platform objects, and business schema issues.
-8. [Release Checklist](docs/en/release-checklist.md): AAR, ProGuard, documentation version, and local Maven artifact checks before publishing 1.0.0.
-9. [1.0.0 Release Notes](docs/en/release-notes-1.0.0.md): initial capabilities, compatibility boundaries, and release verification notes.
+8. [Release Checklist](docs/en/release-checklist.md): AAR, ProGuard, documentation version, and local Maven artifact checks before publishing 1.0.1.
+9. [1.0.1 Release Notes](docs/en/release-notes-1.0.1.md): stabilization fixes, compatibility boundaries, and release verification notes.
+10. [1.0.0 Release Notes](docs/en/release-notes-1.0.0.md): initial capabilities, compatibility boundaries, and release verification notes.
 
 ## Boundaries
 

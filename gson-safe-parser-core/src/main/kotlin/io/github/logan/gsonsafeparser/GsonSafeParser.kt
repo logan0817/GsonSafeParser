@@ -590,11 +590,16 @@ fun GsonBuilder.enableSafeParser(
         objectToNumberStrategy = objectToNumberStrategy,
         reflectionAccessFilters = config.reflectionAccessFilters.asReversed() + snapshot.reflectionFilters,
         complexMapKeySerialization = config.complexMapKeySerialization || snapshot.complexMapKeySerialization,
-        useJdkUnsafe = config.useJdkUnsafe && snapshot.useJdkUnsafe
+        useJdkUnsafe = if (
+            config.requiredConstructorParameterPolicy == RequiredConstructorParameterPolicy.Strict
+        ) {
+            false
+        } else {
+            config.useJdkUnsafe && snapshot.useJdkUnsafe
+        }
     )
-    if (!safeConfig.useJdkUnsafe) {
-        // Delegate fallback 仍会使用同一个 GsonBuilder 创建的原生 Gson Adapter；这里同步禁用 Unsafe，
-        // 避免 Safe 构造层拒绝 Unsafe 后又被 Gson delegate 绕回去。
+    if (safeConfig.requiredConstructorParameterPolicy == RequiredConstructorParameterPolicy.Strict) {
+        // Strict 优先级最高，不能让 Safe 构造层或 Gson delegate 通过 Unsafe 绕过构造校验。
         disableJdkUnsafe()
     }
     return setObjectToNumberStrategy(objectToNumberStrategy)

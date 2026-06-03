@@ -2,6 +2,17 @@
 
 All notable changes are summarized here. Detailed bilingual release notes stay under `docs/`.
 
+## 1.0.1
+
+Stabilization release for production adoption.
+
+1. Aligns Gradle publishing version, Demo version, dependency snippets, compatibility docs, release checklist, and release notes with `1.0.1`.
+2. Keeps the default constructor policy Gson-compatible so existing projects can migrate without fixing every missing non-null Kotlin field at once.
+3. Documents and tests that `RequiredConstructorParameterPolicy.Strict` has priority over `useJdkUnsafe`.
+4. Keeps `1.0.0` as the first public API compatibility baseline.
+
+Details: [中文](docs/release-notes-1.0.1.md) / [English](docs/en/release-notes-1.0.1.md)
+
 ## 1.0.0
 
 First public release for production adoption.

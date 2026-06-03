@@ -30,6 +30,7 @@ class SafeParserPresetConfigTest {
         assertEquals(PrimitiveParsingPolicy.DelegateToGson, config.primitiveParsingPolicy)
         assertEquals(EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly, config.emptyResponsePolicy)
         assertEquals(NullValuePolicy.WriteExplicitNulls, config.nullValuePolicy)
+        assertEquals(RequiredConstructorParameterPolicy.GsonCompatible, config.requiredConstructorParameterPolicy)
         assertEquals(MapItemKeyPolicy.Hash, config.mapItemKeyPolicy)
         assertFalse(config.useJdkUnsafe)
     }
@@ -48,6 +49,7 @@ class SafeParserPresetConfigTest {
         assertEquals(PrimitiveParsingPolicy.DelegateToGson, config.primitiveParsingPolicy)
         assertEquals(EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly, config.emptyResponsePolicy)
         assertEquals(NullValuePolicy.WriteExplicitNulls, config.nullValuePolicy)
+        assertEquals(RequiredConstructorParameterPolicy.GsonCompatible, config.requiredConstructorParameterPolicy)
         assertEquals(MapItemKeyPolicy.Hash, config.mapItemKeyPolicy)
         assertFalse(config.useJdkUnsafe)
         assertFalse(config.captureRawJsonInCallbacks)
@@ -79,6 +81,7 @@ class SafeParserPresetConfigTest {
         assertTrue(config.captureRawJsonInCallbacks)
         assertEquals(64 * 1024, config.maxRawJsonCaptureBytes)
         assertEquals(FallbackPolicy.NullOnly, config.fallbackPolicy)
+        assertEquals(RequiredConstructorParameterPolicy.GsonCompatible, config.requiredConstructorParameterPolicy)
         assertEquals(JsonToken.BEGIN_ARRAY, event.detail.actualToken)
         assertEquals(1, events.size)
         assertEquals(1, result.events.size)
@@ -96,6 +99,7 @@ class SafeParserPresetConfigTest {
 
         assertEquals(FallbackPolicy.NullOnly, config.fallbackPolicy)
         assertEquals(PrimitiveParsingPolicy.DelegateToGson, config.primitiveParsingPolicy)
+        assertEquals(RequiredConstructorParameterPolicy.GsonCompatible, config.requiredConstructorParameterPolicy)
         assertFalse(config.useJdkUnsafe)
         assertFalse(config.captureRawJsonInCallbacks)
         assertFalse(diagnostics.hasErrors)

@@ -26,6 +26,7 @@ import java.math.BigDecimal
  * @property useJdkUnsafe 是否允许最后使用 JDK Unsafe 绕过构造函数创建对象。
  * @property skippedPlatformTypePrefixes 默认跳过的平台类型包名前缀，例如 Android 平台对象；配置创建时会保存快照。
  * @property nullValuePolicy 后端显式返回 null 时是否写入 nullable 字段。
+ * @property requiredConstructorParameterPolicy Kotlin 非空必填构造参数没有默认值时的处理策略。
  * @property mapItemKeyPolicy Map item 事件里的 key 输出策略，默认输出稳定哈希。
  * @property captureRawJsonInCallbacks 是否在错配回调里附带原始 JSON。线上默认关闭。
  * @property maxRawJsonCaptureBytes rawJson 最大捕获长度。普通 Gson 解析按 UTF-8 字节数安全截断；
@@ -47,6 +48,8 @@ class SafeParserConfig(
     val useJdkUnsafe: Boolean = false,
     skippedPlatformTypePrefixes: Set<String> = setOf("android."),
     val nullValuePolicy: NullValuePolicy = NullValuePolicy.WriteExplicitNulls,
+    val requiredConstructorParameterPolicy: RequiredConstructorParameterPolicy =
+        RequiredConstructorParameterPolicy.GsonCompatible,
     val mapItemKeyPolicy: MapItemKeyPolicy = MapItemKeyPolicy.Hash,
     val captureRawJsonInCallbacks: Boolean = false,
     val maxRawJsonCaptureBytes: Int = 1024 * 1024,
@@ -75,6 +78,7 @@ class SafeParserConfig(
      * @param useJdkUnsafe 是否允许 Unsafe 兜底构造对象。
      * @param skippedPlatformTypePrefixes 需要跳过的平台类型包名前缀。
      * @param nullValuePolicy 后端显式返回 null 时是否写入 nullable 字段。
+     * @param requiredConstructorParameterPolicy Kotlin 非空必填构造参数没有默认值时的处理策略。
      * @param mapItemKeyPolicy Map item 事件里的 key 输出策略。
      * @param captureRawJsonInCallbacks 是否在回调里携带原始 JSON。
      * @param maxRawJsonCaptureBytes 按 UTF-8 字节数计算的 rawJson 捕获上限。
@@ -95,6 +99,8 @@ class SafeParserConfig(
         useJdkUnsafe: Boolean = this.useJdkUnsafe,
         skippedPlatformTypePrefixes: Set<String> = this.skippedPlatformTypePrefixes,
         nullValuePolicy: NullValuePolicy = this.nullValuePolicy,
+        requiredConstructorParameterPolicy: RequiredConstructorParameterPolicy =
+            this.requiredConstructorParameterPolicy,
         mapItemKeyPolicy: MapItemKeyPolicy = this.mapItemKeyPolicy,
         captureRawJsonInCallbacks: Boolean = this.captureRawJsonInCallbacks,
         maxRawJsonCaptureBytes: Int = this.maxRawJsonCaptureBytes,
@@ -114,6 +120,7 @@ class SafeParserConfig(
             useJdkUnsafe = useJdkUnsafe,
             skippedPlatformTypePrefixes = skippedPlatformTypePrefixes,
             nullValuePolicy = nullValuePolicy,
+            requiredConstructorParameterPolicy = requiredConstructorParameterPolicy,
             mapItemKeyPolicy = mapItemKeyPolicy,
             captureRawJsonInCallbacks = captureRawJsonInCallbacks,
             maxRawJsonCaptureBytes = maxRawJsonCaptureBytes,
@@ -158,7 +165,8 @@ class SafeParserConfig(
                 readPolicy = SafeReadPolicy(
                     fallbackPolicy = FallbackPolicy.NullOnly,
                     primitiveParsingPolicy = PrimitiveParsingPolicy.DelegateToGson,
-                    useJdkUnsafe = false
+                    useJdkUnsafe = false,
+                    requiredConstructorParameterPolicy = RequiredConstructorParameterPolicy.GsonCompatible
                 ),
                 writePolicy = SafeWritePolicy(
                     complexMapKeySerialization = false
@@ -191,7 +199,8 @@ class SafeParserConfig(
                 readPolicy = SafeReadPolicy(
                     fallbackPolicy = FallbackPolicy.NullOnly,
                     primitiveParsingPolicy = PrimitiveParsingPolicy.DelegateToGson,
-                    useJdkUnsafe = false
+                    useJdkUnsafe = false,
+                    requiredConstructorParameterPolicy = RequiredConstructorParameterPolicy.GsonCompatible
                 ),
                 writePolicy = SafeWritePolicy(
                     complexMapKeySerialization = false
@@ -222,7 +231,8 @@ class SafeParserConfig(
                 readPolicy = SafeReadPolicy(
                     fallbackPolicy = FallbackPolicy.NullOnly,
                     primitiveParsingPolicy = PrimitiveParsingPolicy.DelegateToGson,
-                    useJdkUnsafe = false
+                    useJdkUnsafe = false,
+                    requiredConstructorParameterPolicy = RequiredConstructorParameterPolicy.GsonCompatible
                 ),
                 writePolicy = SafeWritePolicy(
                     complexMapKeySerialization = false
@@ -266,6 +276,7 @@ class SafeParserConfig(
                 useJdkUnsafe = readPolicy.useJdkUnsafe,
                 skippedPlatformTypePrefixes = readPolicy.skippedPlatformTypePrefixes,
                 nullValuePolicy = readPolicy.nullValuePolicy,
+                requiredConstructorParameterPolicy = readPolicy.requiredConstructorParameterPolicy,
                 mapItemKeyPolicy = observerPolicy.mapItemKeyPolicy,
                 captureRawJsonInCallbacks = observerPolicy.captureRawJsonInCallbacks,
                 maxRawJsonCaptureBytes = observerPolicy.maxRawJsonCaptureBytes,
@@ -289,6 +300,7 @@ class SafeParserConfig(
  * @property skippedPlatformTypePrefixes 需要跳过的系统平台类前缀。
  * @property useJdkUnsafe 是否允许 Unsafe 兜底构造对象。
  * @property nullValuePolicy 后端显式返回 null 时是否写入 nullable 字段。
+ * @property requiredConstructorParameterPolicy Kotlin 非空必填构造参数没有默认值时的处理策略。
  */
 data class SafeReadPolicy(
     val fallbackPolicy: FallbackPolicy = FallbackPolicy.NullOnly,
@@ -296,7 +308,9 @@ data class SafeReadPolicy(
     val reflectionAccessFilters: List<ReflectionAccessFilter> = emptyList(),
     val skippedPlatformTypePrefixes: Set<String> = setOf("android."),
     val useJdkUnsafe: Boolean = false,
-    val nullValuePolicy: NullValuePolicy = NullValuePolicy.WriteExplicitNulls
+    val nullValuePolicy: NullValuePolicy = NullValuePolicy.WriteExplicitNulls,
+    val requiredConstructorParameterPolicy: RequiredConstructorParameterPolicy =
+        RequiredConstructorParameterPolicy.GsonCompatible
 )
 
 /**
@@ -410,6 +424,16 @@ enum class NullValuePolicy {
     WriteExplicitNulls,
     /** 后端明确返回 null 时也保留构造默认值。 */
     KeepDefaults
+}
+
+/**
+ * Kotlin 非空必填构造参数没有默认值时的处理策略。
+ */
+enum class RequiredConstructorParameterPolicy {
+    /** 默认策略：缺失的引用字段按 Gson 兼容方式保持 null，primitive 保持 JVM 默认值。 */
+    GsonCompatible,
+    /** 严格策略：字段缺失、null、错形或未知枚举值时抛出 JsonIOException，适合新接口契约治理。 */
+    Strict
 }
 
 /**

@@ -19,7 +19,8 @@
 | `fallbackPolicy = FallbackPolicy.NullOnly` | 字段形状不一致时优先返回 `null` 或保留构造默认值。 |
 | `primitiveParsingPolicy = PrimitiveParsingPolicy.DelegateToGson` | 基础类型默认交回 Gson 原生 Adapter。 |
 | `emptyResponsePolicy = EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly` | Retrofit 空 body 只为 `Unit` / `Void` 返回空值。 |
-| `useJdkUnsafe = false` | 默认不使用 JDK Unsafe 绕过构造函数。 |
+| `useJdkUnsafe = false` | 默认兼容模式下，SafeParser 自己不使用 JDK Unsafe 构造对象；开启 `Strict` 后会强制禁用 SafeParser 和 Gson 回退路径里的 Unsafe。 |
+| `requiredConstructorParameterPolicy = RequiredConstructorParameterPolicy.GsonCompatible` | Kotlin 非空必填构造参数缺失时保持 Gson 兼容；引用字段保持 `null`，primitive 保持 JVM 默认值。 |
 | `mapItemKeyPolicy = MapItemKeyPolicy.Hash` | Map item 事件默认输出稳定哈希。 |
 
 下面的“默认处理”都按这组配置描述。只有显式切到 `FallbackPolicy.Default` 或 `PrimitiveParsingPolicy.Safe` 时，才会启用空集合、空 Map、数字 0、布尔 false 这类旧安全默认值。
@@ -32,7 +33,7 @@
 | 集合字段 | 整体形状不一致返回 `null` 或保留默认值。 | 集合内单个坏 item 会被跳过。 |
 | Map 字段 | 整体形状不一致返回 `null` 或保留默认值。 | `[]` 可能是复杂 Map key 的合法数组 entry。 |
 | 基础类型 | 默认交回 Gson 原生 Adapter。 | 只有 `PrimitiveParsingPolicy.Safe` 才使用安全基础值。 |
-| Kotlin 默认值 | 缺字段、可恢复的 JSON 形状不一致尽量保留默认值。 | 非空无默认值的必填参数会硬失败。 |
+| Kotlin 默认值 | 缺字段、可恢复的 JSON 形状不一致尽量保留默认值。 | 非空无默认值的必填参数默认按 Gson 兼容处理；严格失败需要显式配置。 |
 | Retrofit 空 body | `Unit` 返回 `Unit`，其他常见目标返回 `null`。 | HTTP 错误码和业务错误码不由本库判断。 |
 
 ### 2.1 `data: User`
@@ -97,9 +98,9 @@
 1. 后端实际返回：缺字段、字段为 `null`、字段形状不一致。
 2. 默认处理：缺字段保留构造默认值；显式 `null` 只写入 nullable 字段；字段形状不一致读取失败时保留构造默认值。
 3. 观测证据：可通过类型错配事件和最终 value 对照确认。
-4. 边界：非空构造参数如果没有默认值，缺失、`null`、形状不一致或未知枚举值会硬失败。
-5. 边界：这类参数藏在另一个无默认值的必填嵌套对象里时，父对象也会硬失败。
-6. 边界：不要把内部构造占位值当成业务兜底；这会掩盖接口契约问题。
+4. 边界：非空构造参数如果没有默认值，默认按 Gson 兼容处理；缺失引用字段保持 `null`，primitive 保持 JVM 默认值。
+5. 边界：如果你要把缺字段、`null`、形状不一致或未知枚举值作为接口契约错误处理，把 `requiredConstructorParameterPolicy` 改成 `Strict`。
+6. 边界：严格模式会抛出 `JsonIOException`，也会阻止 Gson delegate 继续用 Unsafe 绕过构造；即使同时传入 `useJdkUnsafe = true`，也以 `Strict` 为准。
 
 ### 2.9 `JSONObject` / `JSONArray`
 <!-- capability-id: org-json-mismatch -->

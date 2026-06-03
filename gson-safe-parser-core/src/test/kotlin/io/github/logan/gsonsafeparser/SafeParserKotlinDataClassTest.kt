@@ -2,6 +2,7 @@ package io.github.logan.gsonsafeparser
 
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import com.google.gson.JsonIOException
@@ -43,11 +44,27 @@ class SafeParserKotlinDataClassTest {
     data class RequiredPrimitivePayload(val count: Int, val enabled: Boolean)
     /** 测试模型：嵌套对象包含非空无默认字段时，父对象不能保留子对象占位值。 */
     data class NestedRequiredStringPayload(val payload: RequiredStringPayload, val traceId: String = "local")
+    /** 测试模型：模拟业务接口外层 data 节点。 */
+    data class FilterResponse(val data: FilterData = FilterData())
+    /** 测试模型：模拟业务接口 attributes 节点。 */
+    data class FilterData(val attributes: FiltersResource? = null)
+    /** 测试模型：模拟后端只返回 groups，但旧业务模型还有 treatments/types 必填字段。 */
+    data class FiltersResource(
+        val treatments: List<String>,
+        val types: List<String>,
+        val groups: List<String> = emptyList()
+    )
     /** 测试枚举：用于验证 Kotlin 枚举字段错形时不会拖垮整个对象。 */
     enum class Role {
         ADMIN,
         USER
     }
+
+    private fun strictGson() = GsonSafeParser.create(
+        SafeParserConfig(
+            requiredConstructorParameterPolicy = RequiredConstructorParameterPolicy.Strict
+        )
+    )
 
     /**
      * 测试方法说明：验证“kotlin data class uses default values when object payload is invalid”这个具体行为。
@@ -124,11 +141,41 @@ class SafeParserKotlinDataClassTest {
     }
 
     /**
+     * 测试方法说明：验证默认配置不会因为 Kotlin 非空必填构造参数缺字段而比 Gson 更容易失败。
+     */
+    @Test
+    fun `missing required constructor parameter delegates to native gson by default`() {
+        val gson = GsonSafeParser.create()
+
+        val result = gson.fromJson("""{"name":"Tom"}""", EnumPayload::class.java)
+
+        assertNull(result.role)
+        assertEquals("Tom", result.name)
+    }
+
+    /**
+     * 测试方法说明：复现真实业务日志里的 attributes groups 返回，确认缺 treatments/types 时默认保持 Gson 兼容。
+     */
+    @Test
+    fun `nested required constructor fields keep gson compatibility by default`() {
+        val gson = GsonSafeParser.create()
+
+        val result = gson.fromJson(
+            """{"data":{"attributes":{"groups":["faq"]}}}""",
+            FilterResponse::class.java
+        )
+
+        assertEquals(listOf("faq"), result.data.attributes?.groups)
+        assertNull(result.data.attributes?.treatments)
+        assertNull(result.data.attributes?.types)
+    }
+
+    /**
      * 测试方法说明：验证非空 enum 没有默认值且 JSON 缺字段时，不能把构造占位值静默留给业务。
      */
     @Test
     fun `missing required enum constructor parameter does not keep placeholder enum`() {
-        val gson = GsonSafeParser.create()
+        val gson = strictGson()
 
         val error = assertThrows(JsonIOException::class.java) {
             gson.fromJson("""{"name":"Tom"}""", EnumPayload::class.java)
@@ -142,7 +189,7 @@ class SafeParserKotlinDataClassTest {
      */
     @Test
     fun `wrong shaped required enum constructor parameter does not keep placeholder enum`() {
-        val gson = GsonSafeParser.create()
+        val gson = strictGson()
 
         val error = assertThrows(JsonIOException::class.java) {
             gson.fromJson("""{"role":[],"name":"Tom"}""", EnumPayload::class.java)
@@ -156,7 +203,7 @@ class SafeParserKotlinDataClassTest {
      */
     @Test
     fun `null required enum constructor parameter does not keep placeholder enum`() {
-        val gson = GsonSafeParser.create()
+        val gson = strictGson()
 
         val error = assertThrows(JsonIOException::class.java) {
             gson.fromJson("""{"role":null,"name":"Tom"}""", EnumPayload::class.java)
@@ -170,7 +217,7 @@ class SafeParserKotlinDataClassTest {
      */
     @Test
     fun `unknown required enum constructor parameter does not keep placeholder enum`() {
-        val gson = GsonSafeParser.create()
+        val gson = strictGson()
 
         val error = assertThrows(JsonIOException::class.java) {
             gson.fromJson("""{"role":"OWNER","name":"Tom"}""", EnumPayload::class.java)
@@ -184,7 +231,7 @@ class SafeParserKotlinDataClassTest {
      */
     @Test
     fun `skipped required enum constructor parameter does not keep placeholder enum`() {
-        val gson = GsonSafeParser.create()
+        val gson = strictGson()
 
         val error = assertThrows(JsonIOException::class.java) {
             gson.fromJson("""{"role":"USER","name":"Tom"}""", SkippedEnumPayload::class.java)
@@ -198,7 +245,7 @@ class SafeParserKotlinDataClassTest {
      */
     @Test
     fun `nested required enum constructor parameter does not leak placeholder through parent fallback`() {
-        val gson = GsonSafeParser.create()
+        val gson = strictGson()
 
         val error = assertThrows(JsonIOException::class.java) {
             gson.fromJson("""{"payload":{"name":"Tom"},"traceId":"remote"}""", NestedEnumPayload::class.java)
@@ -212,7 +259,7 @@ class SafeParserKotlinDataClassTest {
      */
     @Test
     fun `missing required string constructor parameter does not keep placeholder string`() {
-        val gson = GsonSafeParser.create()
+        val gson = strictGson()
 
         val error = assertThrows(JsonIOException::class.java) {
             gson.fromJson("""{}""", RequiredStringPayload::class.java)
@@ -226,7 +273,7 @@ class SafeParserKotlinDataClassTest {
      */
     @Test
     fun `wrong shaped required string constructor parameter does not keep placeholder string`() {
-        val gson = GsonSafeParser.create()
+        val gson = strictGson()
 
         val error = assertThrows(JsonIOException::class.java) {
             gson.fromJson("""{"name":[]}""", RequiredStringPayload::class.java)
@@ -240,7 +287,7 @@ class SafeParserKotlinDataClassTest {
      */
     @Test
     fun `missing required primitive constructor parameters do not keep placeholder values`() {
-        val gson = GsonSafeParser.create()
+        val gson = strictGson()
 
         val error = assertThrows(JsonIOException::class.java) {
             gson.fromJson("""{}""", RequiredPrimitivePayload::class.java)
@@ -276,7 +323,7 @@ class SafeParserKotlinDataClassTest {
      */
     @Test
     fun `nested required constructor parameter does not leak placeholder object`() {
-        val gson = GsonSafeParser.create()
+        val gson = strictGson()
 
         val error = assertThrows(JsonIOException::class.java) {
             gson.fromJson("""{"payload":{},"traceId":"remote"}""", NestedRequiredStringPayload::class.java)
@@ -291,7 +338,7 @@ class SafeParserKotlinDataClassTest {
      */
     @Test
     fun `recursive required constructor parameter fails without stack overflow`() {
-        val gson = GsonSafeParser.create()
+        val gson = strictGson()
 
         val error = assertThrows(JsonIOException::class.java) {
             gson.fromJson("""{}""", RecursivePayload::class.java)
@@ -307,7 +354,12 @@ class SafeParserKotlinDataClassTest {
      */
     @Test
     fun `indirect recursive constructor parameter does not fall back to unsafe`() {
-        val gson = GsonSafeParser.create(SafeParserConfig(useJdkUnsafe = true))
+        val gson = GsonSafeParser.create(
+            SafeParserConfig(
+                useJdkUnsafe = true,
+                requiredConstructorParameterPolicy = RequiredConstructorParameterPolicy.Strict
+            )
+        )
 
         val error = assertThrows(JsonIOException::class.java) {
             gson.fromJson("""{}""", IndirectRecursiveParent::class.java)
@@ -333,7 +385,7 @@ class SafeParserKotlinDataClassTest {
      */
     @Test
     fun `ordinary kotlin primary constructor placeholder failure does not delegate through unsafe by default`() {
-        val gson = GsonSafeParser.create()
+        val gson = strictGson()
 
         val error = assertThrows(JsonIOException::class.java) {
             gson.fromJson("""{"name":"remote"}""", ValidatedConstructorPayload::class.java)
