@@ -105,12 +105,12 @@ class OpenSourcePublicationTest {
     }
 
     /**
-     * Demo App 允许开发者本机保留测试签名文件，但不能把签名材料提交到 Git。
+     * Demo App 使用 Android 默认 debug 签名构建 release 测试包，避免仓库保留任何本地签名模板。
      *
-     * release Demo 默认只验证 R8 和接入规则；需要本机安装 release 包时，再手动打开注释里的签名模板。
+     * 签名材料可以留在开发者本机，但不能提交到 Git，也不能成为 Demo 的默认构建前提。
      */
     @Test
-    fun `demo app does not publish local signing material`() {
+    fun `demo app uses default debug signing without local signing material`() {
         val repoRoot = File("..").canonicalFile
         val gitIgnore = File("../.gitignore").readText()
         val demoBuildFile = File("../demo-app/build.gradle.kts").readText()
@@ -142,12 +142,26 @@ class OpenSourcePublicationTest {
         assertTrue(forbiddenTrackedSigningFiles.isEmpty(), "Git must not track local signing files: $forbiddenTrackedSigningFiles")
         val commonTestPassword = "12" + "3456"
         val legacyTestKeyAlias = "shared" + "TestKey"
+        val legacyDebugKeyFileName = "debugKey" + ".jks"
+        val legacyLocalSigningConfigName = "local" + "Test"
+        val legacyDemoSigningPropertyPrefix = "demo" + "Signing"
         assertFalse(demoBuildFile.contains(commonTestPassword), "demo-app must not keep fixed signing passwords, even in comments.")
         assertFalse(demoBuildFile.contains(legacyTestKeyAlias), "demo-app must not keep fixed signing aliases, even in comments.")
-        assertTrue(demoBuildFile.contains("providers.gradleProperty(\"demoSigningStorePassword\")"))
-        assertTrue(demoBuildFile.contains("providers.gradleProperty(\"demoSigningKeyPassword\")"))
-        assertTrue(demoBuildFile.contains("providers.gradleProperty(\"demoSigningKeyAlias\")"))
-        listOf("signingConfigs", "storeFile", "storePassword", "keyAlias", "keyPassword").forEach { keyword ->
+        assertFalse(demoBuildFile.contains(legacyDebugKeyFileName), "demo-app must not mention the legacy local debug key file.")
+        assertFalse(demoBuildFile.contains(legacyLocalSigningConfigName), "demo-app must not keep a legacy local signing template.")
+        assertFalse(demoBuildFile.contains(legacyDemoSigningPropertyPrefix), "demo-app must not keep legacy demo signing Gradle properties.")
+        assertTrue(
+            activeDemoBuildFile.contains("""signingConfig = signingConfigs.getByName("debug")"""),
+            "demo-app release builds must use the default Android debug signing config."
+        )
+        listOf(
+            legacyLocalSigningConfigName,
+            "storeFile",
+            "storePassword",
+            "keyAlias",
+            "keyPassword",
+            legacyDemoSigningPropertyPrefix
+        ).forEach { keyword ->
             assertFalse(activeDemoBuildFile.contains(keyword), "demo-app must not enable local signing config keyword: $keyword")
         }
     }

@@ -42,7 +42,7 @@ captures/
 *.hprof
 
 # 本地签名文件。
-# 允许开发者本机保留 signing/debugKey.jks 测试，但不能提交到开源仓库。
+# 签名材料只允许留在开发者本机，不能提交到开源仓库。
 signing/
 *.jks
 *.keystore

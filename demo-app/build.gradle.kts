@@ -28,30 +28,15 @@ android {
 
     buildTypes {
         release {
-            // release 变体只用于验证用户 App 接入混淆配置的方式，不作为示例 App 发布包或安装包。
+            // release 变体用于验证用户 App 接入混淆配置的方式；默认使用 Android debug 签名，便于本机直接构建和安装测试。
             isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 file("proguard-rules.pro")
             )
-            // 如需在本机安装 release Demo，可先准备 signing/debugKey.jks，再打开下方签名模板。
-            // signingConfig = signingConfigs.getByName("localTest")
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
-
-    // 本地调试签名模板。默认保持注释；需要时在本机 gradle.properties 配置下面 4 个属性后再打开。
-    // val demoSigningStoreFile = providers.gradleProperty("demoSigningStoreFile").orElse("signing/debugKey.jks")
-    // val demoSigningStorePassword = providers.gradleProperty("demoSigningStorePassword")
-    // val demoSigningKeyAlias = providers.gradleProperty("demoSigningKeyAlias")
-    // val demoSigningKeyPassword = providers.gradleProperty("demoSigningKeyPassword")
-    // signingConfigs {
-    //     create("localTest") {
-    //         storeFile = rootProject.file(demoSigningStoreFile.get())
-    //         storePassword = demoSigningStorePassword.get()
-    //         keyAlias = demoSigningKeyAlias.get()
-    //         keyPassword = demoSigningKeyPassword.get()
-    //     }
-    // }
 }
 
 kotlin {
