@@ -34,7 +34,7 @@ Out-of-the-box defaults:
 | `requiredConstructorParameterPolicy` | `RequiredConstructorParameterPolicy.GsonCompatible` |
 | `mapItemKeyPolicy` | `MapItemKeyPolicy.Hash` |
 
-`useJdkUnsafe` only applies in the default `GsonCompatible` mode and controls whether SafeParser itself may use Unsafe construction. After `Strict` is enabled, Unsafe is disabled for both SafeParser and the Gson fallback path; if `useJdkUnsafe = true` is passed together with `Strict`, `Strict` wins.
+Constructor behavior defaults to native-Gson compatibility. Existing projects should usually keep `GsonCompatible + useJdkUnsafe = false`; enable `useJdkUnsafe` only when native Gson-style Unsafe construction is needed; switch to `Strict` when missing fields should be treated as contract errors. See [Configuration](docs/en/configuration.md) for the full decision table.
 
 Fixed behavior:
 

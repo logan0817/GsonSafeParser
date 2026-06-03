@@ -34,7 +34,7 @@ GsonSafeParser 会尽量把问题隔离在当前字段，让外层对象继续�
 | `requiredConstructorParameterPolicy` | `RequiredConstructorParameterPolicy.GsonCompatible` |
 | `mapItemKeyPolicy` | `MapItemKeyPolicy.Hash` |
 
-`useJdkUnsafe` 只在默认 `GsonCompatible` 模式下生效，用来控制 SafeParser 自己是否允许 Unsafe 构造。开启 `Strict` 后会自动禁用 SafeParser 和 Gson 回退路径里的 Unsafe；即使同时传入 `useJdkUnsafe = true`，也以 `Strict` 为准。
+构造策略默认优先兼容原生 Gson。老项目先保持 `GsonCompatible + useJdkUnsafe = false`；如果确实要贴近原生 Gson 的 Unsafe 构造行为，可以显式开启 `useJdkUnsafe`；如果要把缺字段当成契约错误，改用 `Strict`。完整关系见 [配置说明](docs/configuration.md)。
 
 固定行为：
 

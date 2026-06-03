@@ -4,7 +4,7 @@
 
 GsonSafeParser 的配置目标很直接：能安全兜底的字段由库处理，不能确认安全的问题交回 Gson 原生 Adapter。
 
-本文档说明配置项、预设、事件、契约报告和注解。完整 JSON 形状不一致范围见 [错形能力矩阵（JSON 形状不一致）](mismatch-capability-matrix.md)。
+本文档说明配置项、构造策略、预设、事件、契约报告和注解。完整 JSON 形状不一致范围见 [错形能力矩阵（JSON 形状不一致）](mismatch-capability-matrix.md)。
 
 ## 1. 基础配置
 
@@ -52,13 +52,46 @@ raw JSON 捕获规则：
 
 `enableSafeParser()` 对同一个 `GsonBuilder` 是幂等的，重复调用不会重复注册 Safe Adapter。如果需要换配置，请新建一个 `GsonBuilder`。
 
-Unsafe 回退边界：
+## 2. 构造策略与 Unsafe
 
-1. 默认配置优先兼容旧 Gson 项目。`GsonCompatible` 模式下，`useJdkUnsafe` 只控制 SafeParser 自己是否用 Unsafe 构造对象。
-2. 如果 SafeParser 无法安全构造当前类型，默认 `GsonCompatible` 会把它交回 Gson；这条回退路径仍遵循 Gson 自己的 Unsafe 设置。
-3. `Strict` 优先级最高。只要开启 `Strict`，SafeParser 会自动禁用自身 Unsafe，也会禁用 Gson 回退路径里的 Unsafe；即使同时传入 `useJdkUnsafe = true`，也以 `Strict` 为准。
+这两个配置只解决一个问题：对象没有安全构造路径时，库要不要允许 Unsafe 绕过构造函数。
 
-## 2. 预设配置
+先看结论：
+
+| 配置组合 | SafeParser 自己是否允许 Unsafe | Gson 回退路径是否允许 Unsafe | 适合场景 |
+| --- | --- | --- | --- |
+| `GsonCompatible + useJdkUnsafe = false` | 不允许。 | 保留 Gson 原生行为。 | 默认推荐。适合大多数老项目迁移，降低 SafeParser 自己引入额外构造风险的概率。 |
+| `GsonCompatible + useJdkUnsafe = true` | 允许。 | 保留 Gson 原生行为。 | 需要最大程度贴近原生 Gson 构造行为时使用。 |
+| `Strict + useJdkUnsafe = false` | 不允许。 | 不允许。 | 新接口或强契约场景。缺字段、`null`、错形或未知枚举值要尽早暴露。 |
+| `Strict + useJdkUnsafe = true` | 不允许。 | 不允许。 | 不建议这样写；`Strict` 优先级最高，`useJdkUnsafe = true` 会被忽略。 |
+
+`GsonCompatible` 是兼容模式。它的目标是尽量不打断已经依赖 Gson 宽松行为的项目。
+
+在这个模式下，`useJdkUnsafe` 只控制 SafeParser 自己的构造层：
+
+1. `useJdkUnsafe = false` 时，SafeParser 自己不会用 Unsafe 绕过构造函数。
+2. `useJdkUnsafe = true` 时，如果没有可用构造方法、没有默认值构造路径、也没有 `InstanceCreator`，SafeParser 最后可以用 Unsafe 创建对象。
+3. 如果 SafeParser 无法安全处理当前类型，仍会交回 Gson 原生 Adapter；这条回退路径继续遵循 Gson 自己的 Unsafe 设置。
+
+`Strict` 是严格模式。它的目标是把缺失的必填构造参数当成接口契约问题。
+
+只要开启 `Strict`，SafeParser 会同时关闭两条 Unsafe 路径：
+
+1. SafeParser 自己不会用 Unsafe 创建对象。
+2. Gson delegate 回退路径也不会继续用 Unsafe 绕过构造校验。
+3. 即使同时传入 `useJdkUnsafe = true`，也以 `Strict` 为准。
+
+推荐用法：
+
+| 你的目标 | 推荐配置 |
+| --- | --- |
+| 老项目低成本迁移，先保证不增加解析失败 | 保持默认配置：`GsonCompatible + useJdkUnsafe = false`。 |
+| 老项目过去明显依赖 Gson Unsafe 构造，短期内无法改模型 | 临时使用 `GsonCompatible + useJdkUnsafe = true`，同时补业务模型 keep 规则和真实 JSON 回归。 |
+| 新接口、强契约、希望尽早发现后端缺字段 | 使用 `Strict + useJdkUnsafe = false`。 |
+
+Unsafe 的风险很明确：它会绕过构造函数和 `init` 代码。对象可能被创建出来，但 Kotlin 默认值、非空约束和构造校验不一定执行。因此，`useJdkUnsafe = true` 只适合作为兼容旧行为的过渡方案，不建议作为新项目默认配置。
+
+## 3. 预设配置
 
 ```kotlin
 val production = SafeParserConfig.production() // 创建线上默认配置。
@@ -74,7 +107,7 @@ val lowInterference = SafeParserConfig.lowInterference() // 创建低误伤配�
 | `debug()` | 联调、测试和接口排障。 | 与线上读策略一致，但开启有限长度 raw JSON 捕获，并输出明文 Map item key。 |
 | `lowInterference()` | 灰度接入和低干预优先。 | 字段、集合、Map 整体形状不一致优先 `null`，基础类型交回 Gson 原生 Adapter，空响应默认 `null`。 |
 
-## 3. 分层策略
+## 4. 分层策略
 
 ```kotlin
 val config = SafeParserConfig.fromPolicies( // 使用分层策略创建配置。
@@ -96,7 +129,7 @@ val config = SafeParserConfig.fromPolicies( // 使用分层策略创建配置。
 
 分层策略适合团队内部封装统一配置，把读取、写出和观测职责拆开，避免一个构造方法里塞太多参数。
 
-## 4. 事件观测
+## 5. 事件观测
 
 ```kotlin
 val config = SafeParserConfig( // 创建带事件回调的安全解析配置。
@@ -128,7 +161,7 @@ val config = SafeParserConfig( // 创建带事件回调的安全解析配置。
 
 `dispatchEvent` 是低层事件注入口，主要用于跨模块桥接。不建议业务代码直接调用。手动调用只会触发观察回调，不会写入当前 `parseSafe` 事件快照，也不代表真实解析已经发生。
 
-## 5. 契约报告
+## 6. 契约报告
 
 ```kotlin
 val result = GsonSafeParser.parseSafe<ApiResponse>("""{"code":200,"data":[]}""") // 解析一份 Object 字段形状不一致的 JSON。
