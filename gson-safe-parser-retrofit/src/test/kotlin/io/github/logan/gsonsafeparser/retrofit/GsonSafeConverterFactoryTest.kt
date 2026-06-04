@@ -2,6 +2,10 @@ package io.github.logan.gsonsafeparser.retrofit
 
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonSyntaxException
+import com.google.gson.TypeAdapter
+import com.google.gson.annotations.JsonAdapter
+import com.google.gson.stream.JsonReader
+import com.google.gson.stream.JsonWriter
 import io.github.logan.gsonsafeparser.SafeParserConfig
 import io.github.logan.gsonsafeparser.EmptyResponsePolicy
 import io.github.logan.gsonsafeparser.ObserverFailureEvent
@@ -28,6 +32,7 @@ import retrofit2.Retrofit
 import java.lang.reflect.InvocationTargetException
 import java.io.EOFException
 import java.io.IOException
+import java.net.ProtocolException
 import java.nio.charset.Charset
 
 /**
@@ -47,6 +52,28 @@ class GsonSafeConverterFactoryTest {
     data class EmptyPayload(val name: String = "local")
     /** 测试模型：响应体非空但字段错形时，用来验证 Retrofit rawJson 观测。 */
     data class MismatchApiResponse(val data: EmptyPayload = EmptyPayload())
+
+    data class AdapterIOExceptionApiResponse(
+        val data: AdapterIOExceptionPayload = AdapterIOExceptionPayload("default"),
+        val next: String = "local"
+    )
+
+    @JsonAdapter(AdapterIOExceptionPayloadAdapter::class)
+    data class AdapterIOExceptionPayload(val value: String)
+
+    class AdapterIOExceptionPayloadAdapter : TypeAdapter<AdapterIOExceptionPayload>() {
+        override fun write(out: JsonWriter, value: AdapterIOExceptionPayload?) {
+            out.value(value?.value)
+        }
+
+        override fun read(reader: JsonReader): AdapterIOExceptionPayload {
+            val value = reader.nextString()
+            if (value == "bad") {
+                throw IOException("connection reset by business adapter")
+            }
+            return AdapterIOExceptionPayload(value)
+        }
+    }
 
     /**
      * 测试方法说明：验证“factory creates retrofit converter with default safe gson”这个具体行为。
@@ -260,6 +287,56 @@ class GsonSafeConverterFactoryTest {
                 )
             )
         }
+    }
+
+    /**
+     * 测试方法说明：验证正式读取响应体时遇到连接重置，不能被字段级兜底误报为 TypeMismatch。
+     */
+    @Test
+    fun `response body connection reset read failure is rethrown without event`() {
+        val events = mutableListOf<SafeParserEvent>()
+        val factory = GsonSafeConverterFactory.create(SafeParserConfig(onEvent = events::add))
+        val retrofit = Retrofit.Builder()
+            .baseUrl("https://example.com/")
+            .addConverterFactory(factory)
+            .build()
+        val converter = factory.responseBodyConverter(
+            MismatchApiResponse::class.java,
+            emptyArray(),
+            retrofit
+        )
+
+        assertThrows(IOException::class.java) {
+            converter?.convert(failingResponseBody(IOException("connection reset by peer")))
+        }
+
+        assertTrue(events.isEmpty())
+    }
+
+    /**
+     * 测试方法说明：验证 Retrofit 里的业务 Adapter IOException 不会因为文案像网络错误就被整次外抛。
+     */
+    @Test
+    fun `retrofit business adapter io wording remains field recoverable`() {
+        val events = mutableListOf<SafeParserEvent>()
+        val factory = GsonSafeConverterFactory.create(SafeParserConfig(onEvent = events::add))
+        val retrofit = Retrofit.Builder()
+            .baseUrl("https://example.com/")
+            .addConverterFactory(factory)
+            .build()
+        val converter = factory.responseBodyConverter(
+            AdapterIOExceptionApiResponse::class.java,
+            emptyArray(),
+            retrofit
+        )
+
+        val result = converter?.convert(
+            ResponseBody.create(MediaType.parse("application/json"), """{"data":"bad","next":"remote"}""")
+        )
+
+        assertEquals(AdapterIOExceptionApiResponse(next = "remote"), result)
+        val event = events.single() as SafeParserEvent.TypeMismatch
+        assertEquals("$.data", event.detail.path)
     }
 
     /**
@@ -575,11 +652,12 @@ class GsonSafeConverterFactoryTest {
     }
 
     /**
-     * 测试方法说明：验证空响应探测的普通 I/O 失败不会由扩展层放大，应退回 Gson converter 继续解析。
+     * 测试方法说明：验证空响应探测遇到 ResponseBody 读流失败时直接外抛，不降级成普通响应解析。
      */
     @Test
-    fun `empty response ordinary probe failure delegates to Gson conversion`() {
-        val factory = GsonSafeConverterFactory.create()
+    fun `empty response marked probe failure is rethrown without event`() {
+        val events = mutableListOf<SafeParserEvent>()
+        val factory = GsonSafeConverterFactory.create(SafeParserConfig(onEvent = events::add))
         val retrofit = Retrofit.Builder()
             .baseUrl("https://example.com/")
             .addConverterFactory(factory)
@@ -590,11 +668,40 @@ class GsonSafeConverterFactoryTest {
             retrofit
         )
 
-        val result = assertDoesNotThrow<Any?> {
+        assertThrows(IOException::class.java) {
             converter?.convert(firstRequestFailureBody("""{"data":{"name":"remote"}}""", IOException("probe failed")))
         }
 
-        assertEquals(MismatchApiResponse(EmptyPayload("remote")), result)
+        assertTrue(events.isEmpty())
+    }
+
+    /**
+     * 测试方法说明：验证网络流重置不是空响应，也不能降级成 Gson 转换。
+     */
+    @Test
+    fun `empty response stream reset probe failure is rethrown without event`() {
+        val events = mutableListOf<SafeParserEvent>()
+        val factory = GsonSafeConverterFactory.create(SafeParserConfig(onEvent = events::add))
+        val retrofit = Retrofit.Builder()
+            .baseUrl("https://example.com/")
+            .addConverterFactory(factory)
+            .build()
+        val converter = factory.responseBodyConverter(
+            MismatchApiResponse::class.java,
+            emptyArray(),
+            retrofit
+        )
+
+        assertThrows(IOException::class.java) {
+            converter?.convert(
+                firstRequestFailureBody(
+                    """{"data":{"name":"remote"}}""",
+                    IOException("stream was reset: CANCEL")
+                )
+            )
+        }
+
+        assertTrue(events.isEmpty())
     }
 
     /**
@@ -787,10 +894,10 @@ class GsonSafeConverterFactoryTest {
     }
 
     /**
-     * 测试方法说明：验证未知长度 rawJson 探测普通失败时跳过捕获并回到原 Gson converter。
+     * 测试方法说明：验证未知长度 rawJson 探测遇到 ResponseBody 读流失败时直接外抛。
      */
     @Test
-    fun `retrofit raw json unknown length ordinary probe failure skips capture and delegates`() {
+    fun `retrofit raw json unknown length marked probe failure is rethrown`() {
         val events = mutableListOf<SafeParserEvent>()
         val factory = GsonSafeConverterFactory.create(
             SafeParserConfig(
@@ -809,13 +916,195 @@ class GsonSafeConverterFactoryTest {
             retrofit
         )
 
-        val result = converter?.convert(
-            failingRawJsonProbeBody("""{"data":{"name":"remote"}}""", IOException("rawJson probe failed"))
+        assertThrows(IOException::class.java) {
+            converter?.convert(
+                failingRawJsonProbeBody("""{"data":{"name":"remote"}}""", IOException("rawJson probe failed"))
+            )
+        }
+
+        assertTrue(events.isEmpty())
+    }
+
+    /**
+     * 测试方法说明：验证 rawJson 探测阶段遇到网络流重置时直接外抛，不记录 RawJsonCaptureSkipped。
+     */
+    @Test
+    fun `retrofit raw json stream reset probe failure is rethrown without skipped event`() {
+        val events = mutableListOf<SafeParserEvent>()
+        val factory = GsonSafeConverterFactory.create(
+            SafeParserConfig(
+                captureRawJsonInCallbacks = true,
+                maxRawJsonCaptureBytes = 64,
+                onEvent = events::add
+            )
+        )
+        val retrofit = Retrofit.Builder()
+            .baseUrl("https://example.com/")
+            .addConverterFactory(factory)
+            .build()
+        val converter = factory.responseBodyConverter(
+            MismatchApiResponse::class.java,
+            emptyArray(),
+            retrofit
         )
 
-        assertEquals(MismatchApiResponse(EmptyPayload("remote")), result)
-        val event = events.single { it is SafeParserEvent.RawJsonCaptureSkipped } as SafeParserEvent.RawJsonCaptureSkipped
-        assertEquals(RawJsonCaptureSkipReason.UnknownLengthExceedsLimit, event.detail.skipReason)
+        assertThrows(IOException::class.java) {
+            converter?.convert(
+                failingRawJsonProbeBody(
+                    """{"data":{"name":"remote"}}""",
+                    IOException("stream was reset: CANCEL")
+                )
+            )
+        }
+
+        assertTrue(events.isEmpty())
+    }
+
+    /**
+     * 测试方法说明：验证 rawJson 探测阶段遇到 EOF 读流失败时直接外抛，不记录 RawJsonCaptureSkipped。
+     */
+    @Test
+    fun `retrofit raw json eof probe failure is rethrown without skipped event`() {
+        val events = mutableListOf<SafeParserEvent>()
+        val factory = GsonSafeConverterFactory.create(
+            SafeParserConfig(
+                captureRawJsonInCallbacks = true,
+                maxRawJsonCaptureBytes = 64,
+                onEvent = events::add
+            )
+        )
+        val retrofit = Retrofit.Builder()
+            .baseUrl("https://example.com/")
+            .addConverterFactory(factory)
+            .build()
+        val converter = factory.responseBodyConverter(
+            MismatchApiResponse::class.java,
+            emptyArray(),
+            retrofit
+        )
+
+        assertThrows(EOFException::class.java) {
+            converter?.convert(
+                failingRawJsonProbeBody(
+                    """{"data":{"name":"remote"}}""",
+                    EOFException("unexpected end of stream")
+                )
+            )
+        }
+
+        assertTrue(events.isEmpty())
+    }
+
+    /**
+     * 测试方法说明：验证空响应探测遇到协议读流失败时直接外抛，不记录 EmptyResponse。
+     */
+    @Test
+    fun `empty response protocol probe failure is rethrown without event`() {
+        val events = mutableListOf<SafeParserEvent>()
+        val factory = GsonSafeConverterFactory.create(SafeParserConfig(onEvent = events::add))
+        val retrofit = Retrofit.Builder()
+            .baseUrl("https://example.com/")
+            .addConverterFactory(factory)
+            .build()
+        val converter = factory.responseBodyConverter(
+            MismatchApiResponse::class.java,
+            emptyArray(),
+            retrofit
+        )
+
+        assertThrows(ProtocolException::class.java) {
+            converter?.convert(
+                firstRequestFailureBody(
+                    """{"data":{"name":"remote"}}""",
+                    ProtocolException("unexpected end of stream")
+                )
+            )
+        }
+
+        assertTrue(events.isEmpty())
+    }
+
+    /**
+     * 测试方法说明：验证 Unit 响应的空响应探测遇到读流失败时不能被吞掉。
+     */
+    @Test
+    fun `unit response body read failure is rethrown`() {
+        val events = mutableListOf<SafeParserEvent>()
+        val factory = GsonSafeConverterFactory.create(SafeParserConfig(onEvent = events::add))
+        val retrofit = Retrofit.Builder()
+            .baseUrl("https://example.com/")
+            .addConverterFactory(factory)
+            .build()
+        val converter = factory.responseBodyConverter(
+            Unit::class.java,
+            emptyArray(),
+            retrofit
+        )
+
+        assertThrows(IOException::class.java) {
+            converter?.convert(firstRequestFailureBody("""{}""", IOException("read failed")))
+        }
+
+        assertTrue(events.isEmpty())
+    }
+
+    /**
+     * 测试方法说明：验证 Void 响应的空响应探测遇到读流失败时不能被吞掉。
+     */
+    @Test
+    fun `void response body read failure is rethrown`() {
+        val events = mutableListOf<SafeParserEvent>()
+        val factory = GsonSafeConverterFactory.create(SafeParserConfig(onEvent = events::add))
+        val retrofit = Retrofit.Builder()
+            .baseUrl("https://example.com/")
+            .addConverterFactory(factory)
+            .build()
+        val converter = factory.responseBodyConverter(
+            Void::class.java,
+            emptyArray(),
+            retrofit
+        )
+
+        assertThrows(IOException::class.java) {
+            converter?.convert(firstRequestFailureBody("""{}""", IOException("read failed")))
+        }
+
+        assertTrue(events.isEmpty())
+    }
+
+    /**
+     * 测试方法说明：验证 rawJson 探测阶段遇到已打标但普通文案的读流失败时直接外抛。
+     */
+    @Test
+    fun `retrofit raw json marked probe failure is rethrown without skipped event`() {
+        val events = mutableListOf<SafeParserEvent>()
+        val factory = GsonSafeConverterFactory.create(
+            SafeParserConfig(
+                captureRawJsonInCallbacks = true,
+                maxRawJsonCaptureBytes = 64,
+                onEvent = events::add
+            )
+        )
+        val retrofit = Retrofit.Builder()
+            .baseUrl("https://example.com/")
+            .addConverterFactory(factory)
+            .build()
+        val converter = factory.responseBodyConverter(
+            MismatchApiResponse::class.java,
+            emptyArray(),
+            retrofit
+        )
+
+        assertThrows(IOException::class.java) {
+            converter?.convert(
+                failingRawJsonProbeBody(
+                    """{"data":{"name":"remote"}}""",
+                    IOException("read failed")
+                )
+            )
+        }
+
+        assertTrue(events.isEmpty())
     }
 
     /**

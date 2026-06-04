@@ -6,7 +6,9 @@ This document covers common integration issues in GsonSafeParser and the recomme
 
 ## 1. Empty Retrofit Responses
 
-If an API may return an empty body, choose the policy by business semantics:
+An empty response means the body is actually empty. It does not include offline state, request cancellation, connection reset, or TLS failure.
+
+Choose the policy by business semantics:
 
 ```kotlin
 SafeParserConfig(emptyResponsePolicy = EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly) // Default: empty values only for Unit/Void.
@@ -15,9 +17,20 @@ SafeParserConfig(emptyResponsePolicy = EmptyResponsePolicy.Null) // Empty respon
 SafeParserConfig(emptyResponsePolicy = EmptyResponsePolicy.DelegateToGson) // Empty response delegates to native Gson behavior.
 ```
 
-`DelegateToGson` delegates to the native Gson / Retrofit converter. Regular object responses usually throw `EOFException`, so this is suitable for APIs that strictly require non-empty bodies.
+| Policy | Empty model body | Empty `Unit` / `Void` body |
+| --- | --- | --- |
+| `DefaultValueForUnitOrVoidOnly` | Returns `null`. | Returns `Unit` / `null`. |
+| `DefaultValue` | Returns a default object. | Returns `Unit` / `null`. |
+| `Null` | Returns `null`. | Returns `null`. |
+| `DelegateToGson` | Delegates to Gson and usually throws `EOFException`. | Returns `Unit` / `null`. |
 
-Retrofit `Unit` and `Void` are empty-response semantics. They return `Unit` and `null` respectively, avoiding new crashes just to delegate.
+Network failures do not use `emptyResponsePolicy`:
+
+| Scenario | Handling |
+| --- | --- |
+| Offline state, request cancellation, connection reset, TLS failure | Returned to Retrofit / OkHttp error handling. |
+| `EmptyResponse`, `RawJsonCaptureSkipped`, `TypeMismatch` | Not recorded for these failures. |
+| App handling | Keep using the app's existing network error flow. |
 
 ## 2. Raw JSON Is Missing From Callbacks
 

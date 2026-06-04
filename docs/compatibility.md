@@ -9,14 +9,15 @@
 1. 当前产物是 Android AAR，不是普通 JVM Jar。
 2. 推荐接入环境是 `minSdk 23`、`compileSdk 36`、`JDK 17`、`Kotlin 2.0.21`、`Gson 2.13.2`。
 3. Retrofit 模块当前验证版本是 `Retrofit 2.8.1`。
-4. 低版本项目不要直接上线，先按下面表格做兼容验证。
+4. Retrofit 网络或传输读流异常不属于 JSON 错形，也不属于空响应；不要用 `emptyResponsePolicy` 隐藏这类异常。
+5. 低版本项目不要直接上线，先按下面表格做兼容验证。
 
 ## 1. 版本矩阵
 
 | 内容 | 当前验证版本 | 限制类型 | 低版本风险 | 建议 |
 | --- | --- | --- | --- | --- |
 | 发布产物 | Android AAR | 硬边界 | 纯 JVM 项目不能按 Android AAR 方式消费。 | Android 项目直接接入；纯 JVM 需要单独产物。 |
-| 库版本 | `1.0.1` | 当前稳定发布版本 | `1.0.0` 是首个公开兼容基线，低于 `1.0.0` 的内部迭代版本不作为公开兼容承诺。 | 新接入使用 `1.0.1`。 |
+| 库版本 | `1.0.2` | 当前稳定发布版本 | `1.0.0` 是首个公开兼容基线，低于 `1.0.0` 的内部迭代版本不作为公开兼容承诺。 | 新接入使用 `1.0.2`。 |
 | Android `minSdk` | `minSdk 23` | 硬边界 | App 低于 23 时，AAR 合并或运行验证可能失败。 | 业务 App 保持 `minSdk 23` 或更高。 |
 | Android `compileSdk` | `compileSdk 36` | 构建边界 | 低 `compileSdk` 可能遇到 AAR metadata、Lint 或工具链差异。 | 推荐 `compileSdk 36`；低于 36 必须跑完整验证。 |
 | JDK | `JDK 17` | 硬边界 | JDK 8 / 11 构建链消费 Java 17 产物风险高。 | 使用 JDK 17 或更高版本。 |
@@ -46,7 +47,8 @@
 
 1. 响应转换器能正常创建。
 2. 空 body 策略符合预期。
-3. raw JSON 捕获和超限跳过事件符合预期。
+3. 断网、请求取消、连接重置、TLS 失败等传输异常会交回 Retrofit / OkHttp 错误处理，不会被记录成 `EmptyResponse`、`RawJsonCaptureSkipped` 或 `TypeMismatch`。
+4. raw JSON 捕获和超限跳过事件符合预期。
 
 当前版本不主动升级到更高 Retrofit，是为了避免在发布前引入新的 Retrofit / OkHttp 行为变化。
 

@@ -12,15 +12,27 @@ import io.github.logan.gsonsafeparser.SafeParserEvent
 import io.github.logan.gsonsafeparser.SafeParserConfig
 import io.github.logan.gsonsafeparser.dispatchEvent
 import io.github.logan.gsonsafeparser.enableSafeParser
+import io.github.logan.gsonsafeparser.internal.TransportIoContext
 import okhttp3.RequestBody
 import okhttp3.ResponseBody
+import okio.Buffer
+import okio.BufferedSource
 import retrofit2.Converter
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import java.io.EOFException
+import java.io.IOException
+import java.io.InputStream
+import java.io.InterruptedIOException
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Type
+import java.net.ProtocolException
+import java.net.SocketException
+import java.nio.charset.Charset
 import java.util.Collections
+import java.util.Locale
 import java.util.concurrent.CancellationException
+import javax.net.ssl.SSLException
 
 /**
  * Retrofit 接入入口。
@@ -120,36 +132,43 @@ private class GsonSafeRetrofitConverterFactory(
         retrofit: Retrofit
     ): Converter<ResponseBody, *>? {
         unitOrVoidResponseBodyConverter(type)?.let { converter ->
-            return converter
+            return Converter<ResponseBody, Any?> { originalBody ->
+                TransportIoContext.withTransportIoMarkers {
+                    converter.convert(originalBody.markTransportIoFailures())
+                }
+            }
         }
         // converter 是原始 Gson converter；Safe 层处理不了的场景都要回到它。
         val converter = delegate.responseBodyConverter(type, annotations, retrofit)
             ?: return null
-        return Converter<ResponseBody, Any?> { body ->
-            if (body.isEmpty()) {
-                emptyResponseValue(type, body, converter)
-            } else if (config.captureRawJsonInCallbacks) {
-                if (body.canCaptureRawJson()) {
-                    // Retrofit 的 ResponseBody 只能读取一次，所以需要先读成字符串，再交给 GsonSafeParser 带上下文解析。
-                    val rawJson = body.string()
-                    GsonSafeParser.fromJson<Any?>(gson, rawJson, type, config)
-                } else {
-                    // 响应体太大或长度未知时不强行读入内存，只发观测事件，然后回到原 converter。
-                    val contentLength = body.contentLength()
-                    config.dispatchEvent(
-                        SafeParserEvent.RawJsonCaptureSkipped(
-                            RawJsonCaptureSkippedEvent(
-                                typeName = type.toSafeTypeName(),
-                                contentLength = contentLength,
-                                maxBytes = config.maxRawJsonCaptureBytes,
-                                reason = rawJsonCaptureSkippedReason(contentLength).message
+        return Converter<ResponseBody, Any?> { originalBody ->
+            TransportIoContext.withTransportIoMarkers {
+                val body = originalBody.markTransportIoFailures()
+                if (body.isEmpty()) {
+                    emptyResponseValue(type, body, converter)
+                } else if (config.captureRawJsonInCallbacks) {
+                    if (body.canCaptureRawJson()) {
+                        // Retrofit 的 ResponseBody 只能读取一次，所以需要先读成字符串，再交给 GsonSafeParser 带上下文解析。
+                        val rawJson = body.string()
+                        GsonSafeParser.fromJson<Any?>(gson, rawJson, type, config)
+                    } else {
+                        // 响应体太大或长度未知时不强行读入内存，只发观测事件，然后回到原 converter。
+                        val contentLength = body.contentLength()
+                        config.dispatchEvent(
+                            SafeParserEvent.RawJsonCaptureSkipped(
+                                RawJsonCaptureSkippedEvent(
+                                    typeName = type.toSafeTypeName(),
+                                    contentLength = contentLength,
+                                    maxBytes = config.maxRawJsonCaptureBytes,
+                                    reason = rawJsonCaptureSkippedReason(contentLength).message
+                                )
                             )
                         )
-                    )
+                        converter.convert(body)
+                    }
+                } else {
                     converter.convert(body)
                 }
-            } else {
-                converter.convert(body)
             }
         }
     }
@@ -327,6 +346,86 @@ private class GsonSafeRetrofitConverterFactory(
     }
 }
 
+@OptIn(GsonSafeParserLowLevelApi::class)
+private fun ResponseBody.markTransportIoFailures(): ResponseBody {
+    val upstream = this
+    return object : ResponseBody() {
+        private val markedSource: BufferedSource by lazy {
+            upstream.source().markTransportIoFailures()
+        }
+
+        override fun contentLength(): Long = upstream.contentLength()
+
+        override fun contentType() = upstream.contentType()
+
+        override fun source(): BufferedSource = markedSource
+    }
+}
+
+@OptIn(GsonSafeParserLowLevelApi::class)
+private fun BufferedSource.markTransportIoFailures(): BufferedSource {
+    val upstream = this
+    return object : BufferedSource by upstream {
+        override fun request(byteCount: Long): Boolean {
+            return markTransportIoFailure { upstream.request(byteCount) }
+        }
+
+        override fun read(sink: Buffer, byteCount: Long): Long {
+            return markTransportIoFailure { upstream.read(sink, byteCount) }
+        }
+
+        override fun readString(charset: Charset): String {
+            return markTransportIoFailure { upstream.readString(charset) }
+        }
+
+        override fun readUtf8(): String {
+            return markTransportIoFailure { upstream.readUtf8() }
+        }
+
+        override fun readByteArray(): ByteArray {
+            return markTransportIoFailure { upstream.readByteArray() }
+        }
+
+        override fun peek(): BufferedSource {
+            return markTransportIoFailure { upstream.peek().markTransportIoFailures() }
+        }
+
+        override fun inputStream(): InputStream {
+            return upstream.inputStream().markTransportIoFailures()
+        }
+    }
+}
+
+private fun InputStream.markTransportIoFailures(): InputStream {
+    val upstream = this
+    return object : InputStream() {
+        override fun read(): Int {
+            return markTransportIoFailure { upstream.read() }
+        }
+
+        override fun read(buffer: ByteArray, byteOffset: Int, byteCount: Int): Int {
+            return markTransportIoFailure { upstream.read(buffer, byteOffset, byteCount) }
+        }
+
+        override fun available(): Int {
+            return markTransportIoFailure { upstream.available() }
+        }
+
+        override fun close() {
+            upstream.close()
+        }
+    }
+}
+
+@OptIn(GsonSafeParserLowLevelApi::class)
+private fun <T> markTransportIoFailure(block: () -> T): T {
+    return try {
+        block()
+    } catch (error: IOException) {
+        throw TransportIoContext.mark(error)
+    }
+}
+
 /**
  * 把 Retrofit 的响应 Type 转成兼容低 Android 版本的类型名。
  *
@@ -351,12 +450,12 @@ private inline fun <T> runRecovering(block: () -> T): Result<T> {
 }
 
 private fun Throwable.throwIfFatal() {
-    fatalCauseOrNull()?.let { fatal ->
-        throw fatal
+    unrecoverableCauseOrNull()?.let { unrecoverable ->
+        throw unrecoverable
     }
 }
 
-private fun Throwable.fatalCauseOrNull(): Throwable? {
+private fun Throwable.unrecoverableCauseOrNull(): Throwable? {
     val visited = Collections.newSetFromMap(java.util.IdentityHashMap<Throwable, Boolean>())
     val pending = ArrayDeque<Throwable>()
     pending += this
@@ -364,10 +463,34 @@ private fun Throwable.fatalCauseOrNull(): Throwable? {
         val current = pending.removeFirst()
         if (!visited.add(current)) continue
         if (current is Error || current is CancellationException) return current
+        if (current is IOException && current.isUnrecoverableTransportIo()) return current
         if (current is InvocationTargetException) {
             current.targetException?.let { pending += it }
         }
         current.cause?.let { pending += it }
     }
     return null
+}
+
+@OptIn(GsonSafeParserLowLevelApi::class)
+private fun IOException.isUnrecoverableTransportIo(): Boolean {
+    if (TransportIoContext.isMarked(this)) return true
+    if (
+        this is EOFException ||
+        this is InterruptedIOException ||
+        this is ProtocolException ||
+        this is SocketException ||
+        this is SSLException
+    ) {
+        return true
+    }
+    if (javaClass.name.endsWith(".StreamResetException") || javaClass.simpleName == "StreamResetException") return true
+
+    val normalizedMessage = message?.lowercase(Locale.US)?.trim() ?: return false
+    return normalizedMessage == "canceled" ||
+        normalizedMessage == "cancelled" ||
+        normalizedMessage.contains("stream was reset") ||
+        normalizedMessage.contains("stream reset") ||
+        normalizedMessage.contains("connection reset") ||
+        normalizedMessage.contains("broken pipe")
 }

@@ -26,13 +26,13 @@ Zero config is only for debug or non-minified trials.
 Plain Gson usage:
 
 ```kotlin
-implementation("io.github.logan0817:gson-safe-parser-core:1.0.1") // Adds the core GsonSafeParser parsing library.
+implementation("io.github.logan0817:gson-safe-parser-core:1.0.2") // Adds the core GsonSafeParser parsing library.
 ```
 
 If the project uses Retrofit, only add:
 
 ```kotlin
-implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.1") // Adds the Retrofit converter integration and transitively includes core.
+implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.2") // Adds the Retrofit converter integration and transitively includes core.
 ```
 
 ## 2. Plain Gson Integration

@@ -10,12 +10,14 @@ import com.google.gson.annotations.JsonAdapter
 import com.google.gson.reflect.TypeToken
 import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonWriter
+import io.github.logan.gsonsafeparser.internal.TransportIoContext
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.io.IOException
+import java.io.InterruptedIOException
 import java.lang.reflect.InvocationTargetException
 import java.util.concurrent.CancellationException
 
@@ -25,6 +27,7 @@ import java.util.concurrent.CancellationException
  * Recoverable malformed field values should be isolated locally. Fatal JVM/thread/cancellation
  * signals and caller adapter failures that cannot be safely isolated must escape to the caller.
  */
+@OptIn(GsonSafeParserLowLevelApi::class)
 class SafeParserExceptionBoundaryTest {
     data class ThreadDeathFieldContainer(
         val value: ThreadDeathFieldValue = ThreadDeathFieldValue()
@@ -67,8 +70,34 @@ class SafeParserExceptionBoundaryTest {
         val values: Map<String, IOExceptionValue> = emptyMap()
     )
 
+    data class ConnectionResetMessageFieldContainer(
+        val value: ConnectionResetMessageValue = ConnectionResetMessageValue("default"),
+        val next: String = "local"
+    )
+
     @JsonAdapter(IOExceptionValueAdapter::class)
     data class IOExceptionValue(val text: String = "local")
+
+    @JsonAdapter(ConnectionResetMessageValueAdapter::class)
+    data class ConnectionResetMessageValue(val text: String = "local")
+
+    data class StreamResetFieldContainer(
+        val value: StreamResetValue = StreamResetValue("default"),
+        val next: String = "local"
+    )
+
+    data class StreamResetListContainer(
+        val values: List<StreamResetValue> = emptyList()
+    )
+
+    data class StreamResetMapContainer(
+        val values: Map<String, StreamResetValue> = emptyMap()
+    )
+
+    @JsonAdapter(StreamResetValueAdapter::class)
+    data class StreamResetValue(val text: String = "local")
+
+    class StreamResetException : IOException("stream was reset: CANCEL")
 
     data class IllegalStateFieldContainer(
         val value: IllegalStateValue = IllegalStateValue("default")
@@ -150,6 +179,31 @@ class SafeParserExceptionBoundaryTest {
                 throw IOException("transient value read failure")
             }
             return IOExceptionValue(text)
+        }
+    }
+
+    class ConnectionResetMessageValueAdapter : TypeAdapter<ConnectionResetMessageValue>() {
+        override fun write(out: JsonWriter, value: ConnectionResetMessageValue?) {
+            out.value(value?.text)
+        }
+
+        override fun read(reader: JsonReader): ConnectionResetMessageValue {
+            val text = reader.nextString()
+            if (text == "bad") {
+                throw IOException("connection reset by business adapter")
+            }
+            return ConnectionResetMessageValue(text)
+        }
+    }
+
+    class StreamResetValueAdapter : TypeAdapter<StreamResetValue>() {
+        override fun write(out: JsonWriter, value: StreamResetValue?) {
+            out.value(value?.text)
+        }
+
+        override fun read(reader: JsonReader): StreamResetValue {
+            reader.nextString()
+            throw TransportIoContext.mark(StreamResetException())
         }
     }
 
@@ -293,6 +347,23 @@ class SafeParserExceptionBoundaryTest {
     }
 
     /**
+     * A custom business adapter may use network-like wording in a local IOException.
+     */
+    @Test
+    fun `field adapter io exception with connection reset wording remains recoverable`() {
+        val events = mutableListOf<TypeMismatchEvent>()
+        val gson = GsonSafeParser.create(SafeParserConfig(onTypeMismatch = events::add))
+
+        val result = gson.fromJson(
+            """{"value":"bad","next":"remote"}""",
+            ConnectionResetMessageFieldContainer::class.java
+        )
+
+        assertEquals(ConnectionResetMessageFieldContainer(next = "remote"), result)
+        assertEquals("value", events.single().fieldName)
+    }
+
+    /**
      * IOException from one list item is isolated so following items remain readable.
      */
     @Test
@@ -326,6 +397,127 @@ class SafeParserExceptionBoundaryTest {
         assertEquals(IOExceptionValue("later"), result.values["later"])
         assertFalse(result.values.containsKey("bad"))
         assertEquals(ParseExceptionKind.MAP_ITEM, events.single().kind)
+    }
+
+    /**
+     * A business adapter may use an exception class named StreamResetException; class name alone is not transport proof.
+     */
+    @Test
+    fun `business adapter stream reset simple name remains recoverable`() {
+        val events = mutableListOf<TypeMismatchEvent>()
+        val gson = GsonSafeParser.create(SafeParserConfig(onTypeMismatch = events::add))
+
+        val result = gson.fromJson(
+            """{"value":"remote","next":"remote"}""",
+            StreamResetFieldContainer::class.java
+        )
+
+        assertEquals(StreamResetFieldContainer(next = "remote"), result)
+        assertEquals("value", events.single().fieldName)
+    }
+
+    /**
+     * A marked transport stream reset is not a field-level malformed JSON value.
+     */
+    @Test
+    fun `marked field adapter stream reset is rethrown without mismatch event`() {
+        val events = mutableListOf<TypeMismatchEvent>()
+        val config = SafeParserConfig(onTypeMismatch = events::add)
+        val gson = GsonSafeParser.create(config)
+
+        TransportIoContext.withTransportIoMarkers {
+            assertThrows(IOException::class.java) {
+                GsonSafeParser.fromJson<StreamResetFieldContainer>(
+                    gson = gson,
+                    json = """{"value":"remote","next":"remote"}""",
+                    type = StreamResetFieldContainer::class.java,
+                    config = config
+                )
+            }
+        }
+
+        assertTrue(events.isEmpty())
+    }
+
+    /**
+     * A marked stream reset inside one list item must not be treated as a recoverable bad item.
+     */
+    @Test
+    fun `marked list item stream reset is rethrown without mismatch event`() {
+        val events = mutableListOf<TypeMismatchEvent>()
+        val config = SafeParserConfig(onTypeMismatch = events::add)
+        val gson = GsonSafeParser.create(config)
+
+        TransportIoContext.withTransportIoMarkers {
+            assertThrows(IOException::class.java) {
+                GsonSafeParser.fromJson<StreamResetListContainer>(
+                    gson = gson,
+                    json = """{"values":["remote"]}""",
+                    type = StreamResetListContainer::class.java,
+                    config = config
+                )
+            }
+        }
+
+        assertTrue(events.isEmpty())
+    }
+
+    /**
+     * A marked stream reset inside one map value must not be hidden as a malformed map entry.
+     */
+    @Test
+    fun `marked map value stream reset is rethrown without mismatch event`() {
+        val events = mutableListOf<TypeMismatchEvent>()
+        val config = SafeParserConfig(onTypeMismatch = events::add)
+        val gson = GsonSafeParser.create(config)
+
+        TransportIoContext.withTransportIoMarkers {
+            assertThrows(IOException::class.java) {
+                GsonSafeParser.fromJson<StreamResetMapContainer>(
+                    gson = gson,
+                    json = """{"values":{"remote":"remote"}}""",
+                    type = StreamResetMapContainer::class.java,
+                    config = config
+                )
+            }
+        }
+
+        assertTrue(events.isEmpty())
+    }
+
+    /**
+     * Interrupted I/O is a transport/control-flow boundary and must not become a fallback value.
+     */
+    @Test
+    fun `interrupted io is rethrown without mismatch event`() {
+        val events = mutableListOf<TypeMismatchEvent>()
+        val config = SafeParserConfig(onTypeMismatch = events::add)
+        val gson = GsonBuilder()
+            .registerTypeAdapter(
+                StreamResetValue::class.java,
+                object : TypeAdapter<StreamResetValue>() {
+                    override fun write(out: JsonWriter, value: StreamResetValue?) {
+                        out.value(value?.text)
+                    }
+
+                    override fun read(reader: JsonReader): StreamResetValue {
+                        throw InterruptedIOException("socket timeout")
+                    }
+                }
+            )
+            .enableSafeParser(config)
+            .create()
+
+        assertThrows(InterruptedIOException::class.java) {
+            GsonSafeParser.fromJson<StreamResetFieldContainer>(
+                gson = gson,
+                json = """{"value":"remote"}""",
+                type = StreamResetFieldContainer::class.java,
+                config = config
+            )
+        }
+
+        assertTrue(events.isEmpty())
     }
 
     /**

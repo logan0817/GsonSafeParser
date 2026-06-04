@@ -18,12 +18,14 @@ GsonSafeParser 会尽量把问题隔离在当前字段，让外层对象继续�
 2. 默认交回 Gson 原生 Adapter：Safe Adapter 创建失败、配置不完整或遇到无法确认的类型时，不由 SafeParser 改写读取行为。
 3. Kotlin 友好：支持 Kotlin data class 默认值、reified API、`parseSafe<T>()` 和 `fromJsonSafe<T>()`。
 4. Retrofit 接入：提供 `GsonSafeConverterFactory`，支持空响应策略和 raw JSON 捕获上限。
-5. 契约证据：通过 `SafeParserEvent`、`TypeMismatchEvent`、`contractReport()` 和 `toBackendMarkdown()` 输出字段 path、期望形状、实际形状、兜底动作、客户端影响和后端修复建议。
+5. 契约证据：输出字段 path、期望形状、实际形状和兜底动作；也可以生成给后端看的 Markdown 报告。
 6. Demo App：内置 Android 示例应用，可粘贴业务 JSON，在真机上对比 GsonSafeParser 和原生 Gson 解析结果。
 
 ## 默认行为
 
-当前开箱默认配置：
+默认配置适合直接接入已有 Gson 项目。库只处理能安全隔离的字段问题；基础类型、根级异常和不可确认的问题继续交回 Gson。
+
+### 默认配置
 
 | 配置 | 默认值 |
 | --- | --- |
@@ -34,9 +36,19 @@ GsonSafeParser 会尽量把问题隔离在当前字段，让外层对象继续�
 | `requiredConstructorParameterPolicy` | `RequiredConstructorParameterPolicy.GsonCompatible` |
 | `mapItemKeyPolicy` | `MapItemKeyPolicy.Hash` |
 
-构造策略默认优先兼容原生 Gson。老项目先保持 `GsonCompatible + useJdkUnsafe = false`；如果确实要贴近原生 Gson 的 Unsafe 构造行为，可以显式开启 `useJdkUnsafe`；如果要把缺字段当成契约错误，改用 `Strict`。完整关系见 [配置说明](docs/configuration.md)。
+### 构造策略
 
-固定行为：
+默认使用 `GsonCompatible + useJdkUnsafe = false`。这组配置保持 Gson 兼容，同时避免 SafeParser 自己用 Unsafe 绕过构造函数。
+
+| 目标 | 推荐配置 |
+| --- | --- |
+| 直接接入已有项目 | 保持默认配置。 |
+| 项目明确依赖原生 Gson 的 Unsafe 构造行为 | 使用 `GsonCompatible + useJdkUnsafe = true`。 |
+| 把缺字段、`null` 或未知枚举值当成接口契约错误 | 使用 `Strict + useJdkUnsafe = false`。 |
+
+完整配置见 [配置说明](docs/configuration.md)。
+
+### 固定边界
 
 | 场景 | 实际 JSON | 处理结果 |
 | --- | --- | --- |
@@ -51,7 +63,7 @@ GsonSafeParser 会尽量把问题隔离在当前字段，让外层对象继续�
 | List / Set | `{}`、`""` | 返回 `null`。 | 返回空集合。 |
 | Map | `[]`、`""` | 返回 `null`。 | 返回空 Map。 |
 
-说明：作为有构造默认值的反射字段时，字段会保留原默认值，不会被 `NullOnly` 的 `null` 覆盖；顶层解析或没有构造默认值的字段仍按表格返回 `null`。
+说明：字段有构造默认值时，会优先保留默认值。顶层解析或没有默认值的字段，仍按表格返回 `null`。
 
 `PrimitiveParsingPolicy`（默认：`PrimitiveParsingPolicy.DelegateToGson`）：
 
@@ -70,14 +82,16 @@ GsonSafeParser 会尽量把问题隔离在当前字段，让外层对象继续�
 
 发布产物是 Android AAR，使用 JDK 17 编译。业务工程请使用 JDK 17 或更高版本。
 
-正式接入前先看 [兼容性说明](docs/compatibility.md)。当前验证矩阵是：`minSdk 23`、`compileSdk 36`、`JDK 17`、`Kotlin 2.0.21`、`kotlin-reflect 2.0.21`、`Gson 2.13.2`；Retrofit 模块当前验证版本是 `Retrofit 2.8.1`。
+正式接入前先看 [兼容性说明](docs/compatibility.md)。
+
+当前验证矩阵：`minSdk 23`、`compileSdk 36`、`JDK 17`、`Kotlin 2.0.21`、`kotlin-reflect 2.0.21`、`Gson 2.13.2`。Retrofit 模块验证版本是 `Retrofit 2.8.1`。
 
 版本号以徽章为准。普通 Gson 或手动持有 Gson 实例时，只依赖 core：
 
 最新版本：[![Maven Central: core](https://img.shields.io/maven-central/v/io.github.logan0817/gson-safe-parser-core?label=core)](https://central.sonatype.com/artifact/io.github.logan0817/gson-safe-parser-core)
 
 ```kotlin
-implementation("io.github.logan0817:gson-safe-parser-core:1.0.1") // 接入 GsonSafeParser 核心解析能力。
+implementation("io.github.logan0817:gson-safe-parser-core:1.0.2") // 接入 GsonSafeParser 核心解析能力。
 ```
 
 如果项目使用 Retrofit，只依赖 retrofit 模块即可；它会传递带上 core：
@@ -85,7 +99,7 @@ implementation("io.github.logan0817:gson-safe-parser-core:1.0.1") // 接入 Gson
 最新版本：[![Maven Central: retrofit](https://img.shields.io/maven-central/v/io.github.logan0817/gson-safe-parser-retrofit?label=retrofit)](https://central.sonatype.com/artifact/io.github.logan0817/gson-safe-parser-retrofit)
 
 ```kotlin
-implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.1") // 接入 Retrofit Converter 扩展，并自动带上 core。
+implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.2") // 接入 Retrofit Converter 扩展，并自动带上 core。
 ```
 
 Android release 额外要求：
@@ -126,6 +140,7 @@ val response = gson.fromJson(json, ApiResponse::class.java) // 使用安全 Gson
 | 字段级 JSON 形状不一致 | 只兜底当前字段，外层对象继续解析。 |
 | JSON 语法错误 | 继续抛出，不伪装成默认值。 |
 | 根级解析失败 | 继续遵循 Gson 边界，不能保证字段级隔离。 |
+| Retrofit 网络或传输读流失败 | 交回 Retrofit / OkHttp 错误处理，不记录成字段错形或空响应，也不能用 `emptyResponsePolicy` 隐藏。 |
 | 不可安全隔离异常 | `Error`、`ThreadDeath`、`LinkageError`、`CancellationException` 继续外抛。 |
 
 字段级 Adapter 读取失败如果能被当前字段边界隔离，会产生事件并保留外层对象解析。
@@ -289,7 +304,9 @@ Demo App 支持内置用例和用户自定义 JSON。你可以把接口返回直
 
 ## 文档
 
-建议阅读顺序：先看 [快速开始](docs/getting-started.md)，再看 [兼容性说明](docs/compatibility.md)、[配置说明](docs/configuration.md) 和 [错形能力矩阵（JSON 形状不一致）](docs/mismatch-capability-matrix.md)；如果是 Android release 接入，再补看 [Android 混淆](docs/android-proguard.md)。
+建议阅读顺序：先看 [快速开始](docs/getting-started.md)，再看 [兼容性说明](docs/compatibility.md)、[配置说明](docs/configuration.md) 和 [错形能力矩阵（JSON 形状不一致）](docs/mismatch-capability-matrix.md)。
+
+如果是 Android release 接入，再看 [Android 混淆](docs/android-proguard.md)。
 
 1. [快速开始](docs/getting-started.md)：安装、普通 Gson、Retrofit、Kotlin API 和 CI 自检。
 2. [错形能力矩阵（JSON 形状不一致）](docs/mismatch-capability-matrix.md)：对象、集合、Map、基础类型、Kotlin 默认值、Retrofit 空响应和 raw JSON 捕获的处理范围。
@@ -298,9 +315,10 @@ Demo App 支持内置用例和用户自定义 JSON。你可以把接口返回直
 5. [Android 混淆](docs/android-proguard.md)：新项目接入、老项目快速接入、R8 fullMode 选择和 release 验证。
 6. [Demo App](docs/demo-app.md)：真机测试方式、页面说明和用户 JSON 验证入口。
 7. [排障指南](docs/troubleshooting.md)：空响应、raw JSON、Adapter 创建失败、平台对象和业务协议问题。
-8. [发布清单](docs/release-checklist.md)：1.0.1 发版前的 AAR、混淆、文档版本和 Maven 本地产物检查。
-9. [1.0.1 发布说明](docs/release-notes-1.0.1.md)：本次稳定性修正、兼容边界和发布验证说明。
-10. [1.0.0 发布说明](docs/release-notes-1.0.0.md)：首发能力、兼容边界和发布验证说明。
+8. [发布清单](docs/release-checklist.md)：1.0.2 发版前的 AAR、混淆、文档版本和 Maven 本地产物检查。
+9. [1.0.2 发布说明](docs/release-notes-1.0.2.md)：传输异常边界修正、兼容边界和发布验证说明。
+10. [1.0.1 发布说明](docs/release-notes-1.0.1.md)：历史稳定性修正、兼容边界和发布验证说明。
+11. [1.0.0 发布说明](docs/release-notes-1.0.0.md)：首发能力、兼容边界和发布验证说明。
 
 ## 风险边界
 

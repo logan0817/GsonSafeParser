@@ -9,14 +9,15 @@ Start with the short version:
 1. The published artifacts are Android AARs, not plain JVM jars.
 2. The recommended integration baseline is `minSdk 23`, `compileSdk 36`, `JDK 17`, `Kotlin 2.0.21`, and `Gson 2.13.2`.
 3. The Retrofit module is verified with `Retrofit 2.8.1`.
-4. Legacy projects should not go straight to production. Validate them against the matrix below first.
+4. Retrofit network or transport read failures are not JSON mismatches or empty responses; do not hide them with `emptyResponsePolicy`.
+5. Legacy projects should not go straight to production. Validate them against the matrix below first.
 
 ## 1. Version Matrix
 
 | Area | Verified version | Boundary type | Legacy risk | Recommendation |
 | --- | --- | --- | --- | --- |
 | Artifact | Android AAR | Hard boundary | Plain JVM projects cannot consume it as a normal JVM jar. | Use it directly in Android projects; a JVM artifact would need separate publishing. |
-| Library | `1.0.1` | Current stable release | `1.0.0` is the first public compatibility baseline; internal pre-1.0 iterations are not covered by the public compatibility promise. | Use `1.0.1` for new integration. |
+| Library | `1.0.2` | Current stable release | `1.0.0` is the first public compatibility baseline; internal pre-1.0 iterations are not covered by the public compatibility promise. | Use `1.0.2` for new integration. |
 | Android `minSdk` | `minSdk 23` | Hard boundary | Apps below 23 may fail AAR merge or runtime validation. | Keep the app at `minSdk 23` or higher. |
 | Android `compileSdk` | `compileSdk 36` | Build boundary | Lower `compileSdk` values may hit AAR metadata, Lint, or toolchain differences. | Prefer `compileSdk 36`; run full validation if lower. |
 | JDK | `JDK 17` | Hard boundary | JDK 8 / 11 build chains are risky for Java 17 artifacts. | Use JDK 17 or later. |
@@ -46,7 +47,8 @@ If your project already uses a newer Retrofit version, Gradle can usually resolv
 
 1. Response converters are created successfully.
 2. Empty-body policy matches expectations.
-3. Raw JSON capture and oversized-body skip events behave as expected.
+3. Offline state, request cancellation, connection reset, and TLS failures return to Retrofit / OkHttp error handling and are not recorded as `EmptyResponse`, `RawJsonCaptureSkipped`, or `TypeMismatch`.
+4. Raw JSON capture and oversized-body skip events behave as expected.
 
 This release does not upgrade Retrofit right before publishing, because that could introduce new Retrofit / OkHttp behavior changes.
 

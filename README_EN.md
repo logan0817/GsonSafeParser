@@ -18,12 +18,14 @@ Use that evidence to report contract issues and observe backend payload drift in
 2. Native Gson adapter fallback by default: if a Safe Adapter cannot be created or a type cannot be handled confidently, SafeParser does not rewrite that type's read behavior.
 3. Kotlin friendly: supports Kotlin data class defaults, reified APIs, `parseSafe<T>()`, and `fromJsonSafe<T>()`.
 4. Retrofit integration: provides `GsonSafeConverterFactory` with empty response policies and raw JSON capture limits.
-5. Contract evidence: exposes `SafeParserEvent`, `TypeMismatchEvent`, `contractReport()`, and `toBackendMarkdown()` with field path, expected shape, actual shape, fallback action, client impact, and backend fix suggestion.
+5. Contract evidence: records field path, expected shape, actual shape, and fallback action; it can also generate backend-facing Markdown reports.
 6. Demo App: includes an Android Demo App for testing built-in cases and custom JSON on a real device.
 
 ## Default Behavior
 
-Out-of-the-box defaults:
+The default config is meant for existing Gson projects. The library handles only field problems that can be safely isolated; primitives, root-level failures, and uncertain cases keep native Gson behavior.
+
+### Default Config
 
 | Config | Default |
 | --- | --- |
@@ -34,9 +36,19 @@ Out-of-the-box defaults:
 | `requiredConstructorParameterPolicy` | `RequiredConstructorParameterPolicy.GsonCompatible` |
 | `mapItemKeyPolicy` | `MapItemKeyPolicy.Hash` |
 
-Constructor behavior defaults to native-Gson compatibility. Existing projects should usually keep `GsonCompatible + useJdkUnsafe = false`; enable `useJdkUnsafe` only when native Gson-style Unsafe construction is needed; switch to `Strict` when missing fields should be treated as contract errors. See [Configuration](docs/en/configuration.md) for the full decision table.
+### Constructor Policy
 
-Fixed behavior:
+The default is `GsonCompatible + useJdkUnsafe = false`. It keeps Gson-compatible behavior while preventing SafeParser itself from bypassing constructors with Unsafe.
+
+| Goal | Recommended config |
+| --- | --- |
+| Adopt the library in an existing project | Keep the default config. |
+| Match native Gson Unsafe construction because the project depends on it | Use `GsonCompatible + useJdkUnsafe = true`. |
+| Treat missing fields, `null`, or unknown enum values as API contract errors | Use `Strict + useJdkUnsafe = false`. |
+
+See [Configuration](docs/en/configuration.md) for the full config reference.
+
+### Fixed Boundaries
 
 | Scenario | Unexpected JSON | Result |
 | --- | --- | --- |
@@ -51,7 +63,7 @@ Fixed behavior:
 | List / Set | `{}`, `""` | Returns `null`. | Returns an empty collection. |
 | Map | `[]`, `""` | Returns `null`. | Returns an empty map. |
 
-Note: When used as a reflective field with a constructed default, the field keeps its original default and is not overwritten by the `NullOnly` `null`; root values or fields without constructed defaults still follow the table.
+Note: fields with constructed defaults keep those defaults. Root values or fields without defaults still follow the table and return `null`.
 
 `PrimitiveParsingPolicy` (default: `PrimitiveParsingPolicy.DelegateToGson`):
 
@@ -70,14 +82,16 @@ Note: When used as a reflective field with a constructed default, the field keep
 
 The published artifacts are Android AARs compiled with JDK 17. Make sure the business project uses JDK 17 or later.
 
-Before production integration, read [Compatibility](docs/en/compatibility.md). The current verified matrix is `minSdk 23`, `compileSdk 36`, `JDK 17`, `Kotlin 2.0.21`, `kotlin-reflect 2.0.21`, and `Gson 2.13.2`; the Retrofit module is currently verified with `Retrofit 2.8.1`.
+Before production integration, read [Compatibility](docs/en/compatibility.md).
+
+The current verified matrix is `minSdk 23`, `compileSdk 36`, `JDK 17`, `Kotlin 2.0.21`, `kotlin-reflect 2.0.21`, and `Gson 2.13.2`. The Retrofit module is verified with `Retrofit 2.8.1`.
 
 Use the badge version below. If you use plain Gson or manage Gson yourself, depend on core only:
 
 [![Maven Central: core](https://img.shields.io/maven-central/v/io.github.logan0817/gson-safe-parser-core?label=core)](https://central.sonatype.com/artifact/io.github.logan0817/gson-safe-parser-core)
 
 ```kotlin
-implementation("io.github.logan0817:gson-safe-parser-core:1.0.1") // Adds the core defensive parsing library.
+implementation("io.github.logan0817:gson-safe-parser-core:1.0.2") // Adds the core defensive parsing library.
 ```
 
 If you use Retrofit, depend on the retrofit module only; it already brings core transitively:
@@ -85,7 +99,7 @@ If you use Retrofit, depend on the retrofit module only; it already brings core 
 [![Maven Central: retrofit](https://img.shields.io/maven-central/v/io.github.logan0817/gson-safe-parser-retrofit?label=retrofit)](https://central.sonatype.com/artifact/io.github.logan0817/gson-safe-parser-retrofit)
 
 ```kotlin
-implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.1") // Adds the Retrofit converter integration and transitively includes core.
+implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.2") // Adds the Retrofit converter integration and transitively includes core.
 ```
 
 Extra Android release requirements:
@@ -126,6 +140,7 @@ Fallback boundary:
 | Field-level unexpected JSON shape | Falls back only for the current field; the outer object keeps parsing. |
 | JSON syntax error | Still thrown. It is not turned into a default value. |
 | Root-level parse failure | Still follows Gson boundaries and cannot always be isolated at field level. |
+| Retrofit network or transport read failure | Returns to Retrofit / OkHttp error handling, is not recorded as a field mismatch or empty response, and must not be hidden with `emptyResponsePolicy`. |
 | Unsafe-to-isolate failure | `Error`, `ThreadDeath`, `LinkageError`, and `CancellationException` are still thrown. |
 
 field-level adapter read failures emit events and keep the outer object parsing when the current field boundary can isolate them.
@@ -289,6 +304,8 @@ The Demo App supports built-in cases and custom JSON input. You can paste a real
 
 Suggested reading order: start with [Getting Started](docs/en/getting-started.md), then read [Compatibility](docs/en/compatibility.md), [Configuration](docs/en/configuration.md), and the [Mismatch Capability Matrix](docs/en/mismatch-capability-matrix.md).
 
+For Android release integration, also read [Android ProGuard](docs/en/android-proguard.md).
+
 If you integrate into Android release builds, read [Android ProGuard](docs/en/android-proguard.md) next.
 
 1. [Getting Started](docs/en/getting-started.md): installation, plain Gson usage, Retrofit integration, Kotlin APIs, and CI self-check.
@@ -298,9 +315,10 @@ If you integrate into Android release builds, read [Android ProGuard](docs/en/an
 5. [Android ProGuard](docs/en/android-proguard.md): new project integration, legacy quick integration, R8 fullMode choice, and release validation.
 6. [Demo App](docs/en/demo-app.md): device testing, screen overview, and custom JSON validation.
 7. [Troubleshooting](docs/en/troubleshooting.md): empty responses, raw JSON, adapter creation failures, platform objects, and business schema issues.
-8. [Release Checklist](docs/en/release-checklist.md): AAR, ProGuard, documentation version, and local Maven artifact checks before publishing 1.0.1.
-9. [1.0.1 Release Notes](docs/en/release-notes-1.0.1.md): stabilization fixes, compatibility boundaries, and release verification notes.
-10. [1.0.0 Release Notes](docs/en/release-notes-1.0.0.md): initial capabilities, compatibility boundaries, and release verification notes.
+8. [Release Checklist](docs/en/release-checklist.md): AAR, ProGuard, documentation version, and local Maven artifact checks before publishing 1.0.2.
+9. [1.0.2 Release Notes](docs/en/release-notes-1.0.2.md): transport exception boundary fix, compatibility boundaries, and release verification notes.
+10. [1.0.1 Release Notes](docs/en/release-notes-1.0.1.md): historical stabilization fixes, compatibility boundaries, and release verification notes.
+11. [1.0.0 Release Notes](docs/en/release-notes-1.0.0.md): initial capabilities, compatibility boundaries, and release verification notes.
 
 ## Boundaries
 

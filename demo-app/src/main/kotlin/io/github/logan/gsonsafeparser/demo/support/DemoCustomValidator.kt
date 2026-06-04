@@ -188,7 +188,7 @@ object DemoCustomValidator {
     val policies: List<DemoCustomPolicy> = listOf(
         DemoCustomPolicy(
             title = "默认契约优先",
-            description = "使用 SafeParser 1.0.1 默认配置，适合观察错配证据和默认返回边界。",
+            description = "使用 SafeParser 1.0.2 默认配置，适合观察错配证据和默认返回边界。",
             configFactory = { events -> SafeParserConfig(onEvent = events::add) }
         ),
         DemoCustomPolicy(

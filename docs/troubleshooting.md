@@ -6,7 +6,9 @@
 
 ## 1. Retrofit 空响应
 
-如果接口可能返回空 body，按业务选择策略：
+空响应指响应体真实为空，不包含断网、取消请求、连接重置或 TLS 失败。
+
+按业务选择策略：
 
 ```kotlin
 SafeParserConfig(emptyResponsePolicy = EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly) // 默认只为 Unit/Void 返回空值。
@@ -15,7 +17,20 @@ SafeParserConfig(emptyResponsePolicy = EmptyResponsePolicy.Null) // 空响应直
 SafeParserConfig(emptyResponsePolicy = EmptyResponsePolicy.DelegateToGson) // 空响应交回 Gson 原生策略。
 ```
 
-`DelegateToGson` 会交给 Gson / Retrofit 原生 converter，普通对象通常会抛 `EOFException`，适合严格要求后端不得返回空 body 的接口。Retrofit 的 `Unit` 和 `Void` 属于空响应语义，分别返回 `Unit` 和 `null`，避免为了委托制造新崩溃。
+| 策略 | 普通业务模型空 body | `Unit` / `Void` 空 body |
+| --- | --- | --- |
+| `DefaultValueForUnitOrVoidOnly` | 返回 `null`。 | 返回 `Unit` / `null`。 |
+| `DefaultValue` | 返回默认对象。 | 返回 `Unit` / `null`。 |
+| `Null` | 返回 `null`。 | 返回 `null`。 |
+| `DelegateToGson` | 交回 Gson，通常抛 `EOFException`。 | 返回 `Unit` / `null`。 |
+
+网络异常不走 `emptyResponsePolicy`：
+
+| 场景 | 处理方式 |
+| --- | --- |
+| 断网、请求取消、连接重置、TLS 失败 | 交回 Retrofit / OkHttp 异常处理。 |
+| `EmptyResponse`、`RawJsonCaptureSkipped`、`TypeMismatch` | 不记录这类事件。 |
+| 业务处理 | 继续使用 App 原有网络异常流程。 |
 
 ## 2. 回调里看不到原始 JSON
 

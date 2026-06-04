@@ -24,7 +24,9 @@ val config = SafeParserConfig( // 创建一份完整的安全解析配置。
 ) // 结束安全解析配置。
 ```
 
-配置项说明：
+默认配置偏向低干预：字段级问题优先局部兜底，不能确认安全的问题交回 Gson。
+
+### 常用配置
 
 | 配置项 | 默认值 | 什么时候改它 |
 | --- | --- | --- |
@@ -40,7 +42,7 @@ val config = SafeParserConfig( // 创建一份完整的安全解析配置。
 | `captureRawJsonInCallbacks` | `false` | 排障时临时打开，线上默认关闭。 |
 | `maxRawJsonCaptureBytes` | `1 MiB` | raw JSON 排障需要更小或更大的捕获上限时再改。 |
 
-raw JSON 捕获规则：
+### raw JSON 捕获规则
 
 1. 普通 Gson 解析会按 UTF-8 字节数安全截断，不会切断中文或 emoji。
 2. Retrofit 已知长度响应会先看 `contentLength`。
@@ -54,42 +56,28 @@ raw JSON 捕获规则：
 
 ## 2. 构造策略与 Unsafe
 
-这两个配置只解决一个问题：对象没有安全构造路径时，库要不要允许 Unsafe 绕过构造函数。
+这一节只回答一个问题：对象没有安全构造路径时，要不要允许 Unsafe 绕过构造函数。
 
-先看结论：
+默认推荐 `GsonCompatible + useJdkUnsafe = false`。这组配置适合直接接入已有 Gson 项目：SafeParser 自己不使用 Unsafe，Gson 回退路径保持原生行为。
 
 | 配置组合 | SafeParser 自己是否允许 Unsafe | Gson 回退路径是否允许 Unsafe | 适合场景 |
 | --- | --- | --- | --- |
-| `GsonCompatible + useJdkUnsafe = false` | 不允许。 | 保留 Gson 原生行为。 | 默认推荐。适合大多数老项目迁移，降低 SafeParser 自己引入额外构造风险的概率。 |
-| `GsonCompatible + useJdkUnsafe = true` | 允许。 | 保留 Gson 原生行为。 | 需要最大程度贴近原生 Gson 构造行为时使用。 |
-| `Strict + useJdkUnsafe = false` | 不允许。 | 不允许。 | 新接口或强契约场景。缺字段、`null`、错形或未知枚举值要尽早暴露。 |
-| `Strict + useJdkUnsafe = true` | 不允许。 | 不允许。 | 不建议这样写；`Strict` 优先级最高，`useJdkUnsafe = true` 会被忽略。 |
-
-`GsonCompatible` 是兼容模式。它的目标是尽量不打断已经依赖 Gson 宽松行为的项目。
-
-在这个模式下，`useJdkUnsafe` 只控制 SafeParser 自己的构造层：
-
-1. `useJdkUnsafe = false` 时，SafeParser 自己不会用 Unsafe 绕过构造函数。
-2. `useJdkUnsafe = true` 时，如果没有可用构造方法、没有默认值构造路径、也没有 `InstanceCreator`，SafeParser 最后可以用 Unsafe 创建对象。
-3. 如果 SafeParser 无法安全处理当前类型，仍会交回 Gson 原生 Adapter；这条回退路径继续遵循 Gson 自己的 Unsafe 设置。
-
-`Strict` 是严格模式。它的目标是把缺失的必填构造参数当成接口契约问题。
-
-只要开启 `Strict`，SafeParser 会同时关闭两条 Unsafe 路径：
-
-1. SafeParser 自己不会用 Unsafe 创建对象。
-2. Gson delegate 回退路径也不会继续用 Unsafe 绕过构造校验。
-3. 即使同时传入 `useJdkUnsafe = true`，也以 `Strict` 为准。
+| `GsonCompatible + useJdkUnsafe = false` | 不允许。 | 保留 Gson 原生行为。 | 默认配置，适合大多数项目。 |
+| `GsonCompatible + useJdkUnsafe = true` | 允许。 | 保留 Gson 原生行为。 | 仅用于项目明确依赖原生 Gson Unsafe 构造的场景。 |
+| `Strict + useJdkUnsafe = false` | 不允许。 | 不允许。 | 新接口或强契约场景。 |
+| `Strict + useJdkUnsafe = true` | 不允许。 | 不允许。 | 不建议使用；`Strict` 优先级最高，`useJdkUnsafe = true` 会被忽略。 |
 
 推荐用法：
 
 | 你的目标 | 推荐配置 |
 | --- | --- |
-| 老项目低成本迁移，先保证不增加解析失败 | 保持默认配置：`GsonCompatible + useJdkUnsafe = false`。 |
-| 老项目过去明显依赖 Gson Unsafe 构造，短期内无法改模型 | 临时使用 `GsonCompatible + useJdkUnsafe = true`，同时补业务模型 keep 规则和真实 JSON 回归。 |
-| 新接口、强契约、希望尽早发现后端缺字段 | 使用 `Strict + useJdkUnsafe = false`。 |
+| 先稳定接入，不改变现有 Gson 习惯 | 保持默认配置。 |
+| 兼容已有 Unsafe 构造依赖 | 使用 `GsonCompatible + useJdkUnsafe = true`，并补真实 JSON 回归。 |
+| 尽早暴露缺字段、`null`、错形或未知枚举值 | 使用 `Strict + useJdkUnsafe = false`。 |
 
-Unsafe 的风险很明确：它会绕过构造函数和 `init` 代码。对象可能被创建出来，但 Kotlin 默认值、非空约束和构造校验不一定执行。因此，`useJdkUnsafe = true` 只适合作为兼容旧行为的过渡方案，不建议作为新项目默认配置。
+Unsafe 会绕过构造函数和 `init` 代码。
+
+开启后对象可能被创建出来，但 Kotlin 默认值、非空约束和构造校验不一定执行。新项目不建议把 `useJdkUnsafe = true` 作为默认配置。
 
 ## 3. 预设配置
 

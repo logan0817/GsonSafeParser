@@ -24,7 +24,9 @@ val config = SafeParserConfig( // Creates a complete safe parsing config.
 ) // Ends safe parsing config.
 ```
 
-Config fields:
+The default config is low-interference: field-level problems fall back locally, and anything unsafe or uncertain goes back to Gson.
+
+### Common Config Fields
 
 | Config | Default | When to change it |
 | --- | --- | --- |
@@ -40,7 +42,7 @@ Config fields:
 | `captureRawJsonInCallbacks` | `false` | Enable temporarily for troubleshooting. |
 | `maxRawJsonCaptureBytes` | `1 MiB` | Tune when raw JSON capture needs a smaller or larger bound. |
 
-Raw JSON capture rules:
+### Raw JSON Capture Rules
 
 1. Plain Gson parsing truncates safely by UTF-8 byte count.
 2. Retrofit known-length bodies use `contentLength`.
@@ -54,42 +56,28 @@ Mutating caller-owned collections later does not affect an existing config.
 
 ## 2. Constructor Policy And Unsafe
 
-These two config fields answer one question: when an object has no safe construction path, may the library bypass constructors with Unsafe?
+This section answers one question: when an object has no safe construction path, may the library bypass constructors with Unsafe?
 
-Short version:
+The recommended default is `GsonCompatible + useJdkUnsafe = false`. It is suitable for existing Gson projects: SafeParser itself does not use Unsafe, while the Gson fallback path keeps native Gson behavior.
 
 | Config combination | May SafeParser itself use Unsafe? | May the Gson fallback path use Unsafe? | Best for |
 | --- | --- | --- | --- |
-| `GsonCompatible + useJdkUnsafe = false` | No. | Keeps native Gson behavior. | Recommended default. Good for most legacy migrations while reducing extra construction risk from SafeParser itself. |
-| `GsonCompatible + useJdkUnsafe = true` | Yes. | Keeps native Gson behavior. | Use only when the project needs behavior closest to native Gson construction. |
-| `Strict + useJdkUnsafe = false` | No. | No. | New APIs or strict contracts where missing fields, `null`, wrong shapes, or unknown enum values should fail early. |
-| `Strict + useJdkUnsafe = true` | No. | No. | Avoid writing this combination. `Strict` has the highest priority, so `useJdkUnsafe = true` is ignored. |
-
-`GsonCompatible` is the compatibility mode. Its goal is to avoid breaking projects that already depend on Gson's lenient behavior.
-
-In this mode, `useJdkUnsafe` controls only SafeParser's own construction layer:
-
-1. With `useJdkUnsafe = false`, SafeParser itself does not bypass constructors with Unsafe.
-2. With `useJdkUnsafe = true`, if there is no usable constructor, default-value construction path, or `InstanceCreator`, SafeParser may create the object with Unsafe as the last fallback.
-3. If SafeParser cannot handle the type safely, it still delegates back to native Gson adapters; that fallback path keeps Gson's own Unsafe setting.
-
-`Strict` is the strict mode. Its goal is to treat missing required constructor parameters as API contract problems.
-
-Once `Strict` is enabled, SafeParser closes both Unsafe paths:
-
-1. SafeParser itself does not create objects with Unsafe.
-2. The Gson delegate fallback path does not continue through Unsafe construction.
-3. If `useJdkUnsafe = true` is passed together with `Strict`, `Strict` wins.
+| `GsonCompatible + useJdkUnsafe = false` | No. | Keeps native Gson behavior. | Default config for most projects. |
+| `GsonCompatible + useJdkUnsafe = true` | Yes. | Keeps native Gson behavior. | Only for projects that explicitly depend on native Gson Unsafe construction. |
+| `Strict + useJdkUnsafe = false` | No. | No. | New APIs or strict contracts. |
+| `Strict + useJdkUnsafe = true` | No. | No. | Avoid this combination; `Strict` has the highest priority and ignores `useJdkUnsafe = true`. |
 
 Recommended usage:
 
 | Goal | Recommended config |
 | --- | --- |
-| Low-cost migration for an existing project, with minimal new parse failures | Keep the default: `GsonCompatible + useJdkUnsafe = false`. |
-| Existing project clearly depends on Gson Unsafe construction and cannot update models immediately | Temporarily use `GsonCompatible + useJdkUnsafe = true`, then add business model keep rules and real JSON regression tests. |
-| New API, strict contract, or early detection of backend missing fields | Use `Strict + useJdkUnsafe = false`. |
+| Adopt safely without changing existing Gson behavior | Keep the default config. |
+| Keep compatibility with an existing Unsafe construction dependency | Use `GsonCompatible + useJdkUnsafe = true`, and add real JSON regression tests. |
+| Expose missing fields, `null`, wrong shapes, or unknown enum values early | Use `Strict + useJdkUnsafe = false`. |
 
-The risk of Unsafe is straightforward: it bypasses constructors and `init` code. The object may be created, but Kotlin defaults, non-null constraints, and constructor validation may not run. Because of that, `useJdkUnsafe = true` should be treated as a migration bridge for legacy behavior, not as the default for new projects.
+Unsafe bypasses constructors and `init` code.
+
+The object may be created, but Kotlin defaults, non-null constraints, and constructor validation may not run. New projects should not use `useJdkUnsafe = true` as the default.
 
 ## 3. Presets
 
