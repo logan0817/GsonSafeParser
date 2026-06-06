@@ -18,9 +18,12 @@ import com.google.gson.stream.JsonToken
 import com.google.gson.stream.JsonWriter
 import io.github.logan.gsonsafeparser.NullValuePolicy
 import io.github.logan.gsonsafeparser.RequiredConstructorParameterPolicy
+import io.github.logan.gsonsafeparser.ShapeCoercionAction
+import io.github.logan.gsonsafeparser.ShapeCoercionPolicy
 import io.github.logan.gsonsafeparser.SafeParseSkip
 import io.github.logan.gsonsafeparser.SafeParserConfig
 import io.github.logan.gsonsafeparser.internal.GsonBuiltInTypes
+import io.github.logan.gsonsafeparser.internal.TokenRules
 import io.github.logan.gsonsafeparser.internal.runRecovering
 import io.github.logan.gsonsafeparser.internal.objectcreation.SafeObjectConstructor
 import java.lang.reflect.Field
@@ -166,7 +169,22 @@ internal object SafeReflectiveAdapterFactory {
                         continue
                     }
                     runRecovering {
-                        val value = binding.adapter.read(reader)
+                        val value = ShapeCoercionReadContext.withPolicy(binding.shapeCoercionPolicy) {
+                            if (
+                                valueToken == JsonToken.BEGIN_ARRAY &&
+                                binding.shapeCoercionPolicy.supportsObjectFromArray() &&
+                                TokenRules.isObjectLike(TypeToken.get(binding.fieldType).rawType)
+                            ) {
+                                readObjectFromFirstArrayItem(
+                                    reader = reader,
+                                    binding = binding,
+                                    valueToken = valueToken,
+                                    pathBeforeRead = pathBeforeRead
+                                )
+                            } else {
+                                binding.adapter.read(reader)
+                            }
+                        }
                         if (value != null) {
                             // null 不覆盖构造默认值，这是本库避免误伤本地默认值的关键行为。
                             binding.field.set(instance, value)
@@ -309,6 +327,7 @@ internal object SafeReflectiveAdapterFactory {
                     val fieldType = GsonTypes.resolve(currentType.type, current, field.genericType)
                     val fieldTypeToken = TypeToken.get(fieldType)
                     val adapter = fieldAdapter(gson, field, fieldTypeToken, config)
+                    val shapeCoercionPolicy = field.shapeCoercionPolicy(config, fieldType)
                     // 同一个字段可能把 @SerializedName 的主名也写进 alternate；这里先按字段自身去重，
                     // 避免误判为字段冲突。不同字段映射到同一个 JSON 名称仍会在下面 fail fast。
                     val names = namesFor(gson, field).distinct()
@@ -329,7 +348,9 @@ internal object SafeReflectiveAdapterFactory {
                                 field.type.isEnum,
                             requiresExplicitNestedConstructorValue =
                                 requiresExplicitConstructorValue &&
-                                    field.name in constructorReadRequirements.nestedConstructorParameterNames
+                                    field.name in constructorReadRequirements.nestedConstructorParameterNames,
+                            shapeCoercionPolicy = shapeCoercionPolicy,
+                            config = config
                         )
                         val replaced = fields.put(name, binding)
                         if (previous == null) previous = replaced
@@ -461,6 +482,98 @@ internal object SafeReflectiveAdapterFactory {
             }
         }.getOrNull()
         return kotlinProperty?.returnType?.isMarkedNullable == true
+    }
+
+    private fun readObjectFromFirstArrayItem(
+        reader: JsonReader,
+        binding: FieldBinding,
+        valueToken: JsonToken,
+        pathBeforeRead: String
+    ): Any? {
+        val fieldTypeToken = TypeToken.get(binding.fieldType)
+        reader.beginArray()
+        if (!reader.hasNext()) {
+            reader.endArray()
+            dispatchShapeCoercion(
+                config = binding.config,
+                type = fieldTypeToken,
+                reader = reader,
+                token = valueToken,
+                action = ShapeCoercionAction.EmptyArrayForObjectSkipped,
+                fieldName = binding.primaryName,
+                path = pathBeforeRead
+            )
+            return null
+        }
+
+        val firstItemPath = reader.path
+        val firstItemToken = reader.peek()
+        if (firstItemToken != JsonToken.BEGIN_OBJECT) {
+            reader.skipValue()
+            while (reader.hasNext()) {
+                reader.skipValue()
+            }
+            reader.endArray()
+            dispatchShapeCoercion(
+                config = binding.config,
+                type = fieldTypeToken,
+                reader = reader,
+                token = valueToken,
+                action = ShapeCoercionAction.CoercionFailed,
+                fieldName = binding.primaryName,
+                reason = "First array item is $firstItemToken, not an object value",
+                path = pathBeforeRead
+            )
+            return null
+        }
+        val value = runRecovering { binding.adapter.read(reader) }
+            .getOrElse { error ->
+                reader.skipUnreadValueIfPossible(firstItemPath)
+                while (runRecovering { reader.hasNext() }.getOrDefault(false)) {
+                    reader.skipValue()
+                }
+                reader.endArray()
+                dispatchShapeCoercion(
+                    config = binding.config,
+                    type = fieldTypeToken,
+                    reader = reader,
+                    token = valueToken,
+                    action = ShapeCoercionAction.CoercionFailed,
+                    fieldName = binding.primaryName,
+                    reason = error.message ?: error.javaClass.name,
+                    path = pathBeforeRead
+                )
+                return null
+            }
+
+        dispatchShapeCoercion(
+            config = binding.config,
+            type = fieldTypeToken,
+            reader = reader,
+            token = valueToken,
+            action = ShapeCoercionAction.ObjectFromFirstArrayItem,
+            fieldName = binding.primaryName,
+            path = pathBeforeRead
+        )
+        var discardedItemCount = 0
+        while (reader.hasNext()) {
+            reader.skipValue()
+            discardedItemCount++
+        }
+        reader.endArray()
+        if (discardedItemCount > 0) {
+            dispatchShapeCoercion(
+                config = binding.config,
+                type = fieldTypeToken,
+                reader = reader,
+                token = valueToken,
+                action = ShapeCoercionAction.ArrayExtraItemsSkipped,
+                fieldName = binding.primaryName,
+                discardedItemCount = discardedItemCount,
+                path = pathBeforeRead
+            )
+        }
+        return value
     }
 
     private fun handleRequiredEnumValues(
@@ -623,7 +736,9 @@ internal object SafeReflectiveAdapterFactory {
         val acceptsNull: Boolean,
         val requiresExplicitConstructorValue: Boolean,
         val requiresExplicitEnumValue: Boolean,
-        val requiresExplicitNestedConstructorValue: Boolean
+        val requiresExplicitNestedConstructorValue: Boolean,
+        val shapeCoercionPolicy: ShapeCoercionPolicy,
+        val config: SafeParserConfig
     )
 
     private data class ConstructorReadRequirements(

@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertThrows
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.math.BigDecimal
 import com.google.gson.annotations.SerializedName
@@ -12,6 +13,7 @@ import com.google.gson.TypeAdapter
 import com.google.gson.annotations.JsonAdapter
 import com.google.gson.reflect.TypeToken
 import com.google.gson.stream.JsonReader
+import com.google.gson.stream.JsonToken
 import com.google.gson.stream.JsonWriter
 
 /**
@@ -407,6 +409,47 @@ class SafeParserBehaviorTest {
         assertEquals("null-key", result[null])
         assertEquals("one", result[1])
         assertFalse(result.containsKey(""))
+    }
+
+    /**
+     * 测试方法说明：验证复杂 Map entry 缺少 value 时只跳过当前 entry，后续 entry 仍继续解析。
+     */
+    @Test
+    fun `map array entry with missing value skips entry and keeps following entries`() {
+        val events = mutableListOf<TypeMismatchEvent>()
+        val gson = GsonSafeParser.create(SafeParserConfig(onTypeMismatch = events::add))
+
+        val result = gson.fromJson(
+            """{"values":[[1],[2,"two"]]}""",
+            IntKeyMap::class.java
+        )
+
+        assertEquals(mapOf(2 to "two"), result.values)
+        val event = events.single()
+        assertEquals(ParseExceptionKind.MAP_ITEM, event.kind)
+        assertEquals(JsonToken.END_ARRAY, event.actualToken)
+        assertEquals("values", event.fieldName)
+        assertEquals("$.values[0][1]", event.path)
+        assertEquals("Map entry value is missing", event.reason)
+        assertNotEquals("1", event.mapItemKey)
+        assertEquals(true, event.mapItemKey?.startsWith("sha256:"))
+    }
+
+    /**
+     * 测试方法说明：验证复杂 Map entry 带额外元素时按兼容策略静默跳过多余值，不能污染下一条 entry。
+     */
+    @Test
+    fun `map array entry with extra values silently skips extras and keeps following entries`() {
+        val events = mutableListOf<TypeMismatchEvent>()
+        val gson = GsonSafeParser.create(SafeParserConfig(onTypeMismatch = events::add))
+
+        val result = gson.fromJson(
+            """{"values":[[1,"one","extra",{"ignored":true}],[2,"two"]]}""",
+            IntKeyMap::class.java
+        )
+
+        assertEquals(mapOf(1 to "one", 2 to "two"), result.values)
+        assertEquals(emptyList<TypeMismatchEvent>(), events)
     }
 
     /**

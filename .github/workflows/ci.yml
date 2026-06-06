@@ -56,3 +56,6 @@ jobs:
 
       - name: Verify Maven local publication artifacts
         run: ./gradlew verifyMavenLocalPublicationArtifacts --warning-mode=fail
+
+      - name: Verify patch formatting
+        run: git diff --check

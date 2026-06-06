@@ -61,6 +61,14 @@ class SafeParserConfig(
     val instanceCreators: Map<Type, InstanceCreator<*>> = instanceCreators.toMap()
     val reflectionAccessFilters: List<ReflectionAccessFilter> = reflectionAccessFilters.toList()
     val skippedPlatformTypePrefixes: Set<String> = skippedPlatformTypePrefixes.toSet()
+    /**
+     * JSON 对象和数组形态漂移时的显式转换策略。
+     *
+     * 该属性不放进公开构造函数，避免 1.0.3 补丁版改变 1.0.2 已发布构造签名。
+     * 调用方请通过 [withShapeCoercion] 或 [withShapeCoercionPolicy] 创建带转换策略的配置副本。
+     */
+    var shapeCoercionPolicy: ShapeCoercionPolicy = ShapeCoercionPolicy.Disabled
+        private set
 
     /**
      * 创建当前配置的副本。
@@ -109,7 +117,7 @@ class SafeParserConfig(
         onTypeMismatch: (TypeMismatchEvent) -> Unit = this.onTypeMismatch,
         onObserverFailure: (ObserverFailureEvent) -> Unit = this.onObserverFailure
     ): SafeParserConfig {
-        return SafeParserConfig(
+        val copied = SafeParserConfig(
             fallbackPolicy = fallbackPolicy,
             emptyResponsePolicy = emptyResponsePolicy,
             instanceCreators = instanceCreators,
@@ -129,6 +137,28 @@ class SafeParserConfig(
             onTypeMismatch = onTypeMismatch,
             onObserverFailure = onObserverFailure
         )
+        copied.shapeCoercionPolicy = this.shapeCoercionPolicy
+        return copied
+    }
+
+    /**
+     * 返回一份启用指定 JSON 形态转换选项的新配置。
+     *
+     * 该入口用于 1.0.3 新能力，不改变 [SafeParserConfig] 构造函数签名。
+     */
+    fun withShapeCoercion(options: ShapeCoercionOptions): SafeParserConfig {
+        return copy().apply {
+            shapeCoercionPolicy = options.policy
+        }
+    }
+
+    /**
+     * 返回一份启用指定 JSON 形态转换策略的新配置。
+     *
+     * 如果需要把多个 shape 相关选项统一传递，优先使用 [withShapeCoercion]。
+     */
+    fun withShapeCoercionPolicy(policy: ShapeCoercionPolicy): SafeParserConfig {
+        return withShapeCoercion(ShapeCoercionOptions(policy))
     }
 
     companion object {
@@ -417,6 +447,33 @@ enum class PrimitiveParsingPolicy {
 }
 
 /**
+ * JSON 形态转换选项。
+ *
+ * 1.0.3 新增能力通过这个独立类型显式开启，不插入 [SafeParserConfig] 或 [SafeReadPolicy] 公开构造函数。
+ *
+ * @property policy 对象和数组漂移时的转换策略，默认关闭。
+ */
+data class ShapeCoercionOptions(
+    val policy: ShapeCoercionPolicy = ShapeCoercionPolicy.Disabled
+)
+
+/**
+ * JSON 形态转换策略。
+ *
+ * 该能力默认关闭。开启后只处理字段级对象和数组漂移，不做字符串二次解析，也不改变不可恢复异常边界。
+ */
+enum class ShapeCoercionPolicy {
+    /** 不做对象和数组互转，保持原错形兜底行为。 */
+    Disabled,
+    /** 字段声明为对象但 JSON 返回数组时，尝试读取数组第一个元素。 */
+    ObjectFromFirstArrayItem,
+    /** 字段声明为集合或数组但 JSON 返回对象时，尝试包装成单元素容器。 */
+    CollectionFromSingleObject,
+    /** 同时启用对象取数组首项、集合或数组包装单对象。 */
+    ObjectAndCollection
+}
+
+/**
  * JSON 显式 null 写入策略。
  */
 enum class NullValuePolicy {
@@ -476,6 +533,47 @@ data class TypeMismatchEvent(
 )
 
 /**
+ * JSON 形态转换事件。
+ *
+ * 这类事件只在调用方显式开启 shape coercion 后出现，用来说明库把对象和数组漂移恢复成了目标字段值。
+ *
+ * @property expectedType 代码里期望读取的目标类型。
+ * @property actualToken 实际 JSON token。
+ * @property path Gson Reader 当前路径。
+ * @property action 本次转换动作。
+ * @property fieldName 归因到的字段名。
+ * @property discardedItemCount 数组多元素被丢弃的数量。
+ * @property reason 转换说明或失败原因。
+ */
+data class ShapeCoercionEvent(
+    val expectedType: String,
+    val actualToken: JsonToken,
+    val path: String,
+    val action: ShapeCoercionAction,
+    val fieldName: String? = null,
+    val discardedItemCount: Int = 0,
+    val reason: String = "JSON shape coerced by explicit policy"
+)
+
+/**
+ * JSON 形态转换动作。
+ */
+enum class ShapeCoercionAction {
+    /** 对象字段从数组第一个元素读取。 */
+    ObjectFromFirstArrayItem,
+    /** 集合字段从单个对象包装。 */
+    CollectionFromSingleObject,
+    /** 数组字段从单个对象包装。 */
+    ArrayFromSingleObject,
+    /** 对象字段遇到空数组，回到原兜底。 */
+    EmptyArrayForObjectSkipped,
+    /** 对象字段取首项后跳过了数组里的额外元素。 */
+    ArrayExtraItemsSkipped,
+    /** 显式转换失败，回到原兜底。 */
+    CoercionFailed
+}
+
+/**
  * Safe Adapter 创建失败事件。
  *
  * 只要配置允许，创建失败后会返回 null 让 Gson 使用默认 Adapter；事件用于提醒接入方这个类型没有被 SafeParser 接管。
@@ -515,6 +613,10 @@ interface SafeParserEvent {
 
     data class TypeMismatch(val detail: TypeMismatchEvent) : SafeParserEvent {
         override val eventName: String = "TypeMismatch"
+    }
+
+    data class ShapeCoercion(val detail: ShapeCoercionEvent) : SafeParserEvent {
+        override val eventName: String = "ShapeCoercion"
     }
 
     data class AdapterCreationFailure(val detail: AdapterCreationFailureEvent) : SafeParserEvent {
@@ -635,6 +737,15 @@ internal fun SafeParserConfig.dispatchTypeMismatch(event: TypeMismatchEvent) {
 }
 
 /**
+ * 分发 JSON 形态转换事件。
+ *
+ * @param event 已经组装好的转换详情。
+ */
+internal fun SafeParserConfig.dispatchShapeCoercion(event: ShapeCoercionEvent) {
+    dispatchParserEvent(SafeParserEvent.ShapeCoercion(event))
+}
+
+/**
  * 分发 Adapter 创建失败事件。
  *
  * @param event 创建失败详情，默认会作为观测信息上报，不直接抛给业务调用方。
@@ -700,6 +811,7 @@ private fun SafeParserConfig.dispatchEvent(
         is SafeParserEvent.AdapterCreationFailure -> notifyObserver("onAdapterCreationFailure", event) {
             onAdapterCreationFailure(event.detail)
         }
+        is SafeParserEvent.ShapeCoercion,
         is SafeParserEvent.EmptyResponse,
         is SafeParserEvent.RawJsonCaptureSkipped -> Unit
         else -> Unit

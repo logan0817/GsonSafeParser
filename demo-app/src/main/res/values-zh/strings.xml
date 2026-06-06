@@ -149,6 +149,8 @@
     <string name="demo_policy_primitive_delegate_description">基础类型完全交给 Gson 原生 Adapter，适合确认哪些基础字段异常需要暴露出来。</string>
     <string name="demo_policy_object_number_title">Object 数字按 Long/Double</string>
     <string name="demo_policy_object_number_description">Any/Object 里的数字按 Gson LONG_OR_DOUBLE 处理，适合验证动态字段里的数字类型。</string>
+    <string name="demo_policy_shape_coercion_title">JSON 形态转换</string>
+    <string name="demo_policy_shape_coercion_description">显式开启对象和集合形态转换，适合验证对象字段收到数组、集合字段收到对象的接口。</string>
     <string name="demo_policy_raw_json_truncate_title">rawJson 截断测试</string>
     <string name="demo_policy_raw_json_truncate_description">开启 rawJson 捕获，并把上限降到 10 字节，适合验证日志截断和 rawJsonTruncated 标记。</string>
 </resources>

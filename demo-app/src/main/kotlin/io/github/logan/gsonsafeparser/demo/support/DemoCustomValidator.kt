@@ -32,6 +32,7 @@ import io.github.logan.gsonsafeparser.SafeParseDelegateToGson
 import io.github.logan.gsonsafeparser.SafeParseSkip
 import io.github.logan.gsonsafeparser.SafeReadPolicy
 import io.github.logan.gsonsafeparser.SafeWritePolicy
+import io.github.logan.gsonsafeparser.ShapeCoercionPolicy
 import io.github.logan.gsonsafeparser.TypeMismatchEvent
 import io.github.logan.gsonsafeparser.contractReport
 import io.github.logan.gsonsafeparser.dispatchEvent
@@ -188,7 +189,7 @@ object DemoCustomValidator {
     val policies: List<DemoCustomPolicy> = listOf(
         DemoCustomPolicy(
             title = "默认契约优先",
-            description = "使用 SafeParser 1.0.2 默认配置，适合观察错配证据和默认返回边界。",
+            description = "使用 SafeParser 1.0.3 默认配置，适合观察错配证据和默认返回边界。",
             configFactory = { events -> SafeParserConfig(onEvent = events::add) }
         ),
         DemoCustomPolicy(
@@ -227,6 +228,15 @@ object DemoCustomValidator {
                     objectToNumberStrategy = ToNumberPolicy.LONG_OR_DOUBLE,
                     onEvent = events::add
                 )
+            }
+        ),
+        DemoCustomPolicy(
+            title = "JSON 形态转换",
+            description = "显式开启对象和集合形态转换，适合验证对象字段收到数组、集合字段收到对象的接口。",
+            configFactory = { events ->
+                SafeParserConfig(
+                    onEvent = events::add
+                ).withShapeCoercionPolicy(ShapeCoercionPolicy.ObjectAndCollection)
             }
         ),
         DemoCustomPolicy(

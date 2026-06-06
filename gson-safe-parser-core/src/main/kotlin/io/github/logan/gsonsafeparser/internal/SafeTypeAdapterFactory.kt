@@ -10,6 +10,7 @@ import io.github.logan.gsonsafeparser.PrimitiveParsingPolicy
 import io.github.logan.gsonsafeparser.SafeParseDelegateToGson
 import io.github.logan.gsonsafeparser.SafeParserConfig
 import io.github.logan.gsonsafeparser.dispatchAdapterCreationFailure
+import io.github.logan.gsonsafeparser.internal.adapter.SafeArrayAdapterFactory
 import io.github.logan.gsonsafeparser.internal.adapter.SafeCollectionAdapterFactory
 import io.github.logan.gsonsafeparser.internal.adapter.SafeMapAdapterFactory
 import io.github.logan.gsonsafeparser.internal.adapter.SafeOrgJsonAdapters
@@ -56,7 +57,18 @@ internal class SafeTypeAdapterFactory(
             return null
         }
 
-        // 集合、Map、普通对象都可能在创建 Adapter 时遇到反射限制或字段冲突，所以统一走 createSafely。
+        // 集合、数组、Map、普通对象都可能在创建 Adapter 时遇到反射限制或字段冲突，所以统一走 createSafely。
+        if (rawType.isArray && !rawType.componentType.isPrimitive) {
+            return createSafely(config, type) {
+                SafeArrayAdapterFactory.create(
+                    gson = gson,
+                    type = type,
+                    config = config,
+                    delegate = gson.getDelegateAdapter(this, type)
+                )
+            }
+        }
+
         if (Collection::class.java.isAssignableFrom(rawType)) {
             return createSafely(config, type) { SafeCollectionAdapterFactory.create(gson, type, config) }
         }

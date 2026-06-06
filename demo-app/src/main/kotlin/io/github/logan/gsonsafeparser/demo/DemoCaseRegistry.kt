@@ -41,6 +41,7 @@ object DemoCaseRegistry {
         fallbackNullOnlyCollectionMapCase(),
         callbackCompatibilityCase(),
         collectionMapMismatchCase(),
+        shapeCoercionCase(),
         rootShapeAndNullFieldBoundaryCase(),
         scalarStringFallbackCase(),
         mapBadKeyNestedEntryCase(),

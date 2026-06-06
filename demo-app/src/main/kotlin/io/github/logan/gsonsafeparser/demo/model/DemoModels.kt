@@ -66,6 +66,7 @@ import java.util.concurrent.ConcurrentMap
 
 internal data class ApiResponse(val code: Int = 0, val data: User = User())
 internal data class NullableApiResponse(val code: Int = 0, val data: User? = null)
+internal data class NullableUserEnvelope(val code: Int = 0, val data: User? = null)
 internal data class User(val id: Long = 0L, val name: String = "anonymous")
 internal data class PrimitiveResponse(
     val count: Int = 0,

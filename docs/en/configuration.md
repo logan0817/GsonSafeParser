@@ -42,6 +42,12 @@ The default config is low-interference: field-level problems fall back locally, 
 | `captureRawJsonInCallbacks` | `false` | Enable temporarily for troubleshooting. |
 | `maxRawJsonCaptureBytes` | `1 MiB` | Tune when raw JSON capture needs a smaller or larger bound. |
 
+### Optional Capability Switches
+
+| Capability | Default state | How to enable |
+| --- | --- | --- |
+| JSON shape coercion | `Disabled` | Enable only when backend object-array drift is known and the business accepts an explicit recovery rule. Call `withShapeCoercionPolicy(...)`, or annotate a field with `@SafeParseShapeCoercion`. |
+
 ### Raw JSON Capture Rules
 
 1. Plain Gson parsing truncates safely by UTF-8 byte count.
@@ -117,7 +123,57 @@ val config = SafeParserConfig.fromPolicies( // Creates config from layered polic
 
 Layered policies are useful when a team wraps a shared config internally. They separate read behavior, write behavior, and observation so one constructor does not carry every concern.
 
-## 5. Event Observation
+## 5. JSON Shape Coercion
+
+JSON shape coercion is disabled by default. If it is not enabled, an object field receiving an array or a collection field receiving an object keeps the original field-mismatch fallback behavior.
+
+It only handles field-level object-array drift. It does not handle root JSON values, and it does not parse JSON embedded inside strings.
+
+| Policy | Supported behavior |
+| --- | --- |
+| `Disabled` | Does not convert objects and arrays. |
+| `ObjectFromFirstArrayItem` | For object fields, reads the first object from an array. |
+| `CollectionFromSingleObject` | For collection fields or object-array fields, wraps one object as a one-item container. |
+| `ObjectAndCollection` | Enables both recovery rules above. |
+
+Enable globally:
+
+```kotlin
+val config = SafeParserConfig()
+    .withShapeCoercionPolicy(ShapeCoercionPolicy.ObjectAndCollection)
+```
+
+`withShapeCoercionPolicy(...)` is the shorthand. Team-level wrappers can also use `withShapeCoercion(ShapeCoercionOptions(...))`.
+
+Enable one field:
+
+```kotlin
+data class ApiResponse(
+    @field:SafeParseShapeCoercion(ShapeCoercionPolicy.ObjectFromFirstArrayItem)
+    val data: User? = null
+)
+```
+
+Keep one strict-contract field on the original behavior when the global policy is enabled:
+
+```kotlin
+data class StrictEnvelope(
+    @field:SafeParseDisableShapeCoercion
+    val signedPayload: SignedPayload = SignedPayload()
+)
+```
+
+If `errors: List<ApiError>` itself is an object/array drift field, do not disable it; use `CollectionFromSingleObject` or `ObjectAndCollection`.
+
+Boundaries:
+
+1. Root objects, root collections, and root object arrays are not coerced.
+2. Maps are not coerced, avoiding conflicts with Gson complex Map key semantics.
+3. Numbers, booleans, and strings are not coerced, and strings are not parsed as nested JSON.
+4. Empty arrays, a non-object first array item, or adapter failures during coercion emit `ShapeCoercion` events and return to the original fallback behavior.
+5. `Error`, `ThreadDeath`, `LinkageError`, `CancellationException`, and real transport I/O still escape.
+
+## 6. Event Observation
 
 ```kotlin
 val config = SafeParserConfig( // Creates safe parsing config with event callbacks.
@@ -136,7 +192,7 @@ val config = SafeParserConfig( // Creates safe parsing config with event callbac
 ) // Ends event config.
 ```
 
-1. `onEvent` is the unified event stream. It receives type mismatches, Adapter creation failures, empty responses, raw JSON capture skips, and other observable events.
+1. `onEvent` is the unified event stream. It receives type mismatches, ShapeCoercion events, Adapter creation failures, empty responses, raw JSON capture skips, and other observable events.
 2. `onTypeMismatch` is useful when the project only cares about field type mismatches.
 3. `onAdapterCreationFailure` observes Safe Adapter creation failures. The default behavior still delegates back to native Gson adapters.
 4. `onObserverFailure` observes exceptions thrown by business logging or analytics callbacks.
@@ -151,7 +207,7 @@ Event callbacks run synchronously on the parsing caller thread. If multiple thre
 
 A manual call does not write into the current `parseSafe` event snapshot, and it does not mean a real parse happened.
 
-## 6. Contract Report
+## 7. Contract Report
 
 ```kotlin
 val result = GsonSafeParser.parseSafe<ApiResponse>("""{"code":200,"data":[]}""") // Parses JSON with an object-field mismatch.
@@ -168,13 +224,13 @@ if (report.hasIssues) { // Checks whether this parse found contract issues.
 
 The contract report only consumes events from the current parse. It does not parse JSON again and does not modify the parsed value. Use it for logs, CI reports, and API issue review.
 
-It keeps field path, expected JSON shape, actual JSON shape, fallback action, client impact, backend fix suggestion, and `captureSkipReason`.
+It keeps field path, expected JSON shape, actual JSON shape, fallback action, client impact, backend fix suggestion, `shapeCoercionAction`, and `captureSkipReason`.
 
 It does not print raw JSON bodies or Throwable objects.
 
 Machine-side integrations should prefer `summary`, each issue's `stableKey`, and `toStructuredRows()` instead of parsing Markdown.
 
-## 6. Observer Failure Report
+## 8. Observer Failure Report
 
 ```kotlin
 val observerFailures = mutableListOf<ObserverFailureEvent>() // Creates a list for observer failure events.
@@ -188,9 +244,9 @@ val gson = GsonSafeParser.create( // Creates a Gson with observer failure collec
 println(observerFailures.observerFailureReport().toMarkdown()) // Prints the redacted observer failure report.
 ```
 
-The report redacts and summarizes failed callback names, source event types, field paths, and exception types. It does not directly output raw JSON or stack traces.
+The report redacts and summarizes failed callback names, source event types, field paths, and exception types. It does not directly output raw JSON or stack traces. `ShapeCoercion` events reuse the mismatch category while preserving the event name, path, and field details, so they do not fall into Unknown.
 
-## 7. Annotations
+## 9. Annotations
 
 ```kotlin
 @SafeParseDelegateToGson // Lets this type use native Gson Adapter directly.
@@ -200,18 +256,28 @@ data class PageState( // Defines a page model with runtime state.
     @field:SafeParseSkip // Tells Safe Reflective to skip this field.
     val runtimeCache: Any? = null // Stores runtime cache that should not be read from JSON.
 ) // Ends page model.
+
+data class FlexibleResponse( // Defines a response model with local shape coercion.
+    @field:SafeParseShapeCoercion(ShapeCoercionPolicy.ObjectFromFirstArrayItem)
+    val data: User? = null, // Allows only data to recover from the first object in an array.
+
+    @field:SafeParseDisableShapeCoercion
+    val signedPayload: SignedPayload = SignedPayload() // Keeps a strict-contract field on the original fallback behavior even when the global policy is enabled.
+) // Ends response model.
 ```
 
 1. `@SafeParseDelegateToGson` is used on classes and makes that type use the native Gson Adapter directly.
 2. `@SafeParseSkip` is used on fields and makes Safe Reflective skip that field. It is suitable for caches, runtime state, and platform objects.
+3. `@SafeParseShapeCoercion` is used on fields and allows that field to apply the configured object-array coercion policy.
+4. `@SafeParseDisableShapeCoercion` is used on fields and keeps that field on the original fallback behavior even when the global coercion policy is enabled.
 
-## 8. Default Handling Summary
+## 10. Default Handling Summary
 
 For the fuller scope covering objects, collections, maps, primitives, Kotlin defaults, `org.json`, Retrofit empty bodies, and raw JSON capture, see the [Mismatch Capability Matrix](mismatch-capability-matrix.md).
 
-Out-of-the-box defaults:
+Out-of-the-box defaults and optional capability states:
 
-| Config | Default |
+| Item | Default state |
 | --- | --- |
 | `fallbackPolicy` | `FallbackPolicy.NullOnly` |
 | `primitiveParsingPolicy` | `PrimitiveParsingPolicy.DelegateToGson` |
@@ -219,6 +285,7 @@ Out-of-the-box defaults:
 | `useJdkUnsafe` | `false` |
 | `requiredConstructorParameterPolicy` | `RequiredConstructorParameterPolicy.GsonCompatible` |
 | `mapItemKeyPolicy` | `MapItemKeyPolicy.Hash` |
+| JSON shape coercion | Disabled by default, with state `ShapeCoercionPolicy.Disabled`; enabled only by calling `withShapeCoercionPolicy(...)` or using a field annotation. |
 
 Remember these defaults:
 
@@ -228,5 +295,6 @@ Remember these defaults:
 | Root object mismatch | Usually returns `null`; unrecoverable Gson exceptions are still thrown. |
 | Missing non-null Kotlin constructor parameters | Keeps Gson-compatible behavior by default; reference fields stay `null`, and primitives keep JVM defaults. |
 | Primitive shape mismatch | Delegates to native Gson adapters by default; `PrimitiveParsingPolicy.Safe` enables safe primitive values. |
+| Object-array shape coercion | Disabled by default; enabled only through `withShapeCoercionPolicy(...)` or field annotations. |
 | Empty Retrofit body | `Unit` returns `Unit`; `Void` and normal models return `null`. |
 | Unsafe-to-isolate problems | JSON syntax errors, root failures, `Error`, `ThreadDeath`, `LinkageError`, and `CancellationException` are still thrown. |

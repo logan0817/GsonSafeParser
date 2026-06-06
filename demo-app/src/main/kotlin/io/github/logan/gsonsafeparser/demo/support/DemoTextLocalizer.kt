@@ -75,6 +75,7 @@ internal object DemoTextLocalizer {
         R.string.demo_policy_debug_raw_json_title,
         R.string.demo_policy_primitive_delegate_title,
         R.string.demo_policy_object_number_title,
+        R.string.demo_policy_shape_coercion_title,
         R.string.demo_policy_raw_json_truncate_title
     )
 
@@ -84,11 +85,13 @@ internal object DemoTextLocalizer {
         R.string.demo_policy_debug_raw_json_description,
         R.string.demo_policy_primitive_delegate_description,
         R.string.demo_policy_object_number_description,
+        R.string.demo_policy_shape_coercion_description,
         R.string.demo_policy_raw_json_truncate_description
     )
 
     private val technicalEnglishReplacements = linkedMapOf(
         "类型错配（TypeMismatch）" to "Type mismatch (TypeMismatch)",
+        "JSON 形态转换（ShapeCoercion）" to "JSON shape coercion (ShapeCoercion)",
         "Adapter 创建失败（AdapterCreationFailure）" to "Adapter creation failure (AdapterCreationFailure)",
         "空响应（EmptyResponse）" to "Empty response (EmptyResponse)",
         "跳过原始 JSON 捕获（RawJsonCaptureSkipped）" to "Raw JSON capture skipped (RawJsonCaptureSkipped)",
@@ -97,6 +100,8 @@ internal object DemoTextLocalizer {
         "字段名=" to "Field name=",
         "期望类型=" to "Expected type=",
         "实际 JSON 类型=" to "Actual JSON token=",
+        "转换动作=" to "Coercion action=",
+        "丢弃元素数量=" to "Discarded item count=",
         "问题位置=" to "Mismatch location=",
         "Map 条目 key=" to "Map item key=",
         "原始 JSON=" to "Raw JSON=",
@@ -180,6 +185,7 @@ internal object DemoTextLocalizer {
         "调试 rawJson" to "Debug rawJson",
         "基础类型交回 Gson" to "Primitive delegate to Gson",
         "Object 数字 Long/Double" to "Object numbers Long/Double",
+        "JSON 形态转换" to "JSON shape coercion",
         "rawJson 10 字节截断" to "Raw JSON 10-byte truncation",
         "常见接口壳：code + 非空 data 对象，适合验证 data 返回 []、{}、null 等情况。" to "Common API envelope: code + non-null data object. Good for testing data=[] , data={} , or data=null.",
         "data 可空的接口壳，适合验证 NullOnly 或低误伤策略下的表现。" to "API envelope with nullable data. Good for checking NullOnly or low-interference behavior.",
@@ -192,11 +198,12 @@ internal object DemoTextLocalizer {
         "包含 Any 和 Map<String, Any>，适合观察 Object 数字策略和动态字段。" to "Contains Any and Map<String, Any>. Good for observing Object number strategy and dynamic fields.",
         "同时包含 EnumSet 和 EnumMap，适合验证枚举容器是否能在真实 App 里正常构造。" to "Contains EnumSet and EnumMap. Good for checking whether enum containers can be built correctly in a real app.",
         "包含 JSONObject 和 JSONArray，适合验证 org.json 类型适配。" to "Contains JSONObject and JSONArray. Good for checking org.json adapter support.",
-        "使用 SafeParser 1.0.2 默认配置，适合观察错配证据和默认返回边界。" to "Uses the SafeParser 1.0.2 default config. Good for observing mismatch evidence and default return boundaries.",
+        "使用 SafeParser 1.0.3 默认配置，适合观察错配证据和默认返回边界。" to "Uses the SafeParser 1.0.3 default config. Good for observing mismatch evidence and default return boundaries.",
         "字段错形尽量给 null，基础类型交回 Gson，更接近原生 Gson。" to "Returns null for many mismatched fields and delegates primitives back to Gson, staying closer to native Gson.",
         "开启 rawJson 捕获，适合联调时把后端原始返回和错配事件一起带出来。" to "Enables rawJson capture so you can inspect the backend response together with mismatch events during integration testing.",
         "基础类型完全交回 Gson 原生 Adapter，适合验证低误伤接入时哪些异常会重新暴露出来。" to "Delegates primitive parsing completely to native Gson Adapter. Good for checking which errors reappear during low-interference rollout.",
         "Any/Object 数字使用 Gson 的 LONG_OR_DOUBLE 策略，适合验证动态字段类型是否符合项目预期。" to "Uses Gson's LONG_OR_DOUBLE policy for Any/Object numbers. Good for checking whether dynamic number types match project expectations.",
+        "显式开启对象和集合形态转换，适合验证对象字段收到数组、集合字段收到对象的接口。" to "Explicitly enables object and collection shape coercion. Good for checking object fields returned as arrays and collection fields returned as objects.",
         "开启 rawJson 捕获但把上限降到 10 字节，适合验证日志截断和 rawJsonTruncated 标记。" to "Enables rawJson capture but lowers the limit to 10 bytes. Good for checking truncation and the rawJsonTruncated flag.",
         "SafeParser 解析失败" to "SafeParser failed to parse",
         "原生 Gson 解析失败" to "Native Gson failed to parse",

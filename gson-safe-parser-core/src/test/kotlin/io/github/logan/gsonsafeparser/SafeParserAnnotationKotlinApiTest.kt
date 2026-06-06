@@ -1,8 +1,13 @@
 package io.github.logan.gsonsafeparser
 
+import com.google.gson.TypeAdapter
+import com.google.gson.annotations.JsonAdapter
 import com.google.gson.JsonSyntaxException
+import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonToken
+import com.google.gson.stream.JsonWriter
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
@@ -30,6 +35,42 @@ class SafeParserAnnotationKotlinApiTest {
         var name: String = "local"
     }
 
+    /** 测试模型：把类级 delegate 类型放进字段，验证父对象读取不会绕过 delegate 语义。 */
+    data class NativeOnlyContainer(val native: NativeOnly = NativeOnly())
+
+    /** 测试模型：类级 JsonAdapter 也属于严格交给 Gson 的类型。 */
+    @JsonAdapter(NativeJsonAdapterOnlyAdapter::class)
+    class NativeJsonAdapterOnly {
+        var name: String = "local"
+    }
+
+    /** 测试模型：把类级 JsonAdapter 类型放进字段，验证全局 shape coercion 不会改写旧行为。 */
+    data class NativeJsonAdapterOnlyContainer(
+        val native: NativeJsonAdapterOnly = NativeJsonAdapterOnly()
+    )
+
+    /** 测试 Adapter：只读取对象形态，数组形态应按原 Gson 行为失败。 */
+    class NativeJsonAdapterOnlyAdapter : TypeAdapter<NativeJsonAdapterOnly>() {
+        override fun write(out: JsonWriter, value: NativeJsonAdapterOnly?) {
+            out.beginObject()
+            out.name("name").value(value?.name)
+            out.endObject()
+        }
+
+        override fun read(reader: JsonReader): NativeJsonAdapterOnly {
+            reader.beginObject()
+            val result = NativeJsonAdapterOnly()
+            while (reader.hasNext()) {
+                when (reader.nextName()) {
+                    "name" -> result.name = reader.nextString()
+                    else -> reader.skipValue()
+                }
+            }
+            reader.endObject()
+            return result
+        }
+    }
+
     /**
      * 测试模型：字段级注解跳过 Safe Reflective 绑定。
      *
@@ -53,6 +94,42 @@ class SafeParserAnnotationKotlinApiTest {
         assertThrows(JsonSyntaxException::class.java) {
             gson.fromJson("[]", NativeOnly::class.java)
         }
+    }
+
+    @Test
+    fun `global shape coercion does not override class delegate annotation`() {
+        val events = mutableListOf<SafeParserEvent>()
+        val gson = GsonSafeParser.create(
+            SafeParserConfig(onEvent = events::add).withShapeCoercionPolicy(
+                ShapeCoercionPolicy.ObjectAndCollection
+            )
+        )
+
+        val result = gson.fromJson(
+            """{"native":[{"name":"remote"}]}""",
+            NativeOnlyContainer::class.java
+        )
+
+        assertEquals("local", result.native.name)
+        assertFalse(events.any { event -> event is SafeParserEvent.ShapeCoercion })
+    }
+
+    @Test
+    fun `global shape coercion does not override class json adapter`() {
+        val events = mutableListOf<SafeParserEvent>()
+        val gson = GsonSafeParser.create(
+            SafeParserConfig(onEvent = events::add).withShapeCoercionPolicy(
+                ShapeCoercionPolicy.ObjectAndCollection
+            )
+        )
+
+        val result = gson.fromJson(
+            """{"native":[{"name":"remote"}]}""",
+            NativeJsonAdapterOnlyContainer::class.java
+        )
+
+        assertEquals("local", result.native.name)
+        assertFalse(events.any { event -> event is SafeParserEvent.ShapeCoercion })
     }
 
     /**

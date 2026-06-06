@@ -5,6 +5,7 @@ import com.google.gson.JsonParseException
 import com.google.gson.JsonSyntaxException
 import com.google.gson.TypeAdapter
 import com.google.gson.annotations.JsonAdapter
+import com.google.gson.reflect.TypeToken
 import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonWriter
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -15,6 +16,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.util.ArrayDeque
 import java.util.ArrayList
+import java.util.SortedSet
 import java.util.TreeSet
 import java.util.concurrent.CancellationException
 
@@ -31,6 +33,12 @@ class SafeParserEdgeCaseTest {
         val queue: ArrayDeque<String> = ArrayDeque(),
         val sortedSet: TreeSet<String> = TreeSet()
     )
+    /** 测试模型：SortedSet 的元素不可比较时，容器物化失败不能拖垮整次解析。 */
+    data class NonComparableSortedSetContainer(
+        val values: SortedSet<NonComparableItem> = TreeSet()
+    )
+    /** 测试模型：没有实现 Comparable，用来触发 TreeSet.add 的边界。 */
+    data class NonComparableItem(val id: Long = 0L)
 
     /** 测试模型：Int key 的 Map，用来覆盖非 String key 的读取。 */
     data class IntKeyMap(val scores: Map<Int, String> = emptyMap())
@@ -198,6 +206,48 @@ class SafeParserEdgeCaseTest {
         assertEquals(arrayListOf("a"), result.arrayList)
         assertEquals(listOf("b"), result.queue.toList())
         assertEquals(TreeSet(listOf("c")), result.sortedSet)
+    }
+
+    /**
+     * 测试方法说明：验证 SortedSet 元素不可比较时回到字段兜底，而不是让 TreeSet.add 抛出整次解析异常。
+     */
+    @Test
+    fun `sorted set with non comparable items falls back without crashing response`() {
+        val events = mutableListOf<TypeMismatchEvent>()
+        val gson = GsonSafeParser.create(SafeParserConfig(onTypeMismatch = events::add))
+
+        val result = gson.fromJson(
+            """{"values":[{"id":1},{"id":2}]}""",
+            NonComparableSortedSetContainer::class.java
+        )
+
+        assertEquals(emptyList<NonComparableItem>(), result.values.toList())
+        val event = events.single()
+        assertEquals(ParseExceptionKind.OBJECT, event.kind)
+        assertEquals("$.values", event.path)
+    }
+
+    /**
+     * 测试方法说明：验证根 SortedSet 元素不可比较时也按集合兜底处理，不能向公开 API 调用方抛 ClassCastException。
+     */
+    @Test
+    fun `root sorted set with non comparable items falls back without class cast crash`() {
+        val events = mutableListOf<TypeMismatchEvent>()
+        val type = object : TypeToken<SortedSet<NonComparableItem>>() {}.type
+
+        val result = GsonSafeParser.fromJson<SortedSet<NonComparableItem>>(
+            json = """[{"id":1},{"id":2}]""",
+            type = type,
+            config = SafeParserConfig(
+                fallbackPolicy = FallbackPolicy.Default,
+                onTypeMismatch = events::add
+            )
+        )
+
+        assertEquals(emptyList<NonComparableItem>(), result?.toList())
+        val event = events.single()
+        assertEquals(ParseExceptionKind.OBJECT, event.kind)
+        assertEquals("$", event.path)
     }
 
     /**

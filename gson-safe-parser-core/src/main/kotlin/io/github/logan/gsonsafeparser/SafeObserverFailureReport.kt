@@ -152,6 +152,13 @@ private fun SafeParserEvent.toObserverFailureSource(): ObserverFailureSource {
             actualToken = detail.actualToken.name,
             rawJsonTruncated = detail.rawJsonTruncated
         )
+        is SafeParserEvent.ShapeCoercion -> ObserverFailureSource(
+            category = SafeParserEventCategory.TypeMismatch,
+            path = detail.path,
+            fieldName = detail.fieldName,
+            typeName = detail.expectedType,
+            actualToken = detail.actualToken.name
+        )
         is SafeParserEvent.AdapterCreationFailure -> ObserverFailureSource(
             category = SafeParserEventCategory.AdapterCreationFailure,
             typeName = detail.typeName

@@ -280,6 +280,7 @@ object GsonSafeParser {
             rawType.getAnnotation(com.google.gson.annotations.JsonAdapter::class.java) != null -> SafeTypeHandling.DelegateToGson
             GsonBuiltInTypes.contains(rawType) -> SafeTypeHandling.DelegateToGson
             rawType == org.json.JSONObject::class.java || rawType == org.json.JSONArray::class.java -> SafeTypeHandling.SafeOrgJson
+            rawType.isArray && !rawType.componentType.isPrimitive -> SafeTypeHandling.SafeTypeWrapper
             java.util.Collection::class.java.isAssignableFrom(rawType) -> SafeTypeHandling.SafeCollection
             java.util.Map::class.java.isAssignableFrom(rawType) -> SafeTypeHandling.SafeMap
             rawType.isInterface || java.lang.reflect.Modifier.isAbstract(rawType.modifiers) -> SafeTypeHandling.DelegateToGson

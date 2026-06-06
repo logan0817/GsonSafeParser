@@ -196,7 +196,18 @@ internal object SafeMapAdapterFactory {
                             key = keyAdapter.read(reader)
                             pathBeforeRead = reader.path
                             failureToken = reader.peek()
-                            if (!valueUsesJsonAdapter && !TokenRules.accepts(keyValueTypes.second, valueRawType, failureToken)) {
+                            if (failureToken == JsonToken.END_ARRAY || failureToken == JsonToken.END_DOCUMENT) {
+                                notify(
+                                    config = config,
+                                    type = valueTypeToken,
+                                    reader = reader,
+                                    token = failureToken,
+                                    reason = "Map entry value is missing",
+                                    kind = ParseExceptionKind.MAP_ITEM,
+                                    mapItemKey = key?.toString() ?: "null",
+                                    path = pathBeforeRead
+                                )
+                            } else if (!valueUsesJsonAdapter && !TokenRules.accepts(keyValueTypes.second, valueRawType, failureToken)) {
                                 notify(
                                     config = config,
                                     type = valueTypeToken,

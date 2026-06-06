@@ -28,7 +28,7 @@
 最新版本：[![Maven Central: core](https://img.shields.io/maven-central/v/io.github.logan0817/gson-safe-parser-core?label=core)](https://central.sonatype.com/artifact/io.github.logan0817/gson-safe-parser-core)
 
 ```kotlin
-implementation("io.github.logan0817:gson-safe-parser-core:1.0.2") // 接入 GsonSafeParser 核心解析能力。
+implementation("io.github.logan0817:gson-safe-parser-core:1.0.3") // 接入 GsonSafeParser 核心解析能力。
 ```
 
 如果项目使用 Retrofit，只需要：
@@ -36,7 +36,7 @@ implementation("io.github.logan0817:gson-safe-parser-core:1.0.2") // 接入 Gson
 最新版本：[![Maven Central: retrofit](https://img.shields.io/maven-central/v/io.github.logan0817/gson-safe-parser-retrofit?label=retrofit)](https://central.sonatype.com/artifact/io.github.logan0817/gson-safe-parser-retrofit)
 
 ```kotlin
-implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.2") // 接入 Retrofit Converter 扩展，并自动带上 core。
+implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.3") // 接入 Retrofit Converter 扩展，并自动带上 core。
 ```
 
 ## 2. 普通 Gson 接入
@@ -126,7 +126,37 @@ println(result.contractReport().toMarkdown()) // 打印 Markdown 格式契约报
 println(result.contractReport().toBackendMarkdown()) // 打印给后端修接口用的契约报告。
 ```
 
-## 4. Java 调用和非 reified API
+## 4. JSON 形态转换
+
+默认不做对象和数组互转。只有你调用 `withShapeCoercionPolicy(...)` 或字段注解时，才会启用这项能力。
+
+```kotlin
+val config = SafeParserConfig()
+    .withShapeCoercionPolicy(ShapeCoercionPolicy.ObjectAndCollection)
+
+val gson = GsonSafeParser.create(config)
+```
+
+局部开启更适合生产接入：
+
+```kotlin
+data class ApiResponse(
+    @field:SafeParseShapeCoercion(ShapeCoercionPolicy.ObjectFromFirstArrayItem)
+    val data: User? = null
+)
+```
+
+支持范围：
+
+| 字段类型 | 后端实际 JSON | 开启后处理 |
+| --- | --- | --- |
+| `data: User` | `"data":[{"id":1}]` | 读取数组第 1 个对象。 |
+| `users: List<User>` | `"users":{"id":1}` | 包装成 1 个元素的 List。 |
+| `users: Array<User>` | `"users":{"id":1}` | 包装成长度为 1 的数组。 |
+
+根级对象、根级集合、根级对象数组、Map、字符串二次解析、数字和布尔值不会参与转换。转换失败会记录 `ShapeCoercion` 事件，并回到原兜底行为。
+
+## 5. Java 调用和非 reified API
 
 Kotlin reified API 只适合 Kotlin 调用；Java、反射 Type 或需要显式传类型的场景，使用 `Class` 或 `Type` 入口：
 
@@ -145,7 +175,7 @@ Type listType = new TypeToken<List<ApiResponse>>() {}.getType(); // 保留泛型
 SafeParseResult<List<ApiResponse>> result = parser.parseSafe(json, listType); // 非 reified 泛型解析。
 ```
 
-## 5. 高频复用 Parser
+## 6. 高频复用 Parser
 
 便利入口 `GsonSafeParser.fromJson(json, type, config)` 适合临时验证和低频调用。
 
@@ -185,7 +215,7 @@ Parser 和 Gson 都可以复用，也可以作为单例、DI 对象或 Repositor
 | 字段级 Adapter 的事件回调归属 | 归创建 Gson 时传给 `.enableSafeParser(...)` 的配置。 |
 | 回调在哪个线程执行 | 在实际解析调用线程同步触发；多线程并发时，调用方要保证日志缓冲、指标容器或外部集合线程安全。 |
 
-## 6. Retrofit 接入
+## 7. Retrofit 接入
 
 ```kotlin
 val retrofit = Retrofit.Builder() // 创建 Retrofit 构建器。
@@ -244,7 +274,7 @@ val retrofit = Retrofit.Builder() // 创建 Retrofit 构建器。
 | 已经有统一维护的 `Gson` | 先在创建它的 `GsonBuilder` 上调用 `.enableSafeParser(config)`，再传给 `create(gson, config)` | `Gson` 创建后配置已经固定，库不会偷偷改这个实例。 |
 | 只写 `create(gson, config)` | 只复用这份 `Gson`，并使用 Retrofit 层的空响应、raw JSON 和事件配置 | 这不会自动给外部 Gson 注册 Safe Adapter。 |
 
-## 7. CI 自检
+## 8. CI 自检
 
 ```kotlin
 val diagnostics = GsonSafeParser.diagnostics(SafeParserConfig.production()) // 检查 GsonBuilder 兼容性和高风险配置。
@@ -291,7 +321,7 @@ check(releaseCheck.hasErrors.not()) // 如果疑似模型字段被混淆，让 C
 | 第 3 层 | `modelProbes` 检查关键业务模型 release 字段名和构造方法。 |
 | 第 4 层 | 用同一份真实 JSON 对比 debug 和 release 包。 |
 
-## 8. 建议接入顺序
+## 9. 建议接入顺序
 
 1. 先在测试环境使用 `SafeParserConfig.debug()`，观察事件流和契约报告。
 2. Android 老项目先按 [Android 混淆配置](android-proguard.md) 使用宽范围包级 keep，让 release 字段名稳定。

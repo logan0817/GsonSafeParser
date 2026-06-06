@@ -140,7 +140,7 @@
     <string name="demo_target_org_json_description">Contains JSONObject and JSONArray. Good for checking org.json adapters.</string>
 
     <string name="demo_policy_default_title">Contract-first default</string>
-    <string name="demo_policy_default_description">Uses the SafeParser 1.0.2 default config. Start here to observe mismatch evidence and default return boundaries.</string>
+    <string name="demo_policy_default_description">Uses the SafeParser 1.0.3 default config. Start here to observe mismatch evidence and default return boundaries.</string>
     <string name="demo_policy_low_interference_title">Low-interference NullOnly</string>
     <string name="demo_policy_low_interference_description">Returns null for many mismatched fields and delegates primitives to Gson, staying closer to native Gson.</string>
     <string name="demo_policy_debug_raw_json_title">Debug raw JSON</string>
@@ -149,6 +149,8 @@
     <string name="demo_policy_primitive_delegate_description">Primitive adapters are delegated to native Gson. Useful for checking which primitive errors resurface.</string>
     <string name="demo_policy_object_number_title">Object numbers Long/Double</string>
     <string name="demo_policy_object_number_description">Uses Gson LONG_OR_DOUBLE for Any/Object numbers. Useful for dynamic field number expectations.</string>
+    <string name="demo_policy_shape_coercion_title">JSON shape coercion</string>
+    <string name="demo_policy_shape_coercion_description">Explicitly enables object and collection shape coercion. Useful for checking object fields returned as arrays and collection fields returned as objects.</string>
     <string name="demo_policy_raw_json_truncate_title">Raw JSON 10-byte truncation</string>
     <string name="demo_policy_raw_json_truncate_description">Enables raw JSON capture with a 10-byte limit. Useful for checking log truncation behavior.</string>
 </resources>

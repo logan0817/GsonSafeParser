@@ -465,6 +465,85 @@ class OpenSourcePublicationTest {
             matchingConstructor != null,
             "SafeParseContractIssue must keep its 1.0.0 public constructor signature."
         )
+        assertTrue(
+            SafeParseContractIssue::class.java.constructors.none { constructor ->
+                ShapeCoercionAction::class.java in constructor.parameterTypes
+            },
+            "Shape coercion report metadata must not alter SafeParseContractIssue constructor ABI."
+        )
+    }
+
+    /**
+     * 1.0.3 新增 shape coercion 不能插入旧配置对象的公开构造函数。
+     *
+     * 这能降低补丁版本升级时已编译调用方遇到 `NoSuchMethodError` 的风险。
+     */
+    @Test
+    fun `shape coercion keeps existing config constructor signatures`() {
+        val function1Type = kotlin.jvm.functions.Function1::class.java
+        val configConstructorTypes = listOf(
+            FallbackPolicy::class.java,
+            EmptyResponsePolicy::class.java,
+            java.util.Map::class.java,
+            com.google.gson.ToNumberStrategy::class.java,
+            PrimitiveParsingPolicy::class.java,
+            java.util.List::class.java,
+            Boolean::class.javaPrimitiveType,
+            Boolean::class.javaPrimitiveType,
+            java.util.Set::class.java,
+            NullValuePolicy::class.java,
+            RequiredConstructorParameterPolicy::class.java,
+            MapItemKeyPolicy::class.java,
+            Boolean::class.javaPrimitiveType,
+            Integer::class.javaPrimitiveType,
+            function1Type,
+            function1Type,
+            function1Type,
+            function1Type
+        )
+        val readPolicyConstructorTypes = listOf(
+            FallbackPolicy::class.java,
+            PrimitiveParsingPolicy::class.java,
+            java.util.List::class.java,
+            java.util.Set::class.java,
+            Boolean::class.javaPrimitiveType,
+            NullValuePolicy::class.java,
+            RequiredConstructorParameterPolicy::class.java
+        )
+
+        assertTrue(
+            SafeParserConfig::class.java.constructors.any { constructor ->
+                constructor.parameterTypes.toList() == configConstructorTypes
+            },
+            "SafeParserConfig must keep its pre-1.0.3 public constructor signature."
+        )
+        assertTrue(
+            SafeReadPolicy::class.java.constructors.any { constructor ->
+                constructor.parameterTypes.toList() == readPolicyConstructorTypes
+            },
+            "SafeReadPolicy must keep its pre-1.0.3 public constructor signature."
+        )
+        assertTrue(
+            SafeParserConfig::class.java.constructors.none { constructor ->
+                ShapeCoercionPolicy::class.java in constructor.parameterTypes ||
+                    ShapeCoercionOptions::class.java in constructor.parameterTypes
+            },
+            "Shape coercion must be enabled through a separate option API, not constructor insertion."
+        )
+        assertTrue(
+            SafeReadPolicy::class.java.constructors.none { constructor ->
+                ShapeCoercionPolicy::class.java in constructor.parameterTypes ||
+                    ShapeCoercionOptions::class.java in constructor.parameterTypes
+            },
+            "Shape coercion must not alter SafeReadPolicy constructor ABI."
+        )
+    }
+
+    @Test
+    fun `shape coercion does not extend existing public enum value sets`() {
+        assertTrue(SafeTypeHandling.values().none { value -> value.name == "SafeArray" })
+        assertTrue(SafeParseContractIssueCategory.values().none { value -> value.name == "ShapeCoercion" })
+        assertTrue(SafeParserEventCategory.values().none { value -> value.name == "ShapeCoercion" })
     }
 
     /**

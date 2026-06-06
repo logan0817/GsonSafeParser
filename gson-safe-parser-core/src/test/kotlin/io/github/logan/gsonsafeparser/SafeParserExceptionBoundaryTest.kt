@@ -1,5 +1,6 @@
 package io.github.logan.gsonsafeparser
 
+import android.annotation.SuppressLint
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonParseException
@@ -33,10 +34,25 @@ class SafeParserExceptionBoundaryTest {
         val value: ThreadDeathFieldValue = ThreadDeathFieldValue()
     )
 
+    data class ShapeThreadDeathFieldContainer(
+        val value: ThreadDeathFieldValue? = null
+    )
+
     @JsonAdapter(ThreadDeathFieldValueAdapter::class)
     data class ThreadDeathFieldValue(val text: String = "local")
 
+    data class ShapeCancellationFieldContainer(
+        val value: CancellationFieldValue? = null
+    )
+
+    @JsonAdapter(CancellationFieldValueAdapter::class)
+    data class CancellationFieldValue(val text: String = "local")
+
     data class LinkageListContainer(
+        val values: List<LinkageListValue> = emptyList()
+    )
+
+    data class ShapeLinkageListContainer(
         val values: List<LinkageListValue> = emptyList()
     )
 
@@ -86,6 +102,17 @@ class SafeParserExceptionBoundaryTest {
         val next: String = "local"
     )
 
+    data class ShapeStreamResetFieldContainer(
+        val value: StreamResetValue = StreamResetValue("default"),
+        val next: String = "local"
+    )
+
+    data class ShapeObjectStreamResetFieldContainer(
+        @field:SafeParseShapeCoercion(ShapeCoercionPolicy.ObjectFromFirstArrayItem)
+        val value: ObjectStreamResetValue = ObjectStreamResetValue("default"),
+        val next: String = "local"
+    )
+
     data class StreamResetListContainer(
         val values: List<StreamResetValue> = emptyList()
     )
@@ -96,6 +123,9 @@ class SafeParserExceptionBoundaryTest {
 
     @JsonAdapter(StreamResetValueAdapter::class)
     data class StreamResetValue(val text: String = "local")
+
+    @JsonAdapter(ObjectStreamResetValueAdapter::class)
+    data class ObjectStreamResetValue(val text: String = "local")
 
     class StreamResetException : IOException("stream was reset: CANCEL")
 
@@ -135,6 +165,16 @@ class SafeParserExceptionBoundaryTest {
 
         override fun read(reader: JsonReader): ThreadDeathFieldValue {
             throw ThreadDeath()
+        }
+    }
+
+    class CancellationFieldValueAdapter : TypeAdapter<CancellationFieldValue>() {
+        override fun write(out: JsonWriter, value: CancellationFieldValue?) {
+            out.value(value?.text)
+        }
+
+        override fun read(reader: JsonReader): CancellationFieldValue {
+            throw CancellationException("shape coercion cancelled")
         }
     }
 
@@ -201,8 +241,29 @@ class SafeParserExceptionBoundaryTest {
             out.value(value?.text)
         }
 
+        @SuppressLint("CheckResult")
         override fun read(reader: JsonReader): StreamResetValue {
             reader.nextString()
+            throw TransportIoContext.mark(StreamResetException())
+        }
+    }
+
+    class ObjectStreamResetValueAdapter : TypeAdapter<ObjectStreamResetValue>() {
+        override fun write(out: JsonWriter, value: ObjectStreamResetValue?) {
+            out.beginObject()
+            out.name("text")
+            out.value(value?.text)
+            out.endObject()
+        }
+
+        @SuppressLint("CheckResult")
+        override fun read(reader: JsonReader): ObjectStreamResetValue {
+            reader.beginObject()
+            while (reader.hasNext()) {
+                reader.nextName()
+                reader.skipValue()
+            }
+            reader.endObject()
             throw TransportIoContext.mark(StreamResetException())
         }
     }
@@ -675,5 +736,94 @@ class SafeParserExceptionBoundaryTest {
                 )
             )
         }
+    }
+
+    /**
+     * Shape coercion 只负责对象和数组形态恢复，不能吞掉字段 Adapter 的 fatal 信号。
+     */
+    @Test
+    fun `shape coercion object from array rethrows thread death without event`() {
+        val events = mutableListOf<SafeParserEvent>()
+        val gson = GsonSafeParser.create(
+            SafeParserConfig(
+                onEvent = events::add
+            ).withShapeCoercionPolicy(ShapeCoercionPolicy.ObjectFromFirstArrayItem)
+        )
+
+        assertThrows(ThreadDeath::class.java) {
+            gson.fromJson("""{"value":[{"text":"remote"}]}""", ShapeThreadDeathFieldContainer::class.java)
+        }
+
+        assertTrue(events.isEmpty())
+    }
+
+    /**
+     * Shape coercion 不能把取消信号包装成字段级兜底。
+     */
+    @Test
+    fun `shape coercion object from array rethrows cancellation without event`() {
+        val events = mutableListOf<SafeParserEvent>()
+        val gson = GsonSafeParser.create(
+            SafeParserConfig(
+                onEvent = events::add
+            ).withShapeCoercionPolicy(ShapeCoercionPolicy.ObjectFromFirstArrayItem)
+        )
+
+        assertThrows(CancellationException::class.java) {
+            GsonSafeParser.fromJson<ShapeCancellationFieldContainer>(
+                gson = gson,
+                json = """{"value":[{"text":"remote"}]}""",
+                type = ShapeCancellationFieldContainer::class.java,
+                config = SafeParserConfig(
+                    onEvent = events::add
+                ).withShapeCoercionPolicy(ShapeCoercionPolicy.ObjectFromFirstArrayItem)
+            )
+        }
+
+        assertTrue(events.isEmpty())
+    }
+
+    /**
+     * 集合字段把对象包装成单元素容器时，元素 Adapter 的 fatal 仍然必须外抛。
+     */
+    @Test
+    fun `shape coercion collection from object rethrows linkage error without event`() {
+        val events = mutableListOf<SafeParserEvent>()
+        val gson = GsonSafeParser.create(
+            SafeParserConfig(
+                onEvent = events::add
+            ).withShapeCoercionPolicy(ShapeCoercionPolicy.CollectionFromSingleObject)
+        )
+
+        assertThrows(LinkageError::class.java) {
+            gson.fromJson("""{"values":{"text":"remote"}}""", ShapeLinkageListContainer::class.java)
+        }
+
+        assertTrue(events.isEmpty())
+    }
+
+    /**
+     * shape coercion 内部遇到被 Retrofit 标记过的传输 I/O，仍然按不可恢复边界外抛。
+     */
+    @Test
+    fun `shape coercion marked transport io is rethrown without event`() {
+        val events = mutableListOf<SafeParserEvent>()
+        val config = SafeParserConfig(
+            onEvent = events::add
+        ).withShapeCoercionPolicy(ShapeCoercionPolicy.ObjectFromFirstArrayItem)
+        val gson = GsonSafeParser.create(config)
+
+        TransportIoContext.withTransportIoMarkers {
+            assertThrows(IOException::class.java) {
+                GsonSafeParser.fromJson<ShapeObjectStreamResetFieldContainer>(
+                    gson = gson,
+                    json = """{"value":[{"text":"remote"}],"next":"remote"}""",
+                    type = ShapeObjectStreamResetFieldContainer::class.java,
+                    config = config
+                )
+            }
+        }
+
+        assertTrue(events.isEmpty())
     }
 }

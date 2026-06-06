@@ -32,6 +32,8 @@ import io.github.logan.gsonsafeparser.SafeParseDelegateToGson
 import io.github.logan.gsonsafeparser.SafeParseSkip
 import io.github.logan.gsonsafeparser.SafeReadPolicy
 import io.github.logan.gsonsafeparser.SafeWritePolicy
+import io.github.logan.gsonsafeparser.ShapeCoercionAction
+import io.github.logan.gsonsafeparser.ShapeCoercionPolicy
 import io.github.logan.gsonsafeparser.TypeMismatchEvent
 import io.github.logan.gsonsafeparser.contractReport
 import io.github.logan.gsonsafeparser.dispatchEvent
@@ -138,6 +140,52 @@ internal fun collectionMapMismatchCase(): DemoCase = DemoCase(
             result.events.hasTypeMismatch(path = "$.profile") &&
             result.events.any { event -> event.typeMismatchDetail()?.kind?.name == "LIST_ITEM" }
     demoResult(pass, value, result.events, result.contractReport().toMarkdown(), "scores=[2.5]，坏 item 被跳过")
+}
+
+/**
+ * 显式开启 JSON 形态转换后，对象字段可以从数组第 1 个对象恢复，集合字段可以把单对象包装成列表。
+ */
+internal fun shapeCoercionCase(): DemoCase = DemoCase(
+    title = "JSON 形态转换显式开启",
+    capabilityIds = setOf("shape-coercion"),
+    category = "核心解析",
+    entryPoint = "SafeParserConfig().withShapeCoercionPolicy(ShapeCoercionPolicy.ObjectAndCollection)",
+    description = "后端把对象字段 data 返回成数组、集合字段 users 返回成对象时，默认不转换；显式开启后按策略恢复。",
+    defaultJson = """{"code":200,"data":[{"id":9,"name":"Tom"},{"id":10,"name":"Jerry"}]}""",
+    expected = "默认配置 data=null；显式开启后 data=User(id=9,name=Tom)，users 可包装成单元素列表，并产生 ShapeCoercion 事件。"
+) { json ->
+    val collectionJson = """{"users":{"id":12,"name":"Ana"}}"""
+    val defaultValue = GsonSafeParser.fromJson(json, NullableUserEnvelope::class.java)
+    val result = GsonSafeParser.parseSafe<NullableUserEnvelope>(
+        json = json,
+        config = SafeParserConfig().withShapeCoercionPolicy(ShapeCoercionPolicy.ObjectAndCollection)
+    )
+    val collectionResult = GsonSafeParser.parseSafe<CollectionResponse>(
+        json = collectionJson,
+        config = SafeParserConfig().withShapeCoercionPolicy(ShapeCoercionPolicy.ObjectAndCollection)
+    )
+    val allEvents = result.events + collectionResult.events
+    val actions = allEvents.filterIsInstance<SafeParserEvent.ShapeCoercion>().map { event ->
+        event.detail.action
+    }
+    val pass = defaultValue?.data == null &&
+            result.value?.data == User(id = 9L, name = "Tom") &&
+            collectionResult.value?.users == listOf(User(id = 12L, name = "Ana")) &&
+            ShapeCoercionAction.ObjectFromFirstArrayItem in actions &&
+            ShapeCoercionAction.CollectionFromSingleObject in actions &&
+            ShapeCoercionAction.ArrayExtraItemsSkipped in actions
+    DemoRunResult(
+        pass = pass,
+        actual = """
+            default=${pretty(defaultValue)}
+            enabled=${pretty(result.value)}
+            collection=${pretty(collectionResult.value)}
+        """.trimIndent(),
+        expected = "默认关闭不转换；开启后对象字段取数组第 1 个对象，集合字段把单对象包装成列表",
+        events = allEvents.describeEvents(),
+        contractReport = SafeParseResult(Unit, allEvents).contractReport().toMarkdown(),
+        previewOutput = "default.data=${defaultValue?.data}; enabled.data=${result.value?.data}; users=${collectionResult.value?.users}"
+    )
 }
 
 /**

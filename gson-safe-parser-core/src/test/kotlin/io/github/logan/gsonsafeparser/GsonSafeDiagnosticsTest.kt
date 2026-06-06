@@ -128,15 +128,18 @@ class GsonSafeDiagnosticsTest {
         val delegated = GsonSafeParser.explainType(DelegatedResponse::class.java)
         val builtIn = GsonSafeParser.explainType(URL::class.java)
         val orgJson = GsonSafeParser.explainType(JSONObject::class.java)
+        val objectArray = GsonSafeParser.explainType(Array<DiagnosticResponse>::class.java)
 
         assertEquals(SafeTypeHandling.SafeReflective, safe.handling)
         assertEquals(SafeTypeHandling.DelegateToGson, delegated.handling)
         assertEquals(SafeTypeHandling.DelegateToGson, builtIn.handling)
         assertEquals(SafeTypeHandling.SafeOrgJson, orgJson.handling)
+        assertEquals(SafeTypeHandling.SafeTypeWrapper, objectArray.handling)
         assertFalse(safe.hasErrors)
         assertFalse(delegated.hasErrors)
         assertFalse(builtIn.hasErrors)
         assertFalse(orgJson.hasErrors)
+        assertFalse(objectArray.hasErrors)
     }
 
     /**

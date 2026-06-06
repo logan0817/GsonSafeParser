@@ -138,9 +138,12 @@ private fun runIntegrationCheck(
     val probeError = probe.exceptionOrNull()?.let { it.message ?: it.javaClass.name }
     val contractReport = probeResult?.contractReport() ?: SafeParseContractReport(emptyList())
     // 这里同时检查解析结果和报告事件，避免只“没崩溃”却其实没有走到 Safe 兜底。
+    // 开启 shape coercion 后，空数组对象字段会先产生 ShapeCoercion 事件，再回到原兜底。
+    // 这同样说明 Safe Adapter 已经接管并把问题隔离在 $.data。
     val probeFallbackWorking = probeResult?.value == IntegrationProbeResponse() &&
         contractReport.issues.any {
-            it.category == SafeParseContractIssueCategory.TypeMismatch && it.path == "$.data"
+            it.path == "$.data" &&
+                it.category == SafeParseContractIssueCategory.TypeMismatch
         }
     val probeParsed = probe.isSuccess && probeResult?.value != null
     val probeCheck = if (probeParsed && probeFallbackWorking) {

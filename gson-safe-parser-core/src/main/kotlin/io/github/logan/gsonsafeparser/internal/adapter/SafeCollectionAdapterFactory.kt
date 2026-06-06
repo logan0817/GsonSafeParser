@@ -11,6 +11,7 @@ import com.google.gson.stream.JsonWriter
 import io.github.logan.gsonsafeparser.FallbackPolicy
 import io.github.logan.gsonsafeparser.ParseExceptionKind
 import io.github.logan.gsonsafeparser.SafeParserConfig
+import io.github.logan.gsonsafeparser.ShapeCoercionAction
 import io.github.logan.gsonsafeparser.internal.TokenRules
 import io.github.logan.gsonsafeparser.internal.objectcreation.SafeObjectConstructor
 import io.github.logan.gsonsafeparser.internal.runRecovering
@@ -44,6 +45,7 @@ internal object SafeCollectionAdapterFactory {
         val elementAdapter = gson.getAdapter(elementTypeToken) as TypeAdapter<Any?>
         val elementRawType = elementTypeToken.rawType
         val elementUsesJsonAdapter = elementRawType.getAnnotation(JsonAdapter::class.java) != null
+        val elementAcceptsObject = TokenRules.accepts(elementType, elementRawType, JsonToken.BEGIN_OBJECT)
         val rawType = type.rawType
 
         return object : TypeAdapter<T>() {
@@ -73,10 +75,24 @@ internal object SafeCollectionAdapterFactory {
              */
             override fun read(reader: JsonReader): T {
                 val token = reader.peek()
+                val pathBeforeRead = reader.path
                 if (token == JsonToken.NULL) {
                     reader.nextNull()
                     if (config.fallbackPolicy == FallbackPolicy.NullOnly) return null as T
                     return emptyCollection(type.type, rawType, config) as T
+                }
+                if (
+                    token == JsonToken.BEGIN_OBJECT &&
+                    ShapeCoercionReadContext.currentPolicy(config).supportsCollectionFromObject() &&
+                    elementAcceptsObject
+                ) {
+                    return readSingleObjectAsCollection(
+                        reader = reader,
+                        token = token,
+                        type = type,
+                        elementAdapter = elementAdapter,
+                        rawType = rawType
+                    )
                 }
                 if (token != JsonToken.BEGIN_ARRAY) {
                     notify(config, type, reader, token)
@@ -122,7 +138,92 @@ internal object SafeCollectionAdapterFactory {
                 }
                 reader.endArray()
 
-                return collectionFor(type.type, rawType, config, values) as T
+                return materializeCollectionOrFallback(
+                    reader = reader,
+                    token = token,
+                    type = type,
+                    rawType = rawType,
+                    pathBeforeRead = pathBeforeRead,
+                    values = values
+                )
+            }
+
+            private fun readSingleObjectAsCollection(
+                reader: JsonReader,
+                token: JsonToken,
+                type: TypeToken<T>,
+                elementAdapter: TypeAdapter<Any?>,
+                rawType: Class<*>
+            ): T {
+                val pathBeforeRead = reader.path
+                val value = runRecovering { elementAdapter.read(reader) }
+                    .getOrElse { error ->
+                        reader.skipUnreadValueIfPossible(pathBeforeRead)
+                        dispatchShapeCoercion(
+                            config = config,
+                            type = type,
+                            reader = reader,
+                            token = token,
+                            action = ShapeCoercionAction.CoercionFailed,
+                            reason = error.message ?: error.javaClass.name,
+                            path = pathBeforeRead
+                        )
+                        return fallbackCollection(type, rawType) as T
+                    }
+                val collection = runRecovering {
+                    collectionFor(type.type, rawType, config, listOf(value)) as T
+                }.getOrElse { error ->
+                    dispatchShapeCoercion(
+                        config = config,
+                        type = type,
+                        reader = reader,
+                        token = token,
+                        action = ShapeCoercionAction.CoercionFailed,
+                        reason = error.message ?: error.javaClass.name,
+                        path = pathBeforeRead
+                    )
+                    return fallbackCollection(type, rawType) as T
+                }
+                dispatchShapeCoercion(
+                    config = config,
+                    type = type,
+                    reader = reader,
+                    token = token,
+                    action = ShapeCoercionAction.CollectionFromSingleObject,
+                    path = pathBeforeRead
+                )
+                return collection
+            }
+
+            private fun fallbackCollection(
+                type: TypeToken<T>,
+                rawType: Class<*>
+            ): Collection<Any?>? {
+                if (config.fallbackPolicy == FallbackPolicy.NullOnly) return null
+                return emptyCollection(type.type, rawType, config)
+            }
+
+            private fun materializeCollectionOrFallback(
+                reader: JsonReader,
+                token: JsonToken,
+                type: TypeToken<T>,
+                rawType: Class<*>,
+                pathBeforeRead: String,
+                values: List<Any?>
+            ): T {
+                return runRecovering {
+                    collectionFor(type.type, rawType, config, values) as T
+                }.getOrElse { error ->
+                    notify(
+                        config = config,
+                        type = type,
+                        reader = reader,
+                        token = token,
+                        reason = error.message ?: error.javaClass.name,
+                        path = pathBeforeRead
+                    )
+                    fallbackCollection(type, rawType) as T
+                }
             }
         }
     }

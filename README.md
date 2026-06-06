@@ -18,8 +18,9 @@ GsonSafeParser 会尽量把问题隔离在当前字段，让外层对象继续�
 2. 默认交回 Gson 原生 Adapter：Safe Adapter 创建失败、配置不完整或遇到无法确认的类型时，不由 SafeParser 改写读取行为。
 3. Kotlin 友好：支持 Kotlin data class 默认值、reified API、`parseSafe<T>()` 和 `fromJsonSafe<T>()`。
 4. Retrofit 接入：提供 `GsonSafeConverterFactory`，支持空响应策略和 raw JSON 捕获上限。
-5. 契约证据：输出字段 path、期望形状、实际形状和兜底动作；也可以生成给后端看的 Markdown 报告。
-6. Demo App：内置 Android 示例应用，可粘贴业务 JSON，在真机上对比 GsonSafeParser 和原生 Gson 解析结果。
+5. 显式形态转换：可选择把对象字段收到的数组取第 1 个对象，或把集合/数组字段收到的对象包装成单元素容器。
+6. 契约证据：输出字段 path、期望形状、实际形状和兜底动作；也可以生成给后端看的 Markdown 报告。
+7. Demo App：内置 Android 示例应用，可粘贴业务 JSON，在真机上对比 GsonSafeParser 和原生 Gson 解析结果。
 
 ## 默认行为
 
@@ -35,6 +36,12 @@ GsonSafeParser 会尽量把问题隔离在当前字段，让外层对象继续�
 | `useJdkUnsafe` | `false` |
 | `requiredConstructorParameterPolicy` | `RequiredConstructorParameterPolicy.GsonCompatible` |
 | `mapItemKeyPolicy` | `MapItemKeyPolicy.Hash` |
+
+### 可选能力状态
+
+| 能力 | 默认状态 | 启用方式 |
+| --- | --- | --- |
+| JSON 形态转换 | `ShapeCoercionPolicy.Disabled` | 调用 `withShapeCoercionPolicy(...)`，或在字段上使用 `@SafeParseShapeCoercion`。 |
 
 ### 构造策略
 
@@ -91,7 +98,7 @@ GsonSafeParser 会尽量把问题隔离在当前字段，让外层对象继续�
 最新版本：[![Maven Central: core](https://img.shields.io/maven-central/v/io.github.logan0817/gson-safe-parser-core?label=core)](https://central.sonatype.com/artifact/io.github.logan0817/gson-safe-parser-core)
 
 ```kotlin
-implementation("io.github.logan0817:gson-safe-parser-core:1.0.2") // 接入 GsonSafeParser 核心解析能力。
+implementation("io.github.logan0817:gson-safe-parser-core:1.0.3") // 接入 GsonSafeParser 核心解析能力。
 ```
 
 如果项目使用 Retrofit，只依赖 retrofit 模块即可；它会传递带上 core：
@@ -99,7 +106,7 @@ implementation("io.github.logan0817:gson-safe-parser-core:1.0.2") // 接入 Gson
 最新版本：[![Maven Central: retrofit](https://img.shields.io/maven-central/v/io.github.logan0817/gson-safe-parser-retrofit?label=retrofit)](https://central.sonatype.com/artifact/io.github.logan0817/gson-safe-parser-retrofit)
 
 ```kotlin
-implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.2") // 接入 Retrofit Converter 扩展，并自动带上 core。
+implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.3") // 接入 Retrofit Converter 扩展，并自动带上 core。
 ```
 
 Android release 额外要求：
@@ -180,6 +187,49 @@ val parser = GsonSafeParser.parser(config) // 只创建一次安全 Parser，后
 val value = parser.fromJsonSafe<ApiResponse>(json)
 val result = parser.parseSafe<ApiResponse>(json)
 ```
+
+## JSON 形态转换
+
+默认情况下，GsonSafeParser 不会把对象和数组互相转换。JSON 形态转换的默认状态是 `ShapeCoercionPolicy.Disabled`，所以 1.0.3 不会改变旧版本的默认解析结果。
+
+这个能力只适合后端字段形态不稳定、但业务上可以接受恢复规则的场景：
+
+| 代码字段 | 后端实际 JSON | 开启后处理 |
+| --- | --- | --- |
+| `data: User` | `"data":[{"id":1}]` | 读取数组第 1 个对象赋给 `data`。 |
+| `users: List<User>` | `"users":{"id":1}` | 包装成只有 1 个元素的 List。 |
+| `users: Array<User>` | `"users":{"id":1}` | 包装成长度为 1 的数组。 |
+
+全局开启：
+
+```kotlin
+val config = SafeParserConfig()
+    .withShapeCoercionPolicy(ShapeCoercionPolicy.ObjectAndCollection)
+
+val gson = GsonSafeParser.create(config)
+```
+
+只给某个字段开启：
+
+```kotlin
+data class ApiResponse(
+    @field:SafeParseShapeCoercion(ShapeCoercionPolicy.ObjectFromFirstArrayItem)
+    val data: User? = null
+)
+```
+
+全局开启后，也可以禁止某个强契约字段转换：
+
+```kotlin
+data class StrictEnvelope(
+    @field:SafeParseDisableShapeCoercion
+    val signedPayload: SignedPayload = SignedPayload()
+)
+```
+
+如果 `errors: List<ApiError>` 本身就是后端 object/array 混合字段，不要禁用它；应使用 `CollectionFromSingleObject` 或 `ObjectAndCollection`。
+
+边界很明确：根级对象、根级集合、根级对象数组、Map、字符串二次解析、数字和布尔值不会参与转换。空数组、数组首项不是对象、转换时 Adapter 失败都会记录 `ShapeCoercion` 事件并回到原兜底行为。`Error`、`ThreadDeath`、`LinkageError`、`CancellationException` 和真实传输 I/O 仍然外抛。
 
 ## Retrofit 接入
 
@@ -285,10 +335,20 @@ data class PageState(
     @field:SafeParseSkip // 告诉 Safe Reflective 跳过这个字段。
     val runtimeCache: Any? = null
 )
+
+data class FlexibleResponse(
+    @field:SafeParseShapeCoercion(ShapeCoercionPolicy.ObjectFromFirstArrayItem)
+    val data: User? = null,
+
+    @field:SafeParseDisableShapeCoercion
+    val signedPayload: SignedPayload = SignedPayload()
+)
 ```
 
 1. `@SafeParseDelegateToGson` 标在类上，表示该类型直接交给 Gson 原生 Adapter。
 2. `@SafeParseSkip` 标在字段上，表示 Safe Reflective 不读写该字段，适合运行时状态、缓存字段或平台对象。
+3. `@SafeParseShapeCoercion` 标在字段上，表示这个字段允许按指定策略做对象和数组形态转换。
+4. `@SafeParseDisableShapeCoercion` 标在字段上，表示即使全局开启形态转换，这个字段也保持原错形兜底行为。
 
 ## Demo App
 
@@ -315,10 +375,11 @@ Demo App 支持内置用例和用户自定义 JSON。你可以把接口返回直
 5. [Android 混淆](docs/android-proguard.md)：新项目接入、老项目快速接入、R8 fullMode 选择和 release 验证。
 6. [Demo App](docs/demo-app.md)：真机测试方式、页面说明和用户 JSON 验证入口。
 7. [排障指南](docs/troubleshooting.md)：空响应、raw JSON、Adapter 创建失败、平台对象和业务协议问题。
-8. [发布清单](docs/release-checklist.md)：1.0.2 发版前的 AAR、混淆、文档版本和 Maven 本地产物检查。
-9. [1.0.2 发布说明](docs/release-notes-1.0.2.md)：传输异常边界修正、兼容边界和发布验证说明。
-10. [1.0.1 发布说明](docs/release-notes-1.0.1.md)：历史稳定性修正、兼容边界和发布验证说明。
-11. [1.0.0 发布说明](docs/release-notes-1.0.0.md)：首发能力、兼容边界和发布验证说明。
+8. [发布清单](docs/release-checklist.md)：1.0.3 发版前的 AAR、混淆、文档版本和 Maven 本地产物检查。
+9. [1.0.3 发布说明](docs/release-notes-1.0.3.md)：JSON 形态转换、事件报告、边界规则和发布验证说明。
+10. [1.0.2 发布说明](docs/release-notes-1.0.2.md)：传输异常边界修正、兼容边界和发布验证说明。
+11. [1.0.1 发布说明](docs/release-notes-1.0.1.md)：历史稳定性修正、兼容边界和发布验证说明。
+12. [1.0.0 发布说明](docs/release-notes-1.0.0.md)：首发能力、兼容边界和发布验证说明。
 
 ## 风险边界
 

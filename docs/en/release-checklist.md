@@ -2,7 +2,7 @@
 
 [中文](../release-checklist.md)
 
-Run this checklist before publishing `1.0.2`. The goal is to verify Android AAR artifacts, consumer ProGuard rules, release minification checks, documentation versions, and local Maven artifacts.
+Run this checklist before publishing `1.0.3`. The goal is to verify Android AAR artifacts, consumer ProGuard rules, release minification checks, documentation versions, and local Maven artifacts.
 
 ## 1. Pre-Release Verification Command
 
@@ -22,6 +22,7 @@ Run this checklist before publishing `1.0.2`. The goal is to verify Android AAR 
   --warning-mode=fail
 ./gradlew verifyMavenLocalPublicationArtifacts --warning-mode=fail
 ./gradlew releaseToMavenCentral --dry-run --warning-mode=fail
+git diff --check
 ```
 
 Expected result:
@@ -33,12 +34,13 @@ Expected result:
 6. Dokka javadoc.jar is generated offline and does not depend on external package-list URLs.
 7. `verifyMavenLocalPublicationArtifacts` reuses the CI checks for AAR, POM, sources, javadoc, and demo release merged ProGuard configuration.
 8. `releaseToMavenCentral --dry-run` verifies the remote release task graph, signing task wiring, and `clean` ordering.
-9. The build emits no Gradle warning, Kotlin warning, or configuration-time classpath resolution warning.
+9. `git diff --check` reports no whitespace formatting issues.
+10. The build emits no Gradle warning, Kotlin warning, or configuration-time classpath resolution warning.
 
 ## 2. AAR Artifact Checks
 
 Local Maven artifacts are verified by `verifyMavenLocalPublicationArtifacts` and must satisfy:
-1. `gson-safe-parser-core-1.0.2.aar` and `gson-safe-parser-retrofit-1.0.2.aar` exist.
+1. `gson-safe-parser-core-1.0.3.aar` and `gson-safe-parser-retrofit-1.0.3.aar` exist.
 2. The main artifact does not fall back to a plain `.jar`.
 3. The POM uses `<packaging>aar</packaging>`.
 4. The AAR contains `classes.jar`, `proguard.txt`, `META-INF/LICENSE`, and `META-INF/NOTICE`.
@@ -56,17 +58,18 @@ Before publishing, confirm:
 ## 4. Documentation And Version Checks
 
 Before publishing, confirm:
-1. root `build.gradle.kts` version is `1.0.2`.
-2. demo `versionName` is `1.0.2`, and `versionCode` has been incremented.
-3. `README.md`, `README_EN.md`, `docs/getting-started.md`, and `docs/en/getting-started.md` contain both core and retrofit `1.0.2` coordinates.
+1. root `build.gradle.kts` version is `1.0.3`.
+2. demo `versionName` is `1.0.3`, and `versionCode` has been incremented.
+3. `README.md`, `README_EN.md`, `docs/getting-started.md`, and `docs/en/getting-started.md` contain both core and retrofit `1.0.3` coordinates.
 4. Chinese and English docs can link to each other.
-5. The README documentation table links to Getting Started, Compatibility, Configuration, Mismatch Capability Matrix, Android ProGuard, Demo App, Troubleshooting, Release Checklist, 1.0.2 Release Notes, historical 1.0.1 Release Notes, and historical 1.0.0 Release Notes.
+5. The README documentation table links to Getting Started, Compatibility, Configuration, Mismatch Capability Matrix, Android ProGuard, Demo App, Troubleshooting, Release Checklist, 1.0.3 Release Notes, historical 1.0.2 Release Notes, historical 1.0.1 Release Notes, and historical 1.0.0 Release Notes.
 6. `docs/compatibility.md` and `docs/en/compatibility.md` list `minSdk 23`, `compileSdk 36`, `JDK 17`, `Kotlin 2.0.21`, `kotlin-reflect 2.0.21`, `Gson 2.13.2`, `Retrofit 2.8.1`, and R8 / ProGuard boundaries.
-7. `CHANGELOG.md` exists and treats `1.0.2` as the current release and `1.0.0` as the first public compatibility baseline.
-8. `docs/release-notes-1.0.2.md` and `docs/en/release-notes-1.0.2.md` list the transport exception boundary fix, compatibility boundaries, and release verification.
-9. `docs/release-notes-1.0.1.md` and `docs/en/release-notes-1.0.1.md` keep the historical stabilization fixes, compatibility boundaries, and release verification.
-10. `docs/release-notes-1.0.0.md` and `docs/en/release-notes-1.0.0.md` keep the initial capabilities, compatibility boundaries, and release verification.
-11. `README.md`, `README_EN.md`, `docs/compatibility.md`, `docs/en/compatibility.md`, `docs/troubleshooting.md`, and `docs/en/troubleshooting.md` all state that network or transport read failures return to Retrofit / OkHttp and must not be hidden with `emptyResponsePolicy`.
+7. `CHANGELOG.md` exists and treats `1.0.3` as the current release and `1.0.0` as the first public compatibility baseline.
+8. `docs/release-notes-1.0.3.md` and `docs/en/release-notes-1.0.3.md` list JSON shape coercion, event reporting, boundaries, and release verification.
+9. `docs/release-notes-1.0.2.md` and `docs/en/release-notes-1.0.2.md` keep the transport exception boundary fix, compatibility boundaries, and release verification.
+10. `docs/release-notes-1.0.1.md` and `docs/en/release-notes-1.0.1.md` keep the historical stabilization fixes, compatibility boundaries, and release verification.
+11. `docs/release-notes-1.0.0.md` and `docs/en/release-notes-1.0.0.md` keep the initial capabilities, compatibility boundaries, and release verification.
+12. `README.md`, `README_EN.md`, `docs/compatibility.md`, `docs/en/compatibility.md`, `docs/troubleshooting.md`, and `docs/en/troubleshooting.md` all state that network or transport read failures return to Retrofit / OkHttp and must not be hidden with `emptyResponsePolicy`.
 
 ## 5. Before Remote Publication
 

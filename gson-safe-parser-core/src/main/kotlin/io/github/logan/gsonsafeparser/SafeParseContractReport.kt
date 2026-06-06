@@ -243,7 +243,9 @@ data class SafeParseContractIssue(
      */
     val fallbackAction: String?
         get() = when (category) {
-            SafeParseContractIssueCategory.TypeMismatch -> kind?.let(::fallbackAction)
+            SafeParseContractIssueCategory.TypeMismatch ->
+                shapeCoercionAction?.let { action -> shapeCoercionFallbackAction(action, discardedItemCount) }
+                    ?: kind?.let(::fallbackAction)
             SafeParseContractIssueCategory.AdapterCreationFailure ->
                 "Safe adapter creation failed; parsing falls back to native Gson when available."
             SafeParseContractIssueCategory.EmptyResponse ->
@@ -257,7 +259,8 @@ data class SafeParseContractIssue(
      */
     val clientImpact: String?
         get() = when (category) {
-            SafeParseContractIssueCategory.TypeMismatch -> kind?.let(::clientImpact)
+            SafeParseContractIssueCategory.TypeMismatch ->
+                shapeCoercionAction?.let(::shapeCoercionClientImpact) ?: kind?.let(::clientImpact)
             SafeParseContractIssueCategory.AdapterCreationFailure ->
                 "This type may not receive field-level defensive parsing until the adapter issue is fixed."
             SafeParseContractIssueCategory.EmptyResponse ->
@@ -281,6 +284,18 @@ data class SafeParseContractIssue(
                 "Return a response body that matches ${typeName.orEmpty()}, or document this endpoint as intentionally empty."
             else -> null
         }
+
+    /**
+     * shape coercion 动作。它从已发布的 `reason` 字段推导，避免改动 data class 主构造签名。
+     */
+    val shapeCoercionAction: ShapeCoercionAction?
+        get() = shapeCoercionAction(reason)
+
+    /**
+     * shape coercion 跳过的额外数组元素数量。它从已发布的 `reason` 字段推导。
+     */
+    val discardedItemCount: Int
+        get() = shapeCoercionDiscardedItemCount(reason)
 
     /**
      * rawJson 捕获跳过原因，只有 `RawJsonCaptureSkipped` 类问题有值。
@@ -307,7 +322,9 @@ data class SafeParseContractIssue(
             "mapItemKey" to mapItemKey.orEmpty(),
             "typeName" to typeName.orEmpty(),
             "emptyResponsePolicy" to emptyResponsePolicy?.name.orEmpty(),
-            "captureSkipReason" to captureSkipReason?.name.orEmpty()
+            "captureSkipReason" to captureSkipReason?.name.orEmpty(),
+            "shapeCoercionAction" to shapeCoercionAction?.name.orEmpty(),
+            "discardedItemCount" to discardedItemCount.toString()
         ).joinToString("|") { (key, value) -> "$key=$value" }
 }
 
@@ -352,6 +369,7 @@ fun SafeParseResult<*>.contractReport(): SafeParseContractReport {
 private fun SafeParserEvent.toContractIssueOrNull(): SafeParseContractIssue? {
     return when (this) {
         is SafeParserEvent.TypeMismatch -> detail.toContractIssue()
+        is SafeParserEvent.ShapeCoercion -> detail.toContractIssue()
         is SafeParserEvent.AdapterCreationFailure -> detail.toContractIssue()
         is SafeParserEvent.EmptyResponse -> detail.toContractIssue()
         is SafeParserEvent.RawJsonCaptureSkipped -> detail.toContractIssue()
@@ -379,6 +397,24 @@ private fun TypeMismatchEvent.toContractIssue(): SafeParseContractIssue {
         mapItemKey = mapItemKey,
         reason = reason,
         rawJsonTruncated = rawJsonTruncated
+    )
+}
+
+/**
+ * 把 shape coercion 事件转换成报告条目。
+ */
+private fun ShapeCoercionEvent.toContractIssue(): SafeParseContractIssue {
+    val location = path.takeIf { it.isNotBlank() } ?: "$"
+    return SafeParseContractIssue(
+        category = SafeParseContractIssueCategory.TypeMismatch,
+        severity = SafeParseContractIssueSeverity.Warning,
+        message = "ShapeCoercion at $location: action=${action.name}, expected $expectedType, actual ${actualToken.name}; $reason",
+        path = location,
+        fieldName = fieldName,
+        expectedType = expectedType,
+        actualToken = actualToken.name,
+        kind = ParseExceptionKind.OBJECT,
+        reason = shapeCoercionReportReason(action, discardedItemCount, reason)
     )
 }
 
@@ -447,6 +483,10 @@ private fun SafeParseContractIssue.details(): List<Pair<String, String>> {
         emptyResponsePolicy?.let { add("emptyResponsePolicy" to it.name) }
         contentLength?.let { add("contentLength" to it.toString()) }
         maxBytes?.let { add("maxBytes" to it.toString()) }
+        shapeCoercionAction?.let { add("shapeCoercionAction" to it.name) }
+        if (discardedItemCount > 0) {
+            add("discardedItemCount" to discardedItemCount.toString())
+        }
         if (rawJsonTruncated) {
             add("rawJsonTruncated" to "true")
         }
@@ -477,6 +517,10 @@ private fun SafeParseContractIssue.backendDetails(): List<Pair<String, String>> 
         emptyResponsePolicy?.let { add("emptyResponsePolicy" to it.name) }
         contentLength?.let { add("contentLength" to it.toString()) }
         maxBytes?.let { add("maxBytes" to it.toString()) }
+        shapeCoercionAction?.let { add("shapeCoercionAction" to it.name) }
+        if (discardedItemCount > 0) {
+            add("discardedItemCount" to discardedItemCount.toString())
+        }
     }
 }
 
@@ -500,6 +544,10 @@ private fun SafeParseContractIssue.structuredFields(): Map<String, String> {
         emptyResponsePolicy?.let { put("emptyResponsePolicy", it.name) }
         contentLength?.let { put("contentLength", it.toString()) }
         maxBytes?.let { put("maxBytes", it.toString()) }
+        shapeCoercionAction?.let { put("shapeCoercionAction", it.name) }
+        if (discardedItemCount > 0) {
+            put("discardedItemCount", discardedItemCount.toString())
+        }
         if (rawJsonTruncated) {
             put("rawJsonTruncated", "true")
         }
@@ -554,6 +602,35 @@ private fun actualJsonShape(tokenName: String): String {
     }
 }
 
+private const val SHAPE_COERCION_ACTION_KEY = "shapeCoercionAction="
+private const val SHAPE_COERCION_DISCARDED_KEY = "discardedItemCount="
+private const val SHAPE_COERCION_REASON_KEY = "reason="
+
+private fun shapeCoercionReportReason(
+    action: ShapeCoercionAction,
+    discardedItemCount: Int,
+    reason: String
+): String {
+    return "$SHAPE_COERCION_ACTION_KEY${action.name};" +
+        "$SHAPE_COERCION_DISCARDED_KEY$discardedItemCount;" +
+        "$SHAPE_COERCION_REASON_KEY$reason"
+}
+
+private fun shapeCoercionAction(reason: String?): ShapeCoercionAction? {
+    val actionName = reason?.substringAfter(SHAPE_COERCION_ACTION_KEY, missingDelimiterValue = "")
+        ?.substringBefore(';')
+        ?.takeIf { it.isNotBlank() }
+        ?: return null
+    return ShapeCoercionAction.values().firstOrNull { action -> action.name == actionName }
+}
+
+private fun shapeCoercionDiscardedItemCount(reason: String?): Int {
+    return reason?.substringAfter(SHAPE_COERCION_DISCARDED_KEY, missingDelimiterValue = "")
+        ?.substringBefore(';')
+        ?.toIntOrNull()
+        ?: 0
+}
+
 private fun fallbackAction(kind: ParseExceptionKind): String {
     return when (kind) {
         ParseExceptionKind.OBJECT -> "Skipped the mismatched object value and kept the configured field fallback."
@@ -562,11 +639,41 @@ private fun fallbackAction(kind: ParseExceptionKind): String {
     }
 }
 
+private fun shapeCoercionFallbackAction(
+    action: ShapeCoercionAction,
+    discardedItemCount: Int
+): String {
+    return when (action) {
+        ShapeCoercionAction.ObjectFromFirstArrayItem ->
+            "Read the object field from the first array item by explicit shape coercion."
+        ShapeCoercionAction.CollectionFromSingleObject ->
+            "Wrapped the single JSON object as a one-item collection by explicit shape coercion."
+        ShapeCoercionAction.ArrayFromSingleObject ->
+            "Wrapped the single JSON object as a one-item array by explicit shape coercion."
+        ShapeCoercionAction.EmptyArrayForObjectSkipped ->
+            "Empty array cannot provide an object; kept the configured field fallback."
+        ShapeCoercionAction.ArrayExtraItemsSkipped ->
+            "Skipped $discardedItemCount extra array item(s) after reading the first object."
+        ShapeCoercionAction.CoercionFailed ->
+            "Shape coercion failed; kept the configured field fallback."
+    }
+}
+
 private fun clientImpact(kind: ParseExceptionKind): String {
     return when (kind) {
         ParseExceptionKind.OBJECT -> "The outer object can still be parsed; only this field is affected."
         ParseExceptionKind.LIST_ITEM -> "The collection can still be parsed; only this item is affected."
         ParseExceptionKind.MAP_ITEM -> "The map can still be parsed; only this entry is affected."
+    }
+}
+
+private fun shapeCoercionClientImpact(action: ShapeCoercionAction): String {
+    return when (action) {
+        ShapeCoercionAction.EmptyArrayForObjectSkipped,
+        ShapeCoercionAction.CoercionFailed ->
+            "The field kept its configured fallback; backend contract drift is observable."
+        else ->
+            "The field was parsed by an explicit shape coercion policy; backend contract drift is observable."
     }
 }
 

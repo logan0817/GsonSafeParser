@@ -318,6 +318,16 @@ internal fun SafeParserEvent.describe(): String {
             处理结果=继续解析，只是不把完整原始 JSON 放进事件，避免日志和内存压力过大。
             原因=${detail.reason}
         """.trimIndent()
+        is SafeParserEvent.ShapeCoercion -> """
+            JSON 形态转换（ShapeCoercion）
+            字段路径=${detail.path}
+            字段名=${detail.fieldName ?: "无"}
+            期望类型=${detail.expectedType}
+            实际 JSON 类型=${detail.actualToken}
+            转换动作=${detail.action}
+            丢弃元素数量=${detail.discardedItemCount}
+            原因=${detail.reason}
+        """.trimIndent()
         else -> """
             自定义事件（${eventName}）
             处理结果=已进入统一事件流；当前 Demo 不解析这类事件的内部字段。

@@ -115,6 +115,24 @@ class GsonSafeIntegrationCheckTest {
     }
 
     /**
+     * 测试方法说明：验证“integration check accepts explicit shape coercion events as safe fallback evidence”这个具体行为。
+     * 阅读时可以按开启 shape coercion、运行内置探针、断言自检不误报失败的顺序跟下来。
+     */
+    @Test
+    fun `integration check accepts shape coercion fallback evidence`() {
+        val check = GsonSafeParser.integrationCheck(
+            SafeParserConfig().withShapeCoercionPolicy(ShapeCoercionPolicy.ObjectAndCollection)
+        )
+
+        assertTrue(check.probeParsed)
+        assertTrue(check.fallbackWorking)
+        assertFalse(check.hasErrors)
+        assertTrue(check.contractReport.hasIssues)
+        assertTrue(check.events.any { event -> event is SafeParserEvent.ShapeCoercion })
+        assertTrue(check.checks.any { it.name == "probeFallback" && it.severity == DiagnosticSeverity.OK })
+    }
+
+    /**
      * 测试方法说明：验证“integration check converts probe failure to error result”这个具体行为。
      * 阅读时可以按准备数据、执行解析、断言结果的顺序跟下来。
      */

@@ -108,6 +108,39 @@ class SafeObserverFailureReportTest {
     }
 
     /**
+     * 测试方法说明：验证 ShapeCoercion 事件进入观察者失败报告时复用错形分类并保留定位字段。
+     */
+    @Test
+    fun `observer failure report maps shape coercion event`() {
+        val failures = listOf(
+            ObserverFailureEvent(
+                callbackName = "onEvent",
+                eventName = "ShapeCoercion",
+                sourceEvent = SafeParserEvent.ShapeCoercion(
+                    ShapeCoercionEvent(
+                        expectedType = "com.example.User",
+                        actualToken = JsonToken.BEGIN_ARRAY,
+                        path = "$.data",
+                        action = ShapeCoercionAction.ObjectFromFirstArrayItem,
+                        fieldName = "data"
+                    )
+                ),
+                reason = "logger failed",
+                error = IllegalStateException("logger failed")
+            )
+        )
+
+        val report = failures.observerFailureReport()
+
+        val failure = report.failures.single()
+        assertEquals(SafeParserEventCategory.TypeMismatch, failure.sourceCategory)
+        assertEquals("$.data", failure.sourcePath)
+        assertEquals("data", failure.sourceFieldName)
+        assertEquals("com.example.User", failure.sourceTypeName)
+        assertEquals(JsonToken.BEGIN_ARRAY.name, failure.sourceActualToken)
+    }
+
+    /**
      * 测试方法说明：验证“observer failure report is empty for empty failures”这个具体行为。
      * 阅读时可以按准备数据、执行解析、断言结果的顺序跟下来。
      */

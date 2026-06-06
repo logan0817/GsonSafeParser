@@ -2,6 +2,18 @@
 
 All notable changes are summarized here. Detailed bilingual release notes stay under `docs/`.
 
+## 1.0.3
+
+Explicit JSON shape coercion for field-level object and collection drift.
+
+1. Adds opt-in `ShapeCoercionPolicy` for object fields returned as arrays and collection or object-array fields returned as single objects.
+2. Adds field annotations `@SafeParseShapeCoercion` and `@SafeParseDisableShapeCoercion`.
+3. Emits `ShapeCoercion` events and includes them in contract reports and observer failure reports.
+4. Keeps shape coercion disabled by default and limits it to field-level reads; root objects, root collections, maps, scalar JSON, fatal exceptions, and transport I/O boundaries remain unchanged.
+5. Aligns Gradle publishing version, Demo version, dependency snippets, compatibility docs, release checklist, and release notes with `1.0.3`.
+
+Details: [中文](docs/release-notes-1.0.3.md) / [English](docs/en/release-notes-1.0.3.md)
+
 ## 1.0.2
 
 Transport exception boundary fix for Retrofit and safe adapter recovery.

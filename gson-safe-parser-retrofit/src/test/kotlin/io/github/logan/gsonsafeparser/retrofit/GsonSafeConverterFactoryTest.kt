@@ -13,6 +13,8 @@ import io.github.logan.gsonsafeparser.RawJsonCaptureSkipReason
 import io.github.logan.gsonsafeparser.SafeParserEvent
 import io.github.logan.gsonsafeparser.TypeMismatchEvent
 import io.github.logan.gsonsafeparser.enableSafeParser
+import io.github.logan.gsonsafeparser.ShapeCoercionAction
+import io.github.logan.gsonsafeparser.ShapeCoercionPolicy
 import okhttp3.MediaType
 import okhttp3.RequestBody
 import okhttp3.ResponseBody
@@ -52,6 +54,10 @@ class GsonSafeConverterFactoryTest {
     data class EmptyPayload(val name: String = "local")
     /** 测试模型：响应体非空但字段错形时，用来验证 Retrofit rawJson 观测。 */
     data class MismatchApiResponse(val data: EmptyPayload = EmptyPayload())
+    /** 测试模型：响应体里对象字段偶发返回数组，用来验证 shape coercion。 */
+    data class ShapeApiResponse(val data: ShapePayload? = null)
+    /** 测试模型：shape coercion 的字段值。 */
+    data class ShapePayload(val id: Long = 0L)
 
     data class AdapterIOExceptionApiResponse(
         val data: AdapterIOExceptionPayload = AdapterIOExceptionPayload("default"),
@@ -241,6 +247,63 @@ class GsonSafeConverterFactoryTest {
         assertEquals(MismatchApiResponse(), result)
         val event = events.single() as SafeParserEvent.TypeMismatch
         assertEquals("$.data", event.detail.path)
+    }
+
+    /**
+     * 测试方法说明：验证 builder-first Retrofit 入口能让 shape coercion 配置进入字段级 Safe Adapter。
+     */
+    @Test
+    fun `factory builder entry supports shape coercion for response field`() {
+        val events = mutableListOf<SafeParserEvent>()
+        val config = SafeParserConfig(
+            onEvent = events::add
+        ).withShapeCoercionPolicy(ShapeCoercionPolicy.ObjectFromFirstArrayItem)
+        val factory = GsonSafeConverterFactory.create(
+            builder = GsonBuilder().serializeNulls(),
+            config = config
+        )
+        val retrofit = Retrofit.Builder()
+            .baseUrl("https://example.com/")
+            .addConverterFactory(factory)
+            .build()
+        val converter = factory.responseBodyConverter(
+            ShapeApiResponse::class.java,
+            emptyArray(),
+            retrofit
+        )
+
+        val result = converter?.convert(
+            ResponseBody.create(MediaType.parse("application/json"), """{"data":[{"id":9}]}""")
+        )
+
+        assertEquals(ShapeApiResponse(ShapePayload(9L)), result)
+        val event = events.single() as SafeParserEvent.ShapeCoercion
+        assertEquals("$.data", event.detail.path)
+        assertEquals(ShapeCoercionAction.ObjectFromFirstArrayItem, event.detail.action)
+    }
+
+    /**
+     * 测试方法说明：验证 plain Gson + Retrofit config 不会偷偷补注册字段级 shape coercion。
+     */
+    @Test
+    fun `factory plain gson entry does not auto enable shape coercion`() {
+        val factory = GsonSafeConverterFactory.create(
+            gson = GsonBuilder().create(),
+            config = SafeParserConfig().withShapeCoercionPolicy(ShapeCoercionPolicy.ObjectFromFirstArrayItem)
+        )
+        val retrofit = Retrofit.Builder()
+            .baseUrl("https://example.com/")
+            .addConverterFactory(factory)
+            .build()
+        val converter = factory.responseBodyConverter(
+            ShapeApiResponse::class.java,
+            emptyArray(),
+            retrofit
+        )
+
+        assertThrows(JsonSyntaxException::class.java) {
+            converter?.convert(ResponseBody.create(MediaType.parse("application/json"), """{"data":[{"id":9}]}"""))
+        }
     }
 
     /**

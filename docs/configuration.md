@@ -42,6 +42,12 @@ val config = SafeParserConfig( // 创建一份完整的安全解析配置。
 | `captureRawJsonInCallbacks` | `false` | 排障时临时打开，线上默认关闭。 |
 | `maxRawJsonCaptureBytes` | `1 MiB` | raw JSON 排障需要更小或更大的捕获上限时再改。 |
 
+### 可选能力开关
+
+| 能力 | 默认状态 | 启用方式 |
+| --- | --- | --- |
+| JSON 形态转换 | `Disabled` | 后端对象和数组偶发互换，并且业务可以接受明确恢复规则时，调用 `withShapeCoercionPolicy(...)`，或在字段上使用 `@SafeParseShapeCoercion`。 |
+
 ### raw JSON 捕获规则
 
 1. 普通 Gson 解析会按 UTF-8 字节数安全截断，不会切断中文或 emoji。
@@ -117,7 +123,57 @@ val config = SafeParserConfig.fromPolicies( // 使用分层策略创建配置。
 
 分层策略适合团队内部封装统一配置，把读取、写出和观测职责拆开，避免一个构造方法里塞太多参数。
 
-## 5. 事件观测
+## 5. JSON 形态转换
+
+JSON 形态转换默认关闭。不开启时，对象字段收到数组、集合字段收到对象，仍按原来的字段错形兜底处理。
+
+它只处理字段级对象和数组漂移，不处理根级 JSON，也不把字符串里的 JSON 再解析一遍。
+
+| 策略 | 支持行为 |
+| --- | --- |
+| `Disabled` | 不做对象和数组互转。 |
+| `ObjectFromFirstArrayItem` | 对象字段收到数组时，读取数组第 1 个对象。 |
+| `CollectionFromSingleObject` | 集合字段或对象数组字段收到对象时，包装成 1 个元素的容器。 |
+| `ObjectAndCollection` | 同时开启上面两类转换。 |
+
+全局开启：
+
+```kotlin
+val config = SafeParserConfig()
+    .withShapeCoercionPolicy(ShapeCoercionPolicy.ObjectAndCollection)
+```
+
+`withShapeCoercionPolicy(...)` 是简写。团队内部封装统一配置时，也可以使用 `withShapeCoercion(ShapeCoercionOptions(...))`。
+
+只给某个字段开启：
+
+```kotlin
+data class ApiResponse(
+    @field:SafeParseShapeCoercion(ShapeCoercionPolicy.ObjectFromFirstArrayItem)
+    val data: User? = null
+)
+```
+
+全局开启后，也可以让某个强契约字段保持原行为：
+
+```kotlin
+data class StrictEnvelope(
+    @field:SafeParseDisableShapeCoercion
+    val signedPayload: SignedPayload = SignedPayload()
+)
+```
+
+如果 `errors: List<ApiError>` 本身就是后端 object/array 混合字段，不要禁用它；应使用 `CollectionFromSingleObject` 或 `ObjectAndCollection`。
+
+边界：
+
+1. 根级对象、根级集合和根级对象数组不会被转换。
+2. Map 不会被转换，避免和 Gson 复杂 Map key 语义冲突。
+3. 数字、布尔值、字符串不会被转换，也不会把字符串内容当 JSON 再读一遍。
+4. 对象字段收到空数组、数组第 1 项不是对象、转换时 Adapter 失败，会记录 `ShapeCoercion` 事件并回到原兜底行为。
+5. `Error`、`ThreadDeath`、`LinkageError`、`CancellationException` 和真实传输 I/O 仍然外抛。
+
+## 6. 事件观测
 
 ```kotlin
 val config = SafeParserConfig( // 创建带事件回调的安全解析配置。
@@ -136,7 +192,7 @@ val config = SafeParserConfig( // 创建带事件回调的安全解析配置。
 ) // 结束事件配置。
 ```
 
-1. `onEvent` 是统一事件流，会收到类型错配、Adapter 创建失败、空响应和 raw JSON 捕获跳过等事件。
+1. `onEvent` 是统一事件流，会收到类型错配、ShapeCoercion、Adapter 创建失败、空响应和 raw JSON 捕获跳过等事件。
 2. `onTypeMismatch` 适合只关心字段类型错配的项目。
 3. `onAdapterCreationFailure` 用来观察 Safe Adapter 创建失败；默认仍会交回 Gson。
 4. `onObserverFailure` 用来观察业务日志、埋点等回调自身抛异常的情况。
@@ -149,7 +205,7 @@ val config = SafeParserConfig( // 创建带事件回调的安全解析配置。
 
 `dispatchEvent` 是低层事件注入口，主要用于跨模块桥接。不建议业务代码直接调用。手动调用只会触发观察回调，不会写入当前 `parseSafe` 事件快照，也不代表真实解析已经发生。
 
-## 6. 契约报告
+## 7. 契约报告
 
 ```kotlin
 val result = GsonSafeParser.parseSafe<ApiResponse>("""{"code":200,"data":[]}""") // 解析一份 Object 字段形状不一致的 JSON。
@@ -166,13 +222,13 @@ if (report.hasIssues) { // 判断本次解析是否发现契约问题。
 
 契约报告只消费本次解析产生的事件，不重新解析 JSON，也不会修改解析结果。它适合接日志、CI 报表和接口问题复盘。
 
-报告会保留字段 path、期望 JSON 形状、实际 JSON 形状、兜底动作、客户端影响、后端修复建议和 `captureSkipReason`。
+报告会保留字段 path、期望 JSON 形状、实际 JSON 形状、兜底动作、客户端影响、后端修复建议、`shapeCoercionAction` 和 `captureSkipReason`。
 
 报告不会直接输出 raw JSON 正文或 Throwable。
 
 机器侧接入优先用 `summary`、单条 issue 的 `stableKey` 和 `toStructuredRows()`，不要反向解析 Markdown。
 
-## 6. 观察者失败报告
+## 8. 观察者失败报告
 
 ```kotlin
 val observerFailures = mutableListOf<ObserverFailureEvent>() // 创建列表收集观察者失败事件。
@@ -186,9 +242,9 @@ val gson = GsonSafeParser.create( // 创建带观察者失败收集能力的 Gso
 println(observerFailures.observerFailureReport().toMarkdown()) // 输出脱敏后的观察者失败报告。
 ```
 
-报告会脱敏整理失败回调名称、来源事件类型、字段路径和异常类型，不直接输出原始 JSON 或异常栈。
+报告会脱敏整理失败回调名称、来源事件类型、字段路径和异常类型，不直接输出原始 JSON 或异常栈。`ShapeCoercion` 事件会复用错形分类并保留事件名、路径和字段信息，不会落到 Unknown。
 
-## 7. 注解
+## 9. 注解
 
 ```kotlin
 @SafeParseDelegateToGson // 让这个类型直接使用 Gson 原生 Adapter。
@@ -198,18 +254,28 @@ data class PageState( // 定义包含运行时状态的页面模型。
     @field:SafeParseSkip // 告诉 Safe Reflective 跳过这个字段。
     val runtimeCache: Any? = null // 保存运行时缓存，不从 JSON 中读取。
 ) // 结束页面模型定义。
+
+data class FlexibleResponse( // 定义允许局部形态转换的响应模型。
+    @field:SafeParseShapeCoercion(ShapeCoercionPolicy.ObjectFromFirstArrayItem)
+    val data: User? = null, // 只允许 data 从数组第 1 个对象恢复。
+
+    @field:SafeParseDisableShapeCoercion
+    val signedPayload: SignedPayload = SignedPayload() // 即使全局开启，也不转换强契约字段。
+) // 结束响应模型定义。
 ```
 
 1. `@SafeParseDelegateToGson` 用于类，让该类型直接走 Gson 原生 Adapter。
 2. `@SafeParseSkip` 用于字段，让 Safe Reflective 跳过该字段，适合缓存、运行时状态和平台对象。
+3. `@SafeParseShapeCoercion` 用于字段，让该字段按指定策略做对象和数组形态转换。
+4. `@SafeParseDisableShapeCoercion` 用于字段，让该字段忽略全局形态转换配置，保持原兜底行为。
 
-## 8. 默认处理摘要
+## 10. 默认处理摘要
 
 更完整的对象、集合、Map、基础类型、Kotlin 默认值、`org.json`、Retrofit 空响应和 raw JSON 捕获范围见 [错形能力矩阵（JSON 形状不一致）](mismatch-capability-matrix.md)。
 
-当前开箱默认配置：
+当前开箱默认配置和可选能力状态：
 
-| 配置 | 默认值 |
+| 项目 | 默认状态 |
 | --- | --- |
 | `fallbackPolicy` | `FallbackPolicy.NullOnly` |
 | `primitiveParsingPolicy` | `PrimitiveParsingPolicy.DelegateToGson` |
@@ -217,6 +283,7 @@ data class PageState( // 定义包含运行时状态的页面模型。
 | `useJdkUnsafe` | `false` |
 | `requiredConstructorParameterPolicy` | `RequiredConstructorParameterPolicy.GsonCompatible` |
 | `mapItemKeyPolicy` | `MapItemKeyPolicy.Hash` |
+| JSON 形态转换 | 默认关闭，状态为 `ShapeCoercionPolicy.Disabled`；调用 `withShapeCoercionPolicy(...)` 或字段注解后才启用。 |
 
 默认处理重点：
 
@@ -225,5 +292,6 @@ data class PageState( // 定义包含运行时状态的页面模型。
 | 对象、集合、Map 字段整体形状不一致 | 兜底当前字段，外层对象继续解析；`NullOnly` 下优先返回 `null` 或保留构造默认值。 |
 | Kotlin 非空必填构造参数缺失 | 默认保持 Gson 兼容；引用字段为 `null`，primitive 保持 JVM 默认值。 |
 | 基础类型形状不一致 | 默认交回 Gson 原生 Adapter；只有 `PrimitiveParsingPolicy.Safe` 才使用安全基础值。 |
+| 对象和数组形态转换 | 默认关闭；只有调用 `withShapeCoercionPolicy(...)` 或字段注解才会启用。 |
 | Retrofit 空 body | `Unit` 返回 `Unit`，`Void` 和普通业务模型返回 `null`。 |
 | 不可安全隔离问题 | JSON 语法错误、根级失败、`Error`、`ThreadDeath`、`LinkageError`、`CancellationException` 继续外抛。 |

@@ -81,6 +81,74 @@ class SafeParseContractReportTest {
         assertFalse(backendMarkdown.contains("Throwable"))
     }
 
+    @Test
+    fun `contract report describes shape coercion success and fallback actions separately`() {
+        val result = SafeParseResult<Unit>(
+            value = Unit,
+            events = listOf(
+                SafeParserEvent.ShapeCoercion(
+                    ShapeCoercionEvent(
+                        expectedType = User::class.java.name,
+                        actualToken = JsonToken.BEGIN_ARRAY,
+                        path = "$.data",
+                        action = ShapeCoercionAction.ObjectFromFirstArrayItem,
+                        fieldName = "data"
+                    )
+                ),
+                SafeParserEvent.ShapeCoercion(
+                    ShapeCoercionEvent(
+                        expectedType = User::class.java.name,
+                        actualToken = JsonToken.BEGIN_ARRAY,
+                        path = "$.data",
+                        action = ShapeCoercionAction.ArrayExtraItemsSkipped,
+                        fieldName = "data",
+                        discardedItemCount = 2
+                    )
+                ),
+                SafeParserEvent.ShapeCoercion(
+                    ShapeCoercionEvent(
+                        expectedType = User::class.java.name,
+                        actualToken = JsonToken.BEGIN_ARRAY,
+                        path = "$.empty",
+                        action = ShapeCoercionAction.EmptyArrayForObjectSkipped,
+                        fieldName = "empty"
+                    )
+                ),
+                SafeParserEvent.ShapeCoercion(
+                    ShapeCoercionEvent(
+                        expectedType = User::class.java.name,
+                        actualToken = JsonToken.BEGIN_ARRAY,
+                        path = "$.bad",
+                        action = ShapeCoercionAction.CoercionFailed,
+                        fieldName = "bad",
+                        reason = "First array item is NUMBER"
+                    )
+                )
+            )
+        )
+
+        val issues = result.contractReport().issues
+
+        assertEquals(
+            "Read the object field from the first array item by explicit shape coercion.",
+            issues[0].fallbackAction
+        )
+        assertEquals(
+            "Skipped 2 extra array item(s) after reading the first object.",
+            issues[1].fallbackAction
+        )
+        assertEquals(
+            "Empty array cannot provide an object; kept the configured field fallback.",
+            issues[2].fallbackAction
+        )
+        assertEquals(
+            "Shape coercion failed; kept the configured field fallback.",
+            issues[3].fallbackAction
+        )
+        assertTrue(issues[1].stableKey.contains("shapeCoercionAction=ArrayExtraItemsSkipped"))
+        assertTrue(issues[1].stableKey.contains("discardedItemCount=2"))
+    }
+
     /**
      * 测试方法说明：验证“contract report infers expected json shapes from generic collection and map types”这个具体行为。
      * 阅读时可以按准备数据、执行解析、断言结果的顺序跟下来。

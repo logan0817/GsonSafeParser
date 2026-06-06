@@ -25,14 +25,18 @@ Zero config is only for debug or non-minified trials.
 
 Plain Gson usage:
 
+Latest version: [![Maven Central: core](https://img.shields.io/maven-central/v/io.github.logan0817/gson-safe-parser-core?label=core)](https://central.sonatype.com/artifact/io.github.logan0817/gson-safe-parser-core)
+
 ```kotlin
-implementation("io.github.logan0817:gson-safe-parser-core:1.0.2") // Adds the core GsonSafeParser parsing library.
+implementation("io.github.logan0817:gson-safe-parser-core:1.0.3") // Adds the core GsonSafeParser parsing library.
 ```
 
 If the project uses Retrofit, only add:
 
+Latest version: [![Maven Central: retrofit](https://img.shields.io/maven-central/v/io.github.logan0817/gson-safe-parser-retrofit?label=retrofit)](https://central.sonatype.com/artifact/io.github.logan0817/gson-safe-parser-retrofit)
+
 ```kotlin
-implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.2") // Adds the Retrofit converter integration and transitively includes core.
+implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.3") // Adds the Retrofit converter integration and transitively includes core.
 ```
 
 ## 2. Plain Gson Integration
@@ -122,7 +126,37 @@ println(result.contractReport().toMarkdown()) // Prints the contract report in M
 println(result.contractReport().toBackendMarkdown()) // Prints a backend-facing contract report for API fixes.
 ```
 
-## 4. Java Usage And Non-Reified APIs
+## 4. JSON Shape Coercion
+
+Objects and arrays are not converted by default. This feature is enabled only through `withShapeCoercionPolicy(...)` or field annotations.
+
+```kotlin
+val config = SafeParserConfig()
+    .withShapeCoercionPolicy(ShapeCoercionPolicy.ObjectAndCollection)
+
+val gson = GsonSafeParser.create(config)
+```
+
+Field-level opt-in is usually better for production integration:
+
+```kotlin
+data class ApiResponse(
+    @field:SafeParseShapeCoercion(ShapeCoercionPolicy.ObjectFromFirstArrayItem)
+    val data: User? = null
+)
+```
+
+Supported scope:
+
+| Field type | Backend JSON | Behavior after enabling |
+| --- | --- | --- |
+| `data: User` | `"data":[{"id":1}]` | Reads the first object from the array. |
+| `users: List<User>` | `"users":{"id":1}` | Wraps it as a one-item List. |
+| `users: Array<User>` | `"users":{"id":1}` | Wraps it as a length-1 array. |
+
+Root objects, root collections, root object arrays, maps, string re-parsing, numbers, and booleans are not coerced. Coercion failures emit `ShapeCoercion` events and return to the original fallback behavior.
+
+## 5. Java Usage And Non-Reified APIs
 
 Kotlin reified APIs are Kotlin-only. Java, reflected `Type`, and explicit type passing should use the `Class` or `Type` entries:
 
@@ -141,7 +175,7 @@ Type listType = new TypeToken<List<ApiResponse>>() {}.getType(); // Keeps generi
 SafeParseResult<List<ApiResponse>> result = parser.parseSafe(json, listType); // Non-reified generic parsing.
 ```
 
-## 5. Reusable Parser
+## 6. Reusable Parser
 
 The convenience entry `GsonSafeParser.fromJson(json, type, config)` is useful for quick checks and low-frequency calls.
 
@@ -181,7 +215,7 @@ External Gson rules:
 | Field-level Adapter event callbacks | Owned by the config passed to `.enableSafeParser(...)` when the Gson was created. |
 | Which thread runs callbacks? | The parsing caller thread. Caller-owned lists, log buffers, or metric collectors must be thread-safe under concurrency. |
 
-## 6. Retrofit Integration
+## 7. Retrofit Integration
 
 ```kotlin
 val retrofit = Retrofit.Builder() // Creates a Retrofit builder.
@@ -240,7 +274,7 @@ Choose the entry by what you currently have:
 | You already own a shared `Gson` | Call `.enableSafeParser(config)` on the `GsonBuilder` that creates it, then pass the final Gson to `create(gson, config)` | A created `Gson` has fixed configuration, and the library will not secretly mutate it. |
 | You only call `create(gson, config)` | Reuses that Gson and applies Retrofit-level empty response, raw JSON, and event config | This does not automatically register Safe Adapter on the external Gson. |
 
-## 7. CI Self-Check
+## 8. CI Self-Check
 
 ```kotlin
 val diagnostics = GsonSafeParser.diagnostics(SafeParserConfig.production()) // Checks GsonBuilder compatibility and high-risk config.
@@ -287,7 +321,7 @@ Use 4 integration layers:
 | Layer 3 | `modelProbes` checks key business model release field names and constructors. |
 | Layer 4 | The same real JSON is compared in debug and release builds. |
 
-## 8. Suggested Integration Order
+## 9. Suggested Integration Order
 
 1. Start with `SafeParserConfig.debug()` in a test environment and inspect the event stream and contract reports.
 2. For legacy Android projects, apply broad package-level keep rules from [Android ProGuard](android-proguard.md) first so release field names are stable.

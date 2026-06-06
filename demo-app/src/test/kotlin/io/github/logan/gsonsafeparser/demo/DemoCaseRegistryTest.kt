@@ -119,6 +119,7 @@ class DemoCaseRegistryTest {
         assertTrue(policyTitles.contains("调试 rawJson"))
         assertTrue(policyTitles.contains("基础类型交回 Gson"))
         assertTrue(policyTitles.contains("Object 数字 Long/Double"))
+        assertTrue(policyTitles.contains("JSON 形态转换"))
         assertTrue(policyTitles.contains("rawJson 10 字节截断"))
         assertTrue(entryTitles.contains("Core fromJson"))
         assertTrue(entryTitles.contains("Retrofit Converter"))
@@ -137,6 +138,23 @@ class DemoCaseRegistryTest {
         assertTrue(result.pass)
         assertTrue(result.actual.contains("SafeParser 解析成功"))
         assertTrue(result.actual.contains("原生 Gson 解析失败"))
+        assertTrue(result.events.contains("$.data"))
+    }
+
+    @Test
+    fun customValidatorCanEnableShapeCoercionForUserJson() {
+        val apiResponseIndex = DemoCustomValidator.targets.indexOfFirst { it.title == "NullableApiResponse<User>" }
+        val shapeCoercionPolicyIndex = DemoCustomValidator.policies.indexOfFirst { it.title == "JSON 形态转换" }
+        val result = DemoCustomValidator.validate(
+            json = """{"code":200,"data":[{"id":9,"name":"Tom"}]}""",
+            targetIndex = apiResponseIndex,
+            policyIndex = shapeCoercionPolicyIndex
+        )
+
+        assertTrue(result.pass)
+        assertTrue(result.actual.contains("解析策略：JSON 形态转换"))
+        assertTrue(result.previewOutput.orEmpty().contains("Tom"))
+        assertTrue(result.events.contains("ShapeCoercion"))
         assertTrue(result.events.contains("$.data"))
     }
 

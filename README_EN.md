@@ -18,8 +18,9 @@ Use that evidence to report contract issues and observe backend payload drift in
 2. Native Gson adapter fallback by default: if a Safe Adapter cannot be created or a type cannot be handled confidently, SafeParser does not rewrite that type's read behavior.
 3. Kotlin friendly: supports Kotlin data class defaults, reified APIs, `parseSafe<T>()`, and `fromJsonSafe<T>()`.
 4. Retrofit integration: provides `GsonSafeConverterFactory` with empty response policies and raw JSON capture limits.
-5. Contract evidence: records field path, expected shape, actual shape, and fallback action; it can also generate backend-facing Markdown reports.
-6. Demo App: includes an Android Demo App for testing built-in cases and custom JSON on a real device.
+5. Explicit shape coercion: can read the first object from an array for object fields, or wrap a single object as a one-item collection or object array.
+6. Contract evidence: records field path, expected shape, actual shape, and fallback action; it can also generate backend-facing Markdown reports.
+7. Demo App: includes an Android Demo App for testing built-in cases and custom JSON on a real device.
 
 ## Default Behavior
 
@@ -35,6 +36,12 @@ The default config is meant for existing Gson projects. The library handles only
 | `useJdkUnsafe` | `false` |
 | `requiredConstructorParameterPolicy` | `RequiredConstructorParameterPolicy.GsonCompatible` |
 | `mapItemKeyPolicy` | `MapItemKeyPolicy.Hash` |
+
+### Optional Capability State
+
+| Capability | Default state | How to enable |
+| --- | --- | --- |
+| JSON shape coercion | `ShapeCoercionPolicy.Disabled` | Call `withShapeCoercionPolicy(...)`, or annotate a field with `@SafeParseShapeCoercion`. |
 
 ### Constructor Policy
 
@@ -91,7 +98,7 @@ Use the badge version below. If you use plain Gson or manage Gson yourself, depe
 [![Maven Central: core](https://img.shields.io/maven-central/v/io.github.logan0817/gson-safe-parser-core?label=core)](https://central.sonatype.com/artifact/io.github.logan0817/gson-safe-parser-core)
 
 ```kotlin
-implementation("io.github.logan0817:gson-safe-parser-core:1.0.2") // Adds the core defensive parsing library.
+implementation("io.github.logan0817:gson-safe-parser-core:1.0.3") // Adds the core defensive parsing library.
 ```
 
 If you use Retrofit, depend on the retrofit module only; it already brings core transitively:
@@ -99,7 +106,7 @@ If you use Retrofit, depend on the retrofit module only; it already brings core 
 [![Maven Central: retrofit](https://img.shields.io/maven-central/v/io.github.logan0817/gson-safe-parser-retrofit?label=retrofit)](https://central.sonatype.com/artifact/io.github.logan0817/gson-safe-parser-retrofit)
 
 ```kotlin
-implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.2") // Adds the Retrofit converter integration and transitively includes core.
+implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.3") // Adds the Retrofit converter integration and transitively includes core.
 ```
 
 Extra Android release requirements:
@@ -178,6 +185,49 @@ val parser = GsonSafeParser.parser(config) // Creates one safe Parser and reuses
 val value = parser.fromJsonSafe<ApiResponse>(json)
 val result = parser.parseSafe<ApiResponse>(json)
 ```
+
+## JSON Shape Coercion
+
+By default, GsonSafeParser does not convert objects and arrays into each other. JSON shape coercion stays in the `ShapeCoercionPolicy.Disabled` state by default, so 1.0.3 keeps the same default parsing behavior as previous releases.
+
+Use this feature only when a backend field is unstable and the business accepts an explicit recovery rule:
+
+| Code field | Backend JSON | Behavior after enabling |
+| --- | --- | --- |
+| `data: User` | `"data":[{"id":1}]` | Reads the first object from the array into `data`. |
+| `users: List<User>` | `"users":{"id":1}` | Wraps the object as a one-item List. |
+| `users: Array<User>` | `"users":{"id":1}` | Wraps the object as a one-item array. |
+
+Enable globally:
+
+```kotlin
+val config = SafeParserConfig()
+    .withShapeCoercionPolicy(ShapeCoercionPolicy.ObjectAndCollection)
+
+val gson = GsonSafeParser.create(config)
+```
+
+Enable for one field:
+
+```kotlin
+data class ApiResponse(
+    @field:SafeParseShapeCoercion(ShapeCoercionPolicy.ObjectFromFirstArrayItem)
+    val data: User? = null
+)
+```
+
+Disable one strict-contract field when the global policy is enabled:
+
+```kotlin
+data class StrictEnvelope(
+    @field:SafeParseDisableShapeCoercion
+    val signedPayload: SignedPayload = SignedPayload()
+)
+```
+
+If `errors: List<ApiError>` itself is an object/array drift field, do not disable it; use `CollectionFromSingleObject` or `ObjectAndCollection`.
+
+The boundary is intentionally narrow: root objects, root collections, root object arrays, maps, string re-parsing, numbers, and booleans are not coerced. Empty arrays, a non-object first array item, or adapter failures during coercion emit `ShapeCoercion` events and return to the original fallback behavior. `Error`, `ThreadDeath`, `LinkageError`, `CancellationException`, and real transport I/O still escape.
 
 ## Retrofit Integration
 
@@ -283,10 +333,20 @@ data class PageState(
     @field:SafeParseSkip // Tells Safe Reflective parsing to skip this field.
     val runtimeCache: Any? = null
 )
+
+data class FlexibleResponse(
+    @field:SafeParseShapeCoercion(ShapeCoercionPolicy.ObjectFromFirstArrayItem)
+    val data: User? = null,
+
+    @field:SafeParseDisableShapeCoercion
+    val signedPayload: SignedPayload = SignedPayload()
+)
 ```
 
 1. `@SafeParseDelegateToGson` is placed on a class to delegate that type to native Gson.
 2. `@SafeParseSkip` is placed on a field to skip Safe Reflective read and write for that field.
+3. `@SafeParseShapeCoercion` is placed on a field to allow the configured object-array coercion rule.
+4. `@SafeParseDisableShapeCoercion` is placed on a field to keep original mismatch fallback even when the global policy is enabled.
 
 ## Demo App
 
@@ -304,8 +364,6 @@ The Demo App supports built-in cases and custom JSON input. You can paste a real
 
 Suggested reading order: start with [Getting Started](docs/en/getting-started.md), then read [Compatibility](docs/en/compatibility.md), [Configuration](docs/en/configuration.md), and the [Mismatch Capability Matrix](docs/en/mismatch-capability-matrix.md).
 
-For Android release integration, also read [Android ProGuard](docs/en/android-proguard.md).
-
 If you integrate into Android release builds, read [Android ProGuard](docs/en/android-proguard.md) next.
 
 1. [Getting Started](docs/en/getting-started.md): installation, plain Gson usage, Retrofit integration, Kotlin APIs, and CI self-check.
@@ -315,10 +373,11 @@ If you integrate into Android release builds, read [Android ProGuard](docs/en/an
 5. [Android ProGuard](docs/en/android-proguard.md): new project integration, legacy quick integration, R8 fullMode choice, and release validation.
 6. [Demo App](docs/en/demo-app.md): device testing, screen overview, and custom JSON validation.
 7. [Troubleshooting](docs/en/troubleshooting.md): empty responses, raw JSON, adapter creation failures, platform objects, and business schema issues.
-8. [Release Checklist](docs/en/release-checklist.md): AAR, ProGuard, documentation version, and local Maven artifact checks before publishing 1.0.2.
-9. [1.0.2 Release Notes](docs/en/release-notes-1.0.2.md): transport exception boundary fix, compatibility boundaries, and release verification notes.
-10. [1.0.1 Release Notes](docs/en/release-notes-1.0.1.md): historical stabilization fixes, compatibility boundaries, and release verification notes.
-11. [1.0.0 Release Notes](docs/en/release-notes-1.0.0.md): initial capabilities, compatibility boundaries, and release verification notes.
+8. [Release Checklist](docs/en/release-checklist.md): AAR, ProGuard, documentation version, and local Maven artifact checks before publishing 1.0.3.
+9. [1.0.3 Release Notes](docs/en/release-notes-1.0.3.md): JSON shape coercion, event reporting, boundaries, and release verification notes.
+10. [1.0.2 Release Notes](docs/en/release-notes-1.0.2.md): transport exception boundary fix, compatibility boundaries, and release verification notes.
+11. [1.0.1 Release Notes](docs/en/release-notes-1.0.1.md): historical stabilization fixes, compatibility boundaries, and release verification notes.
+12. [1.0.0 Release Notes](docs/en/release-notes-1.0.0.md): initial capabilities, compatibility boundaries, and release verification notes.
 
 ## Boundaries
 

@@ -19,3 +19,23 @@ annotation class SafeParseDelegateToGson
 @Target(AnnotationTarget.FIELD)
 @Retention(AnnotationRetention.RUNTIME)
 annotation class SafeParseSkip
+
+/**
+ * 标在字段上，表示这个字段允许按指定策略做 JSON 对象和数组形态转换。
+ *
+ * 字段级策略优先于全局 `SafeParserConfig.shapeCoercionPolicy`。适合只放开少数后端返回不稳定的字段。
+ */
+@Target(AnnotationTarget.FIELD)
+@Retention(AnnotationRetention.RUNTIME)
+annotation class SafeParseShapeCoercion(
+    val policy: ShapeCoercionPolicy = ShapeCoercionPolicy.ObjectAndCollection
+)
+
+/**
+ * 标在字段上，表示即使全局开启 shape coercion，这个字段也保持原错形兜底行为。
+ *
+ * 常见用途是错误响应模型、强契约字段或不允许数组取首项的字段。
+ */
+@Target(AnnotationTarget.FIELD)
+@Retention(AnnotationRetention.RUNTIME)
+annotation class SafeParseDisableShapeCoercion
