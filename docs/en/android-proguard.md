@@ -145,6 +145,8 @@ The current core and retrofit artifacts are Android AARs.
 
 Android AAR automatically merges the framework consumer ProGuard rules into the user's App, so users do not need to copy those framework rules by hand.
 
+The default `GsonSafeParser.create(config)` entry does not read `GsonBuilder` internals. The GsonBuilder rules below mainly protect `.enableSafeParser(config)`, `GsonSafeConverterFactory.create(builder, config)`, and external Builder configuration inheritance.
+
 The following rules are already bundled in GsonSafeParser AARs.
 
 Only compare or copy them manually when source-copy integration, custom publication, or troubleshooting shows that consumer rules were not merged:
@@ -164,6 +166,8 @@ Only compare or copy them manually when source-copy integration, custom publicat
 ```
 
 If release builds report `AdapterCreationFailure` while debug builds work, first verify that the AAR consumer ProGuard rules are actually merged into the App.
+
+If `GsonSafeParser.diagnostics()` reports only optional GsonBuilder fields as unreadable, field-level safe registration can continue. If it reports a critical field as unreadable, builder-first entries return to native Gson behavior; check whether consumer rules were merged.
 
 ## 7. Release Verification Checklist
 

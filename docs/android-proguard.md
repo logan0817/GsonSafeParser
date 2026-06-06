@@ -143,6 +143,8 @@ android.enableR8.fullMode=false # 可选兼容策略：降低老项目 release �
 
 当前 core 和 retrofit 都是 Android AAR。Android AAR 会自动把框架自身 consumer ProGuard 规则合并进用户 App，用户不需要手抄这部分。
 
+默认 `GsonSafeParser.create(config)` 不读取 `GsonBuilder` 内部字段；下面的 GsonBuilder 规则主要保护 `.enableSafeParser(config)`、`GsonSafeConverterFactory.create(builder, config)` 和外部 Builder 配置继承场景。
+
 下面规则已经内置在 GsonSafeParser AAR 里。只有拷源码、自定义发布链路丢失 consumer rules，或需要排查合并结果时，才需要手动对照：
 
 ```proguard
@@ -160,6 +162,8 @@ android.enableR8.fullMode=false # 可选兼容策略：降低老项目 release �
 ```
 
 如果 release 包出现 `AdapterCreationFailure`，但 debug 包正常，优先检查 AAR consumer ProGuard 规则是否真的合并进 App。
+
+如果 `GsonSafeParser.diagnostics()` 只报告 optional 的 GsonBuilder 字段不可读，字段级安全注册仍可继续；如果报告 critical 字段不可读，builder-first 入口会回到 Gson 原生链路，先检查 consumer rules 是否合并。
 
 ## 7. release 验证清单
 

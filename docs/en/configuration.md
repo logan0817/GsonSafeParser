@@ -58,7 +58,11 @@ The default config is low-interference: field-level problems fall back locally, 
 
 Mutating caller-owned collections later does not affect an existing config.
 
+`GsonSafeParser.create(config)` registers Safe Adapters directly from the config and does not read `GsonBuilder` internals.
+
 `enableSafeParser()` is idempotent for the same `GsonBuilder`; repeated calls do not register duplicate Safe Adapters. Create a new `GsonBuilder` if a different config is needed.
+
+`enableSafeParser()` and Retrofit builder-first entries read `GsonBuilder` internals only to inherit caller-configured `InstanceCreator`, `ReflectionAccessFilter`, object number strategy, complex Map key, and Unsafe settings. `diagnostics()` reports those fields separately; failed `critical` fields block builder-first safe registration, while failed `optional` fields only degrade inherited configuration.
 
 ## 2. Constructor Policy And Unsafe
 

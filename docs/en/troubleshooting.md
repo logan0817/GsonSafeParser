@@ -73,7 +73,20 @@ SafeParserConfig( // Creates config that observes Adapter creation failures.
 
 If the business wants to expose this strictly, collect events in tests and fail the test. Online traffic should keep the default "creation failure delegates back to Gson" baseline.
 
-## 4. Primitive Types Need SafeParser Lenient Parsing
+## 4. diagnostics Reports Unreadable GsonBuilder Fields
+
+The default `GsonSafeParser.create(config)` entry does not read `GsonBuilder` internals. Only builder-first entries such as `.enableSafeParser(config)` and `GsonSafeConverterFactory.create(builder, config)` read internals to inherit caller-owned Builder configuration.
+
+`diagnostics()` reports those fields separately:
+
+| Result | Meaning | First check |
+| --- | --- | --- |
+| A `critical` field is unreadable | Builder-first entries cannot confirm reflection filters or the Unsafe switch, so they return to native Gson behavior. | Check whether AAR consumer ProGuard rules were merged, then confirm whether the Gson version was forced. |
+| An `optional` field is unreadable | Field-level safe registration can continue, but the related Builder config inheritance degrades. | Check whether the app depends on that Builder setting; add version regression coverage if it does. |
+
+If you do not need a custom `GsonBuilder`, prefer `GsonSafeParser.create(config)` or `GsonSafeConverterFactory.create(config)`.
+
+## 5. Primitive Types Need SafeParser Lenient Parsing
 
 Primitive types delegate to native Gson by default, staying close to Gson behavior. Enable SafeParser primitive parsing explicitly only when you need the previous lenient handling for string numbers, empty strings, and type mismatch defaults:
 
@@ -89,7 +102,7 @@ To keep low intervention, no extra config is required. You can also use:
 SafeParserConfig.lowInterference() // Uses the low-interference preset.
 ```
 
-## 5. Direct gson.fromJson And SafeParser Entries Report Different Exceptions
+## 6. Direct gson.fromJson And SafeParser Entries Report Different Exceptions
 
 Use `parser.parseSafe(...)` or `parser.fromJson(...)` when you need SafeParser's top-level exception boundary. Direct `gson.fromJson(...)` keeps Gson's native top-level wrapping.
 
@@ -116,7 +129,7 @@ val parser = GsonSafeParser.parserWithExternalGson(gson, config)
 
 Keeping direct `gson.fromJson(...)` on Gson's native top-level exception wrapping avoids replacing Gson itself and avoids changing semantics that callers may already rely on.
 
-## 6. Android Platform Objects
+## 7. Android Platform Objects
 
 The default config skips `android.*` fields to avoid platform-object reflection risk. Do not add business model package prefixes here, or matching business fields will be skipped:
 
@@ -126,7 +139,7 @@ SafeParserConfig(skippedPlatformTypePrefixes = setOf("android.")) // Skips Andro
 
 If you change it to an empty set, related fields behave closer to native Gson, but platform-class reflection failures are more likely. Business model packages should be protected through ProGuard keep rules, not through skipped prefixes.
 
-## 7. A Business Field Has Multiple Shapes
+## 8. A Business Field Has Multiple Shapes
 
 If the same field is an object on success but a string or array on failure, GsonSafeParser can avoid parsing crashes, but it cannot infer business semantics automatically. Recommended options:
 
@@ -134,7 +147,7 @@ If the same field is an object on success but a string or array on failure, Gson
 2. Write a custom `TypeAdapter` for that field.
 3. Adjust the API model and use a wrapper that explicitly represents success and failure shapes.
 
-## 8. Passing Through Undeclared Fields
+## 9. Passing Through Undeclared Fields
 
 Fields not declared by the Bean are not injected automatically. Recommended options:
 

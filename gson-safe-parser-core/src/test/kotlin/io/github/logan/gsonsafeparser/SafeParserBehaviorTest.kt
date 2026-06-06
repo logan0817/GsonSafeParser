@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.math.BigDecimal
+import com.google.gson.GsonBuilder
 import com.google.gson.annotations.SerializedName
 import com.google.gson.TypeAdapter
 import com.google.gson.annotations.JsonAdapter
@@ -485,6 +486,22 @@ class SafeParserBehaviorTest {
         val gson = GsonSafeParser.create(
             SafeParserConfig(complexMapKeySerialization = true)
         )
+        val type = object : TypeToken<Map<Child, String>>() {}.type
+
+        val json = gson.toJson(mapOf(Child("remote") to "value"), type)
+
+        assertEquals("""[[{"name":"remote"},"value"]]""", json)
+    }
+
+    /**
+     * 测试方法说明：验证 builder-first 入口会继承 GsonBuilder 上开启的复杂 Map key 序列化配置。
+     */
+    @Test
+    fun `builder first entry inherits complex map key serialization from gson builder`() {
+        val gson = GsonBuilder()
+            .enableComplexMapKeySerialization()
+            .enableSafeParser()
+            .create()
         val type = object : TypeToken<Map<Child, String>>() {}.type
 
         val json = gson.toJson(mapOf(Child("remote") to "value"), type)

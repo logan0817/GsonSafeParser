@@ -408,6 +408,25 @@ class OpenSourcePublicationTest {
     }
 
     /**
+     * 默认入口是普通 Android 接入方最常用路径，不能为了继承用户 Builder 配置而依赖 GsonBuilder 私有字段。
+     */
+    @Test
+    fun `default create entry does not depend on gson builder compatibility snapshot`() {
+        val parserEntry = File("src/main/kotlin/io/github/logan/gsonsafeparser/GsonSafeParser.kt").readText()
+        val createEntry = parserEntry.substringAfter("fun create(config: SafeParserConfig = SafeParserConfig()): Gson {")
+            .substringBefore("    /**\n     * 检查当前运行环境和配置是否适合接入。")
+
+        assertTrue(createEntry.contains("registerSafeParserDirect(config)"))
+        assertFalse(createEntry.contains(".enableSafeParser(config)"))
+        assertFalse(createEntry.contains("compatibilitySnapshot()"))
+
+        val directRegisterEntry = parserEntry.substringAfter("private fun GsonBuilder.registerSafeParserDirect(")
+            .substringBefore("private fun GsonBuilder.hasSafeTypeAdapterFactory()")
+        assertFalse(directRegisterEntry.contains("hasSafeTypeAdapterFactory()"))
+        assertFalse(directRegisterEntry.contains("snapshotField("))
+    }
+
+    /**
      * 公开 API 的长期兼容边界必须明确：外部 Gson 包装入口显式命名，事件流可扩展，低层手动事件注入口需要 opt-in。
      */
     @Test

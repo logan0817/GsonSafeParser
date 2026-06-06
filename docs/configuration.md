@@ -58,7 +58,11 @@ val config = SafeParserConfig( // 创建一份完整的安全解析配置。
 
 后续修改调用方原来的可变集合，不会影响已经创建好的配置。
 
+`GsonSafeParser.create(config)` 使用配置直接注册 Safe Adapter，不读取 `GsonBuilder` 内部字段。
+
 `enableSafeParser()` 对同一个 `GsonBuilder` 是幂等的，重复调用不会重复注册 Safe Adapter。如果需要换配置，请新建一个 `GsonBuilder`。
+
+`enableSafeParser()` 和 Retrofit 的 builder-first 入口会读取 `GsonBuilder` 内部字段，只为继承调用方已经配置的 `InstanceCreator`、`ReflectionAccessFilter`、Object 数字策略、复杂 Map key 和 Unsafe 开关。`diagnostics()` 会按字段拆分报告；`critical` 字段失败会阻断 builder-first 安全注册，`optional` 字段失败只会降级相关配置继承。
 
 ## 2. 构造策略与 Unsafe
 

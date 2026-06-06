@@ -162,6 +162,8 @@ Entry choice:
 | Existing external Gson | Call `.enableSafeParser(config)` on the same `GsonBuilder` first, then use `parserWithExternalGson(gson, config)`. |
 | Retrofit response conversion | `GsonSafeConverterFactory.create(...)`. |
 
+The default `GsonSafeParser.create(config)` entry does not read `GsonBuilder` internals. Only builder-first entries read those internals, and only to inherit caller-provided `InstanceCreator`, `ReflectionAccessFilter`, object number strategy, complex Map key, and Unsafe settings. After forcing a different Gson version, run `GsonSafeParser.diagnostics()` first; it reports critical / optional compatibility per field.
+
 Direct `gson.fromJson(...)` calls keep Gson's native top-level exception wrapping. This avoids replacing Gson itself or changing semantics callers may already depend on.
 
 Kotlin convenience APIs:
@@ -288,6 +290,8 @@ Choose the entry by what you currently have:
 | You only call `create(gson, config)` | Reuses that Gson and applies Retrofit-level empty response, raw JSON, and event config | This does not automatically register Safe Adapter on the external Gson. |
 
 Use `GsonSafeParser.diagnostics(gson)` if you are not sure whether an external Gson has field-level safe parsing enabled.
+
+The default Retrofit `create(config)` entry also uses the lower-risk default path. Only `create(builder, config)` and `.enableSafeParser(config)` read Builder internals to inherit caller configuration.
 
 ## Common Configuration
 

@@ -164,13 +164,15 @@ object GsonSafeParser {
      * 创建一个已经注册 Safe Adapter 的 Gson。
      *
      * 默认配置偏生产可用：尽量兜底常见错形字段，同时在 Adapter 创建失败时回到 Gson 默认策略。
+     * 这个默认入口直接使用 [SafeParserConfig] 注册 Safe Adapter，不读取 `GsonBuilder` 内部字段；
+     * 只有调用方传入已有 `GsonBuilder` 的 builder-first 入口才需要继承 Builder 内部配置。
      *
      * @param config SafeParser 配置。默认配置适合先在普通业务接口里试用。
      * @return 已经注册 Safe Adapter 的 Gson 实例。
      */
     fun create(config: SafeParserConfig = SafeParserConfig()): Gson {
         return GsonBuilder()
-            .enableSafeParser(config)
+            .registerSafeParserDirect(config)
             .create()
     }
 
@@ -186,20 +188,8 @@ object GsonSafeParser {
         val snapshot = GsonBuilder().compatibilitySnapshot()
         // checks 是给开发者看的诊断清单。每发现一个环境或配置风险，就往这里追加一项。
         val checks = mutableListOf<GsonSafeDiagnosticCheck>()
-        checks += if (snapshot.failures.isEmpty()) {
-            GsonSafeDiagnosticCheck(
-                name = "gsonBuilderCompatibility",
-                severity = DiagnosticSeverity.OK,
-                message = "GsonBuilder internals are readable. Gson version: ${gsonRuntimeVersion()}."
-            )
-        } else {
-            GsonSafeDiagnosticCheck(
-                name = "gsonBuilderCompatibility",
-                severity = DiagnosticSeverity.ERROR,
-                message = "Gson version: ${gsonRuntimeVersion()}. " +
-                    snapshot.failures.joinToString { it.message ?: it.javaClass.name }
-            )
-        }
+        checks += snapshot.summaryDiagnosticCheck()
+        checks += snapshot.fieldDiagnosticChecks()
         checks += kotlinReflectCheck()
         if (config.skippedPlatformTypePrefixes.isEmpty()) {
             checks += GsonSafeDiagnosticCheck(
@@ -216,7 +206,7 @@ object GsonSafeParser {
             )
         }
         return GsonSafeDiagnostics(
-            safeAdapterAvailable = snapshot.failures.isEmpty(),
+            safeAdapterAvailable = snapshot.safeAdapterRegistrationAvailable,
             checks = checks
         )
     }
@@ -546,7 +536,8 @@ private fun kotlinReflectCheck(): GsonSafeDiagnosticCheck {
  * 给已有 GsonBuilder 接入 Safe Adapter。
  *
  * 这个入口会尽量读取 Builder 上已经配置的 InstanceCreator、ReflectionAccessFilter、复杂 Map key、
- * Unsafe 开关和 Object number 策略。读取失败时默认不注册 Safe Adapter，保留 Gson 原生行为。
+ * Unsafe 开关和 Object number 策略。安全关键字段读取失败时不注册 Safe Adapter，保留 Gson 原生行为；
+ * 可选字段读取失败时继续注册，但对应 Builder 配置继承会降级。
  * 同一个 GsonBuilder 重复调用时会直接返回原 Builder，避免重复注册 Safe Adapter。
  *
  * @param config SafeParser 配置。它会和 GsonBuilder 上已有配置合并。
@@ -557,12 +548,12 @@ fun GsonBuilder.enableSafeParser(
 ): GsonBuilder {
     if (hasSafeTypeAdapterFactory()) return this
     val snapshot = compatibilitySnapshot()
-    if (snapshot.failures.isNotEmpty()) {
-        // 如果连 Builder 内部配置都读不到，就不要强行注册 Safe Adapter，否则可能比 Gson 原生更不稳定。
+    if (snapshot.criticalFailures.isNotEmpty()) {
+        // 如果安全关键字段读不到，就不要强行注册 Safe Adapter，否则可能比 Gson 原生更不稳定。
         val error = IllegalStateException(
-            "Unable to inspect GsonBuilder internals, delegate to Gson default strategy."
+            "Unable to inspect critical GsonBuilder internals, delegate to Gson default strategy."
         ).apply {
-            snapshot.failures.forEach(::addSuppressed)
+            snapshot.criticalFailures.forEach { failure -> addSuppressed(failure.asException()) }
         }
         config.dispatchAdapterCreationFailure(
             AdapterCreationFailureEvent(
@@ -604,6 +595,26 @@ fun GsonBuilder.enableSafeParser(
         disableJdkUnsafe()
     }
     return setObjectToNumberStrategy(objectToNumberStrategy)
+        .registerTypeAdapterFactory(SafeTypeAdapterFactory(safeConfig))
+}
+
+private fun GsonBuilder.registerSafeParserDirect(
+    config: SafeParserConfig = SafeParserConfig()
+): GsonBuilder {
+    val safeConfig = config.copy(
+        useJdkUnsafe = if (
+            config.requiredConstructorParameterPolicy == RequiredConstructorParameterPolicy.Strict
+        ) {
+            false
+        } else {
+            config.useJdkUnsafe
+        }
+    )
+    safeConfig.reflectionAccessFilters.forEach(::addReflectionAccessFilter)
+    if (safeConfig.requiredConstructorParameterPolicy == RequiredConstructorParameterPolicy.Strict) {
+        disableJdkUnsafe()
+    }
+    return setObjectToNumberStrategy(safeConfig.objectToNumberStrategy)
         .registerTypeAdapterFactory(SafeTypeAdapterFactory(safeConfig))
 }
 
@@ -659,8 +670,104 @@ private data class GsonBuilderCompatibilitySnapshot(
     val reflectionFilters: List<ReflectionAccessFilter>,
     val complexMapKeySerialization: Boolean,
     val useJdkUnsafe: Boolean,
-    val failures: List<Throwable>
-)
+    val failures: List<GsonBuilderCompatibilityFailure>
+) {
+    val criticalFailures: List<GsonBuilderCompatibilityFailure>
+        get() = failures.filter { failure -> failure.field.critical }
+
+    val safeAdapterRegistrationAvailable: Boolean
+        get() = criticalFailures.isEmpty()
+
+    fun summaryDiagnosticCheck(): GsonSafeDiagnosticCheck {
+        val severity = when {
+            criticalFailures.isNotEmpty() -> DiagnosticSeverity.ERROR
+            failures.isNotEmpty() -> DiagnosticSeverity.WARNING
+            else -> DiagnosticSeverity.OK
+        }
+        val message = when (severity) {
+            DiagnosticSeverity.OK -> {
+                "GsonBuilder critical internals are readable. Gson version: ${gsonRuntimeVersion()}."
+            }
+            DiagnosticSeverity.WARNING -> {
+                "Gson version: ${gsonRuntimeVersion()}. Optional GsonBuilder internals are not fully readable: " +
+                    failures.joinToString { failure -> failure.field.fieldName }
+            }
+            DiagnosticSeverity.ERROR -> {
+                "Gson version: ${gsonRuntimeVersion()}. Critical GsonBuilder internals are not readable: " +
+                    criticalFailures.joinToString { failure -> failure.field.fieldName }
+            }
+        }
+        return GsonSafeDiagnosticCheck(
+            name = "gsonBuilderCompatibility",
+            severity = severity,
+            message = message
+        )
+    }
+
+    fun fieldDiagnosticChecks(): List<GsonSafeDiagnosticCheck> {
+        return GsonBuilderCompatibilityField.values().map { field ->
+            val failure = failures.firstOrNull { failure -> failure.field == field }
+            val severity = when {
+                failure == null -> DiagnosticSeverity.OK
+                field.critical -> DiagnosticSeverity.ERROR
+                else -> DiagnosticSeverity.WARNING
+            }
+            val role = if (field.critical) "critical" else "optional"
+            val message = if (failure == null) {
+                "GsonBuilder.${field.fieldName} $role compatibility field is readable."
+            } else {
+                "GsonBuilder.${field.fieldName} $role compatibility field is not readable: " +
+                    (failure.error.message ?: failure.error.javaClass.name)
+            }
+            GsonSafeDiagnosticCheck(
+                name = field.checkName,
+                severity = severity,
+                message = message
+            )
+        }
+    }
+}
+
+private enum class GsonBuilderCompatibilityField(
+    val fieldName: String,
+    val checkName: String,
+    val critical: Boolean
+) {
+    InstanceCreators(
+        fieldName = "instanceCreators",
+        checkName = "gsonBuilderInstanceCreatorsCompatibility",
+        critical = false
+    ),
+    ObjectToNumberStrategy(
+        fieldName = "objectToNumberStrategy",
+        checkName = "gsonBuilderObjectToNumberStrategyCompatibility",
+        critical = false
+    ),
+    ReflectionFilters(
+        fieldName = "reflectionFilters",
+        checkName = "gsonBuilderReflectionFiltersCompatibility",
+        critical = true
+    ),
+    ComplexMapKeySerialization(
+        fieldName = "complexMapKeySerialization",
+        checkName = "gsonBuilderComplexMapKeySerializationCompatibility",
+        critical = false
+    ),
+    UseJdkUnsafe(
+        fieldName = "useJdkUnsafe",
+        checkName = "gsonBuilderUseJdkUnsafeCompatibility",
+        critical = true
+    )
+}
+
+private data class GsonBuilderCompatibilityFailure(
+    val field: GsonBuilderCompatibilityField,
+    val error: Throwable
+) {
+    fun asException(): IllegalStateException {
+        return IllegalStateException("Unable to read GsonBuilder.${field.fieldName}", error)
+    }
+}
 
 /**
  * 读取 GsonBuilder 里 SafeParser 需要继承的内部配置。
@@ -670,21 +777,21 @@ private data class GsonBuilderCompatibilitySnapshot(
 @Suppress("UNCHECKED_CAST")
 private fun GsonBuilder.compatibilitySnapshot(): GsonBuilderCompatibilitySnapshot {
     // failures 用来收集反射读取失败的字段，最后统一交给 diagnostics 和回退逻辑判断。
-    val failures = mutableListOf<Throwable>()
-    fun field(name: String): Any? {
-        return runRecovering { snapshotField(name) }
-            .onFailure { failures += IllegalStateException("Unable to read GsonBuilder.$name", it) }
+    val failures = mutableListOf<GsonBuilderCompatibilityFailure>()
+    fun field(field: GsonBuilderCompatibilityField): Any? {
+        return runRecovering { snapshotField(field.fieldName) }
+            .onFailure { error -> failures += GsonBuilderCompatibilityFailure(field, error) }
             .getOrNull()
     }
 
     return GsonBuilderCompatibilitySnapshot(
-        instanceCreators = field("instanceCreators") as? Map<Type, InstanceCreator<*>> ?: emptyMap(),
-        objectToNumberStrategy = field("objectToNumberStrategy") as? ToNumberStrategy,
-        reflectionFilters = (field("reflectionFilters") as? Collection<*>)
+        instanceCreators = field(GsonBuilderCompatibilityField.InstanceCreators) as? Map<Type, InstanceCreator<*>> ?: emptyMap(),
+        objectToNumberStrategy = field(GsonBuilderCompatibilityField.ObjectToNumberStrategy) as? ToNumberStrategy,
+        reflectionFilters = (field(GsonBuilderCompatibilityField.ReflectionFilters) as? Collection<*>)
             ?.filterIsInstance<ReflectionAccessFilter>()
             .orEmpty(),
-        complexMapKeySerialization = field("complexMapKeySerialization") as? Boolean ?: false,
-        useJdkUnsafe = field("useJdkUnsafe") as? Boolean ?: true,
+        complexMapKeySerialization = field(GsonBuilderCompatibilityField.ComplexMapKeySerialization) as? Boolean ?: false,
+        useJdkUnsafe = field(GsonBuilderCompatibilityField.UseJdkUnsafe) as? Boolean ?: true,
         failures = failures
     )
 }
@@ -693,7 +800,9 @@ private fun GsonBuilder.compatibilitySnapshot(): GsonBuilderCompatibilitySnapsho
  * 读取 Gson 默认的 Object 数字策略。
  */
 private fun defaultObjectToNumberStrategy(): ToNumberStrategy? {
-    return GsonBuilder().compatibilitySnapshot().objectToNumberStrategy
+    return runRecovering {
+        GsonBuilder().snapshotField(GsonBuilderCompatibilityField.ObjectToNumberStrategy.fieldName) as? ToNumberStrategy
+    }.getOrNull()
 }
 
 private fun gsonRuntimeVersion(): String {

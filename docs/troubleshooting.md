@@ -71,7 +71,20 @@ SafeParserConfig( // 创建带 Adapter 创建失败观测的配置。
 
 如果业务希望严格暴露这类问题，可以在测试环境收集事件并让测试失败；线上仍应保持“创建失败交回 Gson”的默认底线。
 
-## 4. 基础类型想使用 SafeParser 宽松解析
+## 4. diagnostics 报告 GsonBuilder 字段不可读
+
+默认 `GsonSafeParser.create(config)` 不读取 `GsonBuilder` 内部字段。只有 `.enableSafeParser(config)`、`GsonSafeConverterFactory.create(builder, config)` 这类 builder-first 入口需要读取内部字段，用来继承调用方已有 Builder 配置。
+
+`diagnostics()` 会把这些字段拆开报告：
+
+| 结果 | 含义 | 优先处理 |
+| --- | --- | --- |
+| `critical` 字段不可读 | builder-first 入口不能确认反射访问限制或 Unsafe 开关，会回到 Gson 原生链路。 | 先检查 AAR consumer ProGuard 规则是否合并，再确认 Gson 版本是否被强制覆盖。 |
+| `optional` 字段不可读 | 字段级安全注册仍可继续，但对应 Builder 配置继承会降级。 | 检查是否真的依赖该 Builder 配置；依赖时补版本回归。 |
+
+如果没有自定义 `GsonBuilder`，优先使用 `GsonSafeParser.create(config)` 或 `GsonSafeConverterFactory.create(config)`。
+
+## 5. 基础类型想使用 SafeParser 宽松解析
 
 当前默认基础类型交回 Gson 原生 Adapter，更贴近原生 Gson 行为。只有需要旧的宽松基础类型解析，例如字符串数字、空字符串和形状不一致默认值时，才显式启用 SafeParser 基础类型解析：
 
@@ -87,7 +100,7 @@ SafeParserConfig( // 创建启用宽松基础类型解析的配置。
 SafeParserConfig.lowInterference() // 使用低误伤预设配置。
 ```
 
-## 5. 直接 gson.fromJson 和 SafeParser 入口异常不一致
+## 6. 直接 gson.fromJson 和 SafeParser 入口异常不一致
 
 结论：如果需要 SafeParser 的顶层异常边界，请使用 `parser.parseSafe(...)` 或 `parser.fromJson(...)`。
 
@@ -116,7 +129,7 @@ val parser = GsonSafeParser.parserWithExternalGson(gson, config)
 
 保留直接 `gson.fromJson(...)` 的原生异常包装，是为了不替换 Gson 本体，也避免扩展层改变调用方已经依赖的 Gson 语义。
 
-## 6. Android 平台对象
+## 7. Android 平台对象
 
 默认跳过 `android.*` 平台类型字段，避免平台对象触发反射风险；不要把业务模型包名前缀放这里，否则会导致业务字段被跳过解析：
 
@@ -126,7 +139,7 @@ SafeParserConfig(skippedPlatformTypePrefixes = setOf("android.")) // 跳过 Andr
 
 如果你把它改成空集合，相关字段会回到更接近 Gson 原生的处理方式，但也更容易遇到平台类反射失败。业务模型包名应该通过混淆 keep 规则保护，不应该放进跳过前缀里。
 
-## 7. 业务字段有多种结构
+## 8. 业务字段有多种结构
 
 同一个字段成功时是对象、失败时是字符串或数组，GsonSafeParser 只能避免解析崩溃，不能自动理解业务语义。推荐做法：
 
@@ -134,7 +147,7 @@ SafeParserConfig(skippedPlatformTypePrefixes = setOf("android.")) // 跳过 Andr
 2. 为该字段写自定义 `TypeAdapter`。
 3. 调整接口模型，用 wrapper 明确表达成功和失败结构。
 
-## 8. 未定义字段透传
+## 9. 未定义字段透传
 
 Bean 没有声明的字段不会被自动注入。推荐做法：
 

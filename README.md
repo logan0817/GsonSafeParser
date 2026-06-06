@@ -162,6 +162,8 @@ val response = gson.fromJson(json, ApiResponse::class.java) // 使用安全 Gson
 | 已有外部 Gson | 先对同一个 `GsonBuilder` 调用 `.enableSafeParser(config)`，再用 `parserWithExternalGson(gson, config)`。 |
 | Retrofit 响应转换 | `GsonSafeConverterFactory.create(...)`。 |
 
+默认 `GsonSafeParser.create(config)` 不读取 `GsonBuilder` 内部字段。只有 builder-first 入口需要读取这些内部字段，用来继承调用方已经放进 Builder 的 `InstanceCreator`、`ReflectionAccessFilter`、Object 数字策略、复杂 Map key 和 Unsafe 开关。强制覆盖 Gson 版本后，先跑 `GsonSafeParser.diagnostics()`，它会按字段报告 critical / optional 兼容性。
+
 直接调用 `gson.fromJson(...)` 时，最外层仍保持 Gson 原生异常包装行为。
 
 这样做是为了不替换 Gson 本体，也避免扩展层改变调用方已经依赖的 Gson 语义。
@@ -290,6 +292,8 @@ val retrofit = Retrofit.Builder()
 | 只写 `create(gson, config)` | 只复用这份 `Gson`，并使用 Retrofit 层的空响应、raw JSON 和事件配置 | 这不会自动给外部 Gson 注册 Safe Adapter。 |
 
 如果不确定外部 `Gson` 是否已经启用字段级安全解析，可以用 `GsonSafeParser.diagnostics(gson)` 检查。
+
+这里的默认 Retrofit `create(config)` 也会走低风险默认入口；只有 `create(builder, config)` 和 `.enableSafeParser(config)` 需要读取 Builder 内部字段来继承调用方配置。
 
 ## 常用配置
 

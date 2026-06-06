@@ -64,6 +64,35 @@ class GsonSafeDiagnosticsTest {
     }
 
     /**
+     * 测试方法说明：验证 diagnostics 把 GsonBuilder 内部字段兼容性拆开报告，方便 Gson 升级后快速定位具体风险。
+     */
+    @Test
+    fun `diagnostics reports field level gson builder compatibility checks`() {
+        val diagnostics = GsonSafeParser.diagnostics()
+        val checksByName = diagnostics.checks.associateBy { it.name }
+
+        listOf(
+            "gsonBuilderInstanceCreatorsCompatibility",
+            "gsonBuilderObjectToNumberStrategyCompatibility",
+            "gsonBuilderReflectionFiltersCompatibility",
+            "gsonBuilderComplexMapKeySerializationCompatibility",
+            "gsonBuilderUseJdkUnsafeCompatibility"
+        ).forEach { checkName ->
+            assertEquals(
+                DiagnosticSeverity.OK,
+                checksByName.getValue(checkName).severity,
+                "$checkName should be readable on the verified Gson version"
+            )
+        }
+        assertTrue(
+            checksByName.getValue("gsonBuilderReflectionFiltersCompatibility").message.contains("critical")
+        )
+        assertTrue(
+            checksByName.getValue("gsonBuilderInstanceCreatorsCompatibility").message.contains("optional")
+        )
+    }
+
+    /**
      * 测试方法说明：验证外部普通 Gson 只能诊断为未启用字段级 Safe Adapter，不能让用户误以为已经接管。
      */
     @Test

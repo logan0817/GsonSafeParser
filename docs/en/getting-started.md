@@ -73,6 +73,8 @@ val gson = GsonSafeParser.create() // Creates a Gson instance with safe parsing 
 val response = gson.fromJson(json, ApiResponse::class.java) // Parses a business response with safe Gson.
 ```
 
+The default entry does not read `GsonBuilder` internals, so it is the lower-risk choice when you do not need a custom GsonBuilder.
+
 If you already own a `GsonBuilder`:
 
 ```kotlin
@@ -83,6 +85,8 @@ val gson = GsonBuilder() // Creates a custom GsonBuilder.
 ```
 
 `enableSafeParser()` registers safe parsing on the current `GsonBuilder` while preserving the Gson options you already configured.
+
+The builder-first entry reads `GsonBuilder` internals only to inherit `InstanceCreator`, `ReflectionAccessFilter`, object number strategy, complex Map keys, and the Unsafe switch. If that inheritance cannot be inspected, `GsonSafeParser.diagnostics()` reports the exact field.
 
 Repeated calls on the same `GsonBuilder` do not register duplicate Safe Adapters. Create a new `GsonBuilder` if a different config is needed.
 
@@ -288,7 +292,7 @@ integrationCheck.checks.forEach { item -> // Iterates over every check result.
 check(integrationCheck.hasErrors.not()) // Fails the test or CI if blocking issues exist.
 ```
 
-`diagnostics()` only checks Gson reflection compatibility and configuration risks, which is useful after forcing a different Gson version.
+`diagnostics()` checks Gson reflection compatibility and configuration risks, which is useful after forcing a different Gson version. It reports `GsonBuilder` internal compatibility per field: failed `critical` fields block builder-first safe registration, while failed `optional` fields only degrade inherited configuration.
 
 `integrationCheck()` also runs built-in probes. It does not access the network, does not require an Android device, and does not parse business beans.
 

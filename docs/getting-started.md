@@ -73,6 +73,8 @@ val gson = GsonSafeParser.create() // 创建带安全解析能力的 Gson 实例
 val response = gson.fromJson(json, ApiResponse::class.java) // 使用安全 Gson 解析业务响应。
 ```
 
+默认入口不会读取 `GsonBuilder` 内部字段，适合没有自定义 GsonBuilder 的普通接入场景。
+
 如果你已经有自己的 `GsonBuilder`：
 
 ```kotlin
@@ -83,6 +85,8 @@ val gson = GsonBuilder() // 创建自定义 GsonBuilder。
 ```
 
 `enableSafeParser()` 会在当前 `GsonBuilder` 上注册安全解析能力，并尽量保留你已有的 Gson 配置。
+
+builder-first 入口才会读取 `GsonBuilder` 内部字段，用来继承 `InstanceCreator`、`ReflectionAccessFilter`、Object 数字策略、复杂 Map key 和 Unsafe 开关。读取失败时可以通过 `GsonSafeParser.diagnostics()` 看到具体字段。
 
 同一个 `GsonBuilder` 重复调用时不会重复注册 Safe Adapter。如果要换配置，请新建 `GsonBuilder`。
 
@@ -288,7 +292,7 @@ integrationCheck.checks.forEach { item -> // 遍历每一条自检结果。
 check(integrationCheck.hasErrors.not()) // 如果存在阻断问题，让测试或 CI 失败。
 ```
 
-`diagnostics()` 只检查当前 Gson 反射兼容性和配置风险，适合在强制覆盖 Gson 版本后先看 Safe Adapter 是否可用。
+`diagnostics()` 会检查当前 Gson 反射兼容性和配置风险，适合在强制覆盖 Gson 版本后先看 Safe Adapter 是否可用。结果会按字段拆分 `GsonBuilder` 内部兼容性，`critical` 字段失败会阻断 builder-first 安全注册，`optional` 字段失败只会降级相关配置继承。
 
 `integrationCheck()` 还会运行库内置探针。它不访问网络，不依赖 Android 设备，也不会解析业务 Bean，适合放进 JVM 单元测试。
 
