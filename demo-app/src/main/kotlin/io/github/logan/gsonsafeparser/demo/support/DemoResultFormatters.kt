@@ -44,8 +44,10 @@ import io.github.logan.gsonsafeparser.observerFailureReport
 import io.github.logan.gsonsafeparser.parseSafe
 import io.github.logan.gsonsafeparser.retrofit.GsonSafeConverterFactory
 import okhttp3.MediaType
-import okhttp3.RequestBody
 import okhttp3.ResponseBody
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.ResponseBody.Companion.toResponseBody
+import okhttp3.RequestBody
 import okio.Buffer
 import okio.BufferedSource
 import org.json.JSONArray
@@ -186,6 +188,45 @@ internal fun normalizeReportText(text: String?): String {
 }
 
 /**
+ * 复制到剪贴板前使用的保守脱敏。
+ *
+ * 页面展示仍保留调试信息；这里专门保护“复制给别人”的文本，避免把真实接口响应里的 token/password
+ * 或完整异常栈带出应用。
+ */
+internal fun sanitizeClipboardReportText(text: String?): String {
+    val normalized = normalizeReportText(text)
+    if (normalized.isBlank()) return normalized
+    val sensitiveKeyPattern = "(?:password|token|secret|authorization|credential|api[_-]?key|x-api-key|cookie|set-cookie)"
+    val longSensitiveKeyPattern = "(?:authorization|credential|api[_-]?key|x-api-key|cookie|set-cookie)"
+    val bearerRedacted = Regex("(?i)((?:Bearer|Basic)\\s+)[A-Za-z0-9._~+/=-]+")
+        .replace(normalized) { match -> "${match.groupValues[1]}[已脱敏]" }
+    val doubleQuotedValueRedacted = Regex(
+        "(?i)(\"?$sensitiveKeyPattern\"?\\s*[:=]\\s*\")((?:\\\\.|[^\"\\\\])*)(\")"
+    ).replace(bearerRedacted) { match ->
+        "${match.groupValues[1]}[已脱敏]${match.groupValues[3]}"
+    }
+    val singleQuotedValueRedacted = Regex(
+        "(?i)(\"?$sensitiveKeyPattern\"?\\s*[:=]\\s*')((?:\\\\.|[^'\\\\])*)(')"
+    ).replace(doubleQuotedValueRedacted) { match ->
+        "${match.groupValues[1]}[已脱敏]${match.groupValues[3]}"
+    }
+    val longUnquotedValueRedacted = Regex(
+        "(?i)(\"?$longSensitiveKeyPattern\"?\\s*[:=]\\s*)([^\"'\\n{}]+)"
+    ).replace(singleQuotedValueRedacted) { match ->
+        "${match.groupValues[1]}[已脱敏]"
+    }
+    val keyValueRedacted = Regex(
+        "(?i)(\"?$sensitiveKeyPattern\"?\\s*[:=]\\s*)([^\"'\\s,;{}]+)"
+    ).replace(longUnquotedValueRedacted) { match ->
+        "${match.groupValues[1]}[已脱敏]"
+    }
+    val exceptionHeaderRedacted = Regex("(?m)^\\s*[\\w.$]+(?:Exception|Error):.*$")
+        .replace(keyValueRedacted, "异常详情=[已脱敏]")
+    return Regex("(?m)^\\s*at\\s+[^\\n]+$")
+        .replace(exceptionHeaderRedacted, "    at [已脱敏]")
+}
+
+/**
  * 给完整报告追加一个标题和正文。
  *
  * @receiver 正在构建的报告文本。
@@ -194,7 +235,7 @@ internal fun normalizeReportText(text: String?): String {
  */
 internal fun StringBuilder.appendDetailedReportSection(title: String, body: String?) {
     appendLine(title)
-    appendLine(normalizeReportText(body))
+    appendLine(sanitizeClipboardReportText(body))
 }
 
 /**
@@ -434,18 +475,18 @@ internal inline fun <reified T> typeOf(): Type {
     return object : TypeToken<T>() {}.type
 }
 
-@Suppress("DEPRECATION")
+private val demoJsonMediaType: MediaType? = "application/json; charset=utf-8".toMediaTypeOrNull()
+
 internal fun String.toResponseBody(): ResponseBody {
-    return ResponseBody.create(MediaType.parse("application/json; charset=utf-8"), this)
+    return toResponseBody(demoJsonMediaType)
 }
 
-@Suppress("DEPRECATION")
 internal fun String.toUnknownLengthResponseBody(): ResponseBody {
     val json = this
     return object : ResponseBody() {
         override fun contentLength(): Long = -1
 
-        override fun contentType(): MediaType? = MediaType.parse("application/json; charset=utf-8")
+        override fun contentType(): MediaType? = demoJsonMediaType
 
         override fun source(): BufferedSource = Buffer().writeUtf8(json)
     }

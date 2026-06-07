@@ -149,6 +149,26 @@ class GsonSafeDiagnosticsTest {
     }
 
     /**
+     * 测试方法说明：验证 rawJson 捕获上限过大时诊断会提示风险，但不会阻断调试配置继续解析。
+     */
+    @Test
+    fun `diagnostics warns when raw json capture limit is too large`() {
+        val diagnostics = GsonSafeParser.diagnostics(
+            SafeParserConfig(
+                captureRawJsonInCallbacks = true,
+                maxRawJsonCaptureBytes = 64 * 1024 * 1024
+            )
+        )
+
+        val warning = diagnostics.checks.single { it.name == "maxRawJsonCaptureBytesTooLarge" }
+
+        assertEquals(DiagnosticSeverity.WARNING, warning.severity)
+        assertTrue(warning.message.contains("64 MiB"))
+        assertTrue(warning.message.contains("Raw JSON"))
+        assertFalse(diagnostics.hasErrors)
+    }
+
+    /**
      * 测试方法说明：验证“type explanation reports whether a model is safe handled or delegated”这个具体行为。
      */
     @Test

@@ -18,10 +18,12 @@ import io.github.logan.gsonsafeparser.ShapeCoercionPolicy
 import okhttp3.MediaType
 import okhttp3.RequestBody
 import okhttp3.ResponseBody
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.ResponseBody.Companion.toResponseBody
 import okio.Buffer
 import okio.BufferedSource
-import okio.Source
-import okio.Timeout
+import okio.ForwardingSource
+import okio.buffer
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -35,7 +37,6 @@ import java.lang.reflect.InvocationTargetException
 import java.io.EOFException
 import java.io.IOException
 import java.net.ProtocolException
-import java.nio.charset.Charset
 
 /**
  * 验证 Retrofit converter 的接入行为。
@@ -44,6 +45,12 @@ import java.nio.charset.Charset
  * Retrofit 层不能重新造解析规则，只能把 core 模块的能力安全接到响应转换流程里。
  */
 class GsonSafeConverterFactoryTest {
+    private val jsonMediaType: MediaType? = "application/json".toMediaTypeOrNull()
+
+    private fun jsonResponseBody(json: String): ResponseBody {
+        return json.toResponseBody(jsonMediaType)
+    }
+
     /** 测试模型：空响应时应该构造出的默认响应对象。 */
     data class EmptyApiResponse(
         val code: Int = 200,
@@ -129,7 +136,7 @@ class GsonSafeConverterFactoryTest {
             retrofit
         )
 
-        val result = converter?.convert(ResponseBody.create(MediaType.parse("application/json"), ""))
+        val result = converter?.convert(jsonResponseBody(""))
 
         assertNull(result)
     }
@@ -152,7 +159,7 @@ class GsonSafeConverterFactoryTest {
         )
 
         assertThrows(JsonSyntaxException::class.java) {
-            converter?.convert(ResponseBody.create(MediaType.parse("application/json"), """{"data":[]}"""))
+            converter?.convert(jsonResponseBody("""{"data":[]}"""))
         }
     }
 
@@ -177,7 +184,7 @@ class GsonSafeConverterFactoryTest {
             retrofit
         )
 
-        val result = converter?.convert(ResponseBody.create(MediaType.parse("application/json"), """{"data":[]}"""))
+        val result = converter?.convert(jsonResponseBody("""{"data":[]}"""))
 
         assertEquals(MismatchApiResponse(), result)
         val event = events.single() as SafeParserEvent.TypeMismatch
@@ -212,7 +219,7 @@ class GsonSafeConverterFactoryTest {
         )
         val rawJson = """{"data":[]}"""
 
-        val result = converter?.convert(ResponseBody.create(MediaType.parse("application/json"), rawJson))
+        val result = converter?.convert(jsonResponseBody(rawJson))
 
         assertEquals(MismatchApiResponse(), result)
         val event = adapterEvents.single() as SafeParserEvent.TypeMismatch
@@ -242,7 +249,7 @@ class GsonSafeConverterFactoryTest {
             retrofit
         )
 
-        val result = converter?.convert(ResponseBody.create(MediaType.parse("application/json"), """{"data":[]}"""))
+        val result = converter?.convert(jsonResponseBody("""{"data":[]}"""))
 
         assertEquals(MismatchApiResponse(), result)
         val event = events.single() as SafeParserEvent.TypeMismatch
@@ -273,7 +280,7 @@ class GsonSafeConverterFactoryTest {
         )
 
         val result = converter?.convert(
-            ResponseBody.create(MediaType.parse("application/json"), """{"data":[{"id":9}]}""")
+            jsonResponseBody("""{"data":[{"id":9}]}""")
         )
 
         assertEquals(ShapeApiResponse(ShapePayload(9L)), result)
@@ -302,7 +309,7 @@ class GsonSafeConverterFactoryTest {
         )
 
         assertThrows(JsonSyntaxException::class.java) {
-            converter?.convert(ResponseBody.create(MediaType.parse("application/json"), """{"data":[{"id":9}]}"""))
+            converter?.convert(jsonResponseBody("""{"data":[{"id":9}]}"""))
         }
     }
 
@@ -394,7 +401,7 @@ class GsonSafeConverterFactoryTest {
         )
 
         val result = converter?.convert(
-            ResponseBody.create(MediaType.parse("application/json"), """{"data":"bad","next":"remote"}""")
+            jsonResponseBody("""{"data":"bad","next":"remote"}""")
         )
 
         assertEquals(AdapterIOExceptionApiResponse(next = "remote"), result)
@@ -423,29 +430,23 @@ class GsonSafeConverterFactoryTest {
         )
 
         // result 是本次解析或转换得到的实际结果，后面的断言都围绕它展开。
-        val result = converter?.convert(ResponseBody.create(MediaType.parse("application/json"), ""))
+        val result = converter?.convert(jsonResponseBody(""))
 
         assertNull(result)
     }
 
     private fun failingResponseBody(failure: Throwable): ResponseBody {
         return object : ResponseBody() {
-            override fun contentType(): MediaType? = MediaType.parse("application/json")
+            override fun contentType(): MediaType? = jsonMediaType
 
             override fun contentLength(): Long = -1
 
             override fun source(): BufferedSource {
-                return okio.Okio.buffer(
-                    object : Source {
-                        override fun read(sink: Buffer, byteCount: Long): Long {
-                            throw failure
-                        }
-
-                        override fun timeout(): Timeout = Timeout.NONE
-
-                        override fun close() = Unit
+                return object : ForwardingSource(Buffer()) {
+                    override fun read(sink: Buffer, byteCount: Long): Long {
+                        throw failure
                     }
-                )
+                }.buffer()
             }
         }
     }
@@ -468,7 +469,7 @@ class GsonSafeConverterFactoryTest {
             retrofit
         )
 
-        val result = converter?.convert(ResponseBody.create(MediaType.parse("application/json"), ""))
+        val result = converter?.convert(jsonResponseBody(""))
 
         assertEquals(EmptyApiResponse(), result)
     }
@@ -494,7 +495,7 @@ class GsonSafeConverterFactoryTest {
         )
 
         // result 是本次解析或转换得到的实际结果，后面的断言都围绕它展开。
-        val result = converter?.convert(ResponseBody.create(MediaType.parse("application/json"), ""))
+        val result = converter?.convert(jsonResponseBody(""))
 
         assertEquals(Unit, result)
     }
@@ -520,7 +521,7 @@ class GsonSafeConverterFactoryTest {
         )
 
         // result 是本次转换得到的实际结果；空响应下 Void 应直接返回 null。
-        val result = converter?.convert(ResponseBody.create(MediaType.parse("application/json"), ""))
+        val result = converter?.convert(jsonResponseBody(""))
 
         assertNull(result)
     }
@@ -541,7 +542,7 @@ class GsonSafeConverterFactoryTest {
             retrofit
         )
 
-        val result = converter?.convert(ResponseBody.create(MediaType.parse("application/json"), ""))
+        val result = converter?.convert(jsonResponseBody(""))
 
         assertNull(result)
     }
@@ -562,7 +563,7 @@ class GsonSafeConverterFactoryTest {
             retrofit
         )
 
-        val result = converter?.convert(ResponseBody.create(MediaType.parse("application/json"), """{"ignored":true}"""))
+        val result = converter?.convert(jsonResponseBody("""{"ignored":true}"""))
 
         assertEquals(Unit, result)
     }
@@ -583,7 +584,7 @@ class GsonSafeConverterFactoryTest {
             retrofit
         )
 
-        val result = converter?.convert(ResponseBody.create(MediaType.parse("application/json"), """{"ignored":true}"""))
+        val result = converter?.convert(jsonResponseBody("""{"ignored":true}"""))
 
         assertNull(result)
     }
@@ -611,7 +612,7 @@ class GsonSafeConverterFactoryTest {
         )
 
         // result 是本次解析或转换得到的实际结果，后面的断言都围绕它展开。
-        val result = converter?.convert(ResponseBody.create(MediaType.parse("application/json"), ""))
+        val result = converter?.convert(jsonResponseBody(""))
 
         assertNull(result)
     }
@@ -640,7 +641,7 @@ class GsonSafeConverterFactoryTest {
             retrofit
         )
 
-        converter?.convert(ResponseBody.create(MediaType.parse("application/json"), ""))
+        converter?.convert(jsonResponseBody(""))
 
         val event = events.single() as SafeParserEvent.EmptyResponse
         assertEquals(EmptyApiResponse::class.java.name, event.detail.typeName)
@@ -678,7 +679,7 @@ class GsonSafeConverterFactoryTest {
 
         // result 是本次解析或转换得到的实际结果，后面的断言都围绕它展开。
         val result = assertDoesNotThrow<Any?> {
-            converter?.convert(ResponseBody.create(MediaType.parse("application/json"), ""))
+            converter?.convert(jsonResponseBody(""))
         }
 
         assertNull(result)
@@ -710,7 +711,7 @@ class GsonSafeConverterFactoryTest {
         )
 
         assertThrows(EOFException::class.java) {
-            converter?.convert(ResponseBody.create(MediaType.parse("application/json"), ""))
+            converter?.convert(jsonResponseBody(""))
         }
     }
 
@@ -819,7 +820,7 @@ class GsonSafeConverterFactoryTest {
         )
         val rawJson = """{"data":[]}"""
 
-        converter?.convert(ResponseBody.create(MediaType.parse("application/json"), rawJson))
+        converter?.convert(jsonResponseBody(rawJson))
 
         assertEquals(rawJson, events.single().rawJson)
     }
@@ -852,7 +853,7 @@ class GsonSafeConverterFactoryTest {
             retrofit
         )
 
-        converter?.convert(ResponseBody.create(MediaType.parse("application/json"), """{"data":[]}"""))
+        converter?.convert(jsonResponseBody("""{"data":[]}"""))
 
         assertNull(events.single().rawJson)
     }
@@ -885,7 +886,7 @@ class GsonSafeConverterFactoryTest {
             retrofit
         )
 
-        converter?.convert(ResponseBody.create(MediaType.parse("application/json"), """{"data":[]}"""))
+        converter?.convert(jsonResponseBody("""{"data":[]}"""))
 
         val event = events.single { it is SafeParserEvent.RawJsonCaptureSkipped } as SafeParserEvent.RawJsonCaptureSkipped
         assertEquals(MismatchApiResponse::class.java.name, event.detail.typeName)
@@ -1225,7 +1226,7 @@ class GsonSafeConverterFactoryTest {
         )
 
         assertThrows(JsonSyntaxException::class.java) {
-            converter?.convert(ResponseBody.create(MediaType.parse("application/json"), """{"data":[]}"""))
+            converter?.convert(jsonResponseBody("""{"data":[]}"""))
         }
 
         assertTrue(events.any { it is SafeParserEvent.RawJsonCaptureSkipped })
@@ -1328,7 +1329,7 @@ class GsonSafeConverterFactoryTest {
 
         // result 是本次解析或转换得到的实际结果，后面的断言都围绕它展开。
         val result = assertDoesNotThrow<Any?> {
-            converter?.convert(ResponseBody.create(MediaType.parse("application/json"), """{"data":[]}"""))
+            converter?.convert(jsonResponseBody("""{"data":[]}"""))
         }
 
         assertEquals(MismatchApiResponse(), result)
@@ -1339,29 +1340,29 @@ class GsonSafeConverterFactoryTest {
         return object : ResponseBody() {
             override fun contentLength(): Long = -1
 
-            override fun contentType(): MediaType? = MediaType.parse("application/json")
+            override fun contentType(): MediaType? = jsonMediaType
 
             override fun source(): BufferedSource = Buffer().writeUtf8(json)
         }
     }
 
     private fun firstRequestFailureBody(json: String, failure: Throwable): ResponseBody {
-        val source = FirstRequestFailureBufferedSource(Buffer().writeUtf8(json), failure)
+        val source = FirstReadFailureSource(Buffer().writeUtf8(json), failure).buffer()
         return object : ResponseBody() {
             override fun contentLength(): Long = -1
 
-            override fun contentType(): MediaType? = MediaType.parse("application/json")
+            override fun contentType(): MediaType? = jsonMediaType
 
             override fun source(): BufferedSource = source
         }
     }
 
     private fun failingRawJsonProbeBody(json: String, failure: Throwable): ResponseBody {
-        val source = FailingPeekBufferedSource(Buffer().writeUtf8(json), failure)
+        val source = ProbeFailureSource(Buffer().writeUtf8(json), failure).buffer()
         return object : ResponseBody() {
             override fun contentLength(): Long = -1
 
-            override fun contentType(): MediaType? = MediaType.parse("application/json")
+            override fun contentType(): MediaType? = jsonMediaType
 
             override fun source(): BufferedSource = source
         }
@@ -1371,68 +1372,56 @@ class GsonSafeConverterFactoryTest {
         return object : ResponseBody() {
             override fun contentLength(): Long = json.toByteArray(Charsets.UTF_8).size.toLong()
 
-            override fun contentType(): MediaType? = MediaType.parse("application/json")
+            override fun contentType(): MediaType? = jsonMediaType
 
             override fun source(): BufferedSource {
-                return object : BufferedSource by Buffer().writeUtf8(json) {
-                    override fun readString(charset: Charset): String {
+                return object : ForwardingSource(Buffer().writeUtf8(json)) {
+                    override fun read(sink: Buffer, byteCount: Long): Long {
                         throw IOException("rawJson string read failed")
                     }
-                }
+                }.buffer()
             }
         }
     }
 
     private fun fatalRawJsonProbeBody(json: String): ResponseBody {
-        val source = FatalPeekBufferedSource(Buffer().writeUtf8(json))
+        val source = ProbeFailureSource(Buffer().writeUtf8(json), AssertionError("fatal raw json probe failure")).buffer()
         return object : ResponseBody() {
             override fun contentLength(): Long = -1
 
-            override fun contentType(): MediaType? = MediaType.parse("application/json")
+            override fun contentType(): MediaType? = jsonMediaType
 
             override fun source(): BufferedSource = source
         }
     }
 
-    private class FirstRequestFailureBufferedSource(
-        private val delegate: BufferedSource,
+    private class FirstReadFailureSource(
+        private val delegateBuffer: Buffer,
         private val failure: Throwable
-    ) : BufferedSource by delegate {
-        private var shouldFailRequest = true
+    ) : ForwardingSource(delegateBuffer) {
+        private var shouldFailRead = true
 
-        override fun request(byteCount: Long): Boolean {
-            if (shouldFailRequest) {
-                shouldFailRequest = false
+        override fun read(sink: Buffer, byteCount: Long): Long {
+            if (shouldFailRead) {
+                shouldFailRead = false
                 throw failure
             }
-            return delegate.request(byteCount)
+            return delegateBuffer.read(sink, byteCount)
         }
     }
 
-    private class FailingPeekBufferedSource(
-        private val delegate: BufferedSource,
+    private class ProbeFailureSource(
+        private val delegateBuffer: Buffer,
         private val failure: Throwable
-    ) : BufferedSource by delegate {
-        override fun peek(): BufferedSource {
-            val peeked = delegate.peek()
-            return object : BufferedSource by peeked {
-                override fun request(byteCount: Long): Boolean {
-                    throw failure
-                }
-            }
-        }
-    }
+    ) : ForwardingSource(delegateBuffer) {
+        private var readCount = 0
 
-    private class FatalPeekBufferedSource(
-        private val delegate: BufferedSource
-    ) : BufferedSource by delegate {
-        override fun peek(): BufferedSource {
-            val peeked = delegate.peek()
-            return object : BufferedSource by peeked {
-                override fun request(byteCount: Long): Boolean {
-                    throw AssertionError("fatal raw json probe failure")
-                }
+        override fun read(sink: Buffer, byteCount: Long): Long {
+            readCount += 1
+            if (readCount > 1) {
+                throw failure
             }
+            return delegateBuffer.read(sink, minOf(byteCount, 1L))
         }
     }
 }

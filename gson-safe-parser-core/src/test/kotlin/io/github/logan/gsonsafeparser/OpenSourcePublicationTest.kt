@@ -88,6 +88,22 @@ class OpenSourcePublicationTest {
     }
 
     /**
+     * CI 必须有依赖漏洞扫描门禁。
+     *
+     * 单元测试、lint 和 assemble 只能证明当前源码能工作，不能发现 Maven 依赖后来披露的 CVE。
+     */
+    @Test
+    fun `ci workflow includes dependency vulnerability scan gate`() {
+        val ciWorkflow = File("../.github/workflows/ci.yml").readText()
+
+        assertTrue(ciWorkflow.contains("Run dependency vulnerability scan"))
+        assertTrue(ciWorkflow.contains("google/osv-scanner-action@v2.3.8"))
+        assertTrue(!ciWorkflow.contains("google/osv-scanner-action@v2\n"))
+        assertTrue(ciWorkflow.contains("scan-args:"))
+        assertTrue(ciWorkflow.contains("--recursive"))
+    }
+
+    /**
      * Gradle Wrapper 是所有构建的第一层供应链入口，必须固定分发包 SHA。
      */
     @Test
@@ -331,6 +347,72 @@ class OpenSourcePublicationTest {
     }
 
     /**
+     * Retrofit 兼容层可以继续保持 Retrofit 2.x API，但不能把已知高风险 OkHttp/Okio 基线传给消费者。
+     */
+    @Test
+    fun `retrofit and demo dependencies override legacy okhttp and okio baselines`() {
+        val rootBuildFile = File("../build.gradle.kts").readText()
+        val retrofitBuildFile = File("../gson-safe-parser-retrofit/build.gradle.kts").readText()
+        val demoBuildFile = File("../demo-app/build.gradle.kts").readText()
+        val dependencyFiles = retrofitBuildFile + "\n" + demoBuildFile
+
+        assertTrue(retrofitBuildFile.contains("api(\"com.squareup.okhttp3:okhttp:4.12.0\")"))
+        assertTrue(retrofitBuildFile.contains("api(\"com.squareup.okio:okio:3.6.0\")"))
+        assertTrue(demoBuildFile.contains("implementation(\"com.squareup.okhttp3:okhttp:4.12.0\")"))
+        assertTrue(demoBuildFile.contains("implementation(\"com.squareup.okio:okio:3.6.0\")"))
+        assertTrue(!dependencyFiles.contains("okhttp:3.14.7"))
+        assertTrue(!dependencyFiles.contains("okio:1.17.2"))
+        assertTrue(rootBuildFile.contains("pomDependencyVersion(retrofitPom, \"okhttp\") == \"4.12.0\""))
+        assertTrue(rootBuildFile.contains("pomDependencyVersion(retrofitPom, \"okio\") == \"3.6.0\""))
+    }
+
+    /**
+     * Retrofit 模块显式携带 OkHttp / Okio 安全基线，文档必须提前告知使用者网络栈解析变化。
+     */
+    @Test
+    fun `retrofit dependency safety baseline is documented for consumers`() {
+        val docs = listOf(
+            File("../README.md").readText(),
+            File("../README_EN.md").readText(),
+            File("../docs/compatibility.md").readText(),
+            File("../docs/en/compatibility.md").readText(),
+            File("../docs/release-notes-1.0.3.md").readText(),
+            File("../docs/en/release-notes-1.0.3.md").readText()
+        ).joinToString(separator = "\n")
+
+        assertTrue(docs.contains("OkHttp 4.12.0"))
+        assertTrue(docs.contains("Okio 3.6.0"))
+        assertTrue(docs.contains("dependencyInsight"))
+        assertTrue(docs.contains("依赖解析") || docs.contains("dependency resolution"))
+    }
+
+    /**
+     * 1.0.3 发布文档必须覆盖本次安全与可靠性加固，避免用户只看到 shape coercion。
+     */
+    @Test
+    fun `release documentation includes security and reliability hardening notes`() {
+        val changelog = File("../CHANGELOG.md").readText()
+        val releaseNotes = File("../docs/release-notes-1.0.3.md").readText()
+        val releaseNotesEn = File("../docs/en/release-notes-1.0.3.md").readText()
+        val releaseChecklist = File("../docs/release-checklist.md").readText()
+        val releaseChecklistEn = File("../docs/en/release-checklist.md").readText()
+        val releaseDocs = listOf(changelog, releaseNotes, releaseNotesEn, releaseChecklist, releaseChecklistEn)
+            .joinToString(separator = "\n")
+
+        assertTrue(releaseDocs.contains("OSV"))
+        assertTrue(releaseDocs.contains("Maven Central"))
+        assertTrue(releaseDocs.contains("剪贴板") || releaseDocs.contains("clipboard"))
+        assertTrue(releaseDocs.contains("脱敏") || releaseDocs.contains("redaction"))
+        assertTrue(releaseDocs.contains("maxRawJsonCaptureBytesTooLarge"))
+        assertTrue(releaseDocs.contains("OkHttp 4.12.0"))
+        assertTrue(releaseDocs.contains("Okio 3.6.0"))
+        assertTrue(releaseChecklist.contains("osv-scanner") || releaseChecklist.contains("OSV"))
+        assertTrue(releaseChecklistEn.contains("osv-scanner") || releaseChecklistEn.contains("OSV"))
+        assertTrue(releaseChecklist.contains("okhttp 4.12.0") || releaseChecklist.contains("OkHttp 4.12.0"))
+        assertTrue(releaseChecklistEn.contains("okhttp 4.12.0") || releaseChecklistEn.contains("OkHttp 4.12.0"))
+    }
+
+    /**
      * AAR 的 consumer ProGuard 规则必须自动带上框架自身规则。
      *
      * 业务模型包名仍由用户配置，但 GsonBuilder 字段、Kotlin Metadata 和 @SerializedName 字段规则不应再让用户手抄。
@@ -372,6 +454,31 @@ class OpenSourcePublicationTest {
         assertTrue(retrofitBuildFile.contains("api(\"com.squareup.retrofit2:retrofit:2.8.1\")"))
         assertTrue(retrofitBuildFile.contains("implementation(\"com.squareup.retrofit2:converter-gson:2.8.1\")"))
         assertTrue(!retrofitBuildFile.contains("api(\"com.squareup.retrofit2:converter-gson:2.8.1\")"))
+    }
+
+    /**
+     * 远程发布失败时可以输出状态码和摘要，但不能把服务端响应体原样写进 CI 日志。
+     */
+    @Test
+    fun `maven central deployment failure output redacts raw response body`() {
+        val rootBuildFile = File("../build.gradle.kts").readText()
+
+        assertTrue(rootBuildFile.contains("fun sanitizeMavenCentralResponseBody("))
+        assertTrue(rootBuildFile.contains("Central Portal deployment response redacted"))
+        assertTrue(!rootBuildFile.contains("Response body: \${responseBody"))
+    }
+
+    /**
+     * 发布响应脱敏不能按空白截断敏感值，否则 password="alpha beta" 会留下 beta。
+     */
+    @Test
+    fun `maven central response redaction does not use whitespace truncated secret values`() {
+        val rootBuildFile = File("../build.gradle.kts").readText()
+
+        assertTrue(!rootBuildFile.contains("([^\\\"\\\\s,;{}]+)"))
+        assertTrue(rootBuildFile.contains("api[_-]?key"))
+        assertTrue(rootBuildFile.contains("set-cookie"))
+        assertTrue(rootBuildFile.contains("Basic"))
     }
 
     /**

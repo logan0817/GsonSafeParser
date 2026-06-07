@@ -50,8 +50,8 @@ dependencies {
     implementation(project(":gson-safe-parser-retrofit"))
     // demo 里会直接创建 Retrofit、OkHttp 请求体和 Buffer，所以这些类型要显式声明依赖。
     implementation("com.squareup.retrofit2:retrofit:2.8.1")
-    implementation("com.squareup.okhttp3:okhttp:3.14.7")
-    implementation("com.squareup.okio:okio:1.17.2")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okio:okio:3.6.0")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20251224")

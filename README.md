@@ -109,6 +109,8 @@ implementation("io.github.logan0817:gson-safe-parser-core:1.0.3") // 接入 Gson
 implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.3") // 接入 Retrofit Converter 扩展，并自动带上 core。
 ```
 
+Retrofit 模块仍保持 `Retrofit 2.8.1` API 兼容，同时会显式携带 `OkHttp 4.12.0` 和 `Okio 3.6.0` 安全基线，避免 Retrofit 2.8.1 的旧传递依赖落回 OkHttp 3.14.x / Okio 1.x。接入已有网络栈时，先用 `./gradlew dependencyInsight --dependency okhttp` 和 `./gradlew dependencyInsight --dependency okio` 确认依赖解析结果，再跑断网、取消、连接重置、TLS 失败和 raw JSON 捕获回归。
+
 Android release 额外要求：
 
 | 场景 | 需要做什么 |

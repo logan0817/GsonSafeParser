@@ -8,7 +8,7 @@
 
 1. 当前产物是 Android AAR，不是普通 JVM Jar。
 2. 推荐接入环境是 `minSdk 23`、`compileSdk 36`、`JDK 17`、`Kotlin 2.0.21`、`Gson 2.13.2`。
-3. Retrofit 模块当前验证版本是 `Retrofit 2.8.1`。
+3. Retrofit 模块当前验证版本是 `Retrofit 2.8.1`，并显式携带 `OkHttp 4.12.0` 和 `Okio 3.6.0` 安全基线。
 4. Retrofit 网络或传输读流异常不属于 JSON 错形，也不属于空响应；不要用 `emptyResponsePolicy` 隐藏这类异常。
 5. 低版本项目不要直接上线，先按下面表格做兼容验证。
 
@@ -27,6 +27,8 @@
 | Gson | `Gson 2.13.2` | 核心依赖 | 强制降级 Gson 可能导致 GsonBuilder 内部字段读取失败，Safe Adapter 降级回 Gson 原生链路。 | 使用 `Gson 2.13.2`；覆盖版本后先跑 `diagnostics()`。 |
 | Retrofit | `Retrofit 2.8.1` | Retrofit 模块依赖 | 强制更低版本可能出现 Converter API 差异。 | Retrofit 场景不要低于 `2.8.1`。 |
 | `converter-gson` | `2.8.1` | Retrofit 内部实现 | 与 Retrofit 主版本不一致时，转换链路行为可能不同。 | 保持 Retrofit 和 converter-gson 版本一致。 |
+| OkHttp | `OkHttp 4.12.0` | Retrofit 网络栈安全基线 | Retrofit 2.8.1 的传递依赖会落到 OkHttp 3.14.x；强制降级会重新暴露旧网络栈风险。 | 让 Gradle 解析到 `4.12.0` 或更高，并用 `dependencyInsight --dependency okhttp` 核对。 |
+| Okio | `Okio 3.6.0` | Retrofit 网络栈安全基线 | Okio 1.x 与 OkHttp 4.x 运行组合不符合当前验证矩阵。 | 让 Gradle 解析到 `3.6.0` 或更高，并用 `dependencyInsight --dependency okio` 核对。 |
 | R8 / ProGuard | AAR 内置框架规则 | release 稳定边界 | 业务模型字段名、构造方法、Kotlin Metadata 被裁剪后，Gson 绑定会失真。 | release 包必须配置业务模型 keep 规则。 |
 
 ## 2. 低版本项目接入判断
@@ -41,7 +43,7 @@
 
 ## 3. Retrofit 版本说明
 
-`gson-safe-parser-retrofit` 公开依赖 `Retrofit 2.8.1`。
+`gson-safe-parser-retrofit` 公开依赖 `Retrofit 2.8.1`，并显式公开 `OkHttp 4.12.0`、`Okio 3.6.0`。这样做是为了保留 Retrofit 2.x Converter API 的同时，避免消费者在没有声明网络栈版本时解析到 Retrofit 2.8.1 自带的 OkHttp 3.14.x / Okio 1.x。
 
 如果业务项目已经使用更高 Retrofit 版本，通常可以由 Gradle 解析到更高版本，但上线前必须验证 4 件事：
 
@@ -50,7 +52,9 @@
 3. 断网、请求取消、连接重置、TLS 失败等传输异常会交回 Retrofit / OkHttp 错误处理，不会被记录成 `EmptyResponse`、`RawJsonCaptureSkipped` 或 `TypeMismatch`。
 4. raw JSON 捕获和超限跳过事件符合预期。
 
-当前版本不主动升级到更高 Retrofit，是为了避免在发布前引入新的 Retrofit / OkHttp 行为变化。
+如果业务项目已经用 OkHttp 5 或其他统一网络栈，先用 `./gradlew dependencyInsight --dependency okhttp` 和 `./gradlew dependencyInsight --dependency okio` 确认最终依赖解析结果，再跑断网、取消、连接重置、TLS 失败和 raw JSON 捕获回归。
+
+当前版本不主动升级到更高 Retrofit，是为了避免在发布前引入新的 Retrofit 行为变化。
 
 ## 4. Kotlin 版本说明
 

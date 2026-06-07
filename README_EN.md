@@ -109,6 +109,8 @@ If you use Retrofit, depend on the retrofit module only; it already brings core 
 implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.3") // Adds the Retrofit converter integration and transitively includes core.
 ```
 
+The Retrofit module keeps the `Retrofit 2.8.1` API baseline, and it also publishes `OkHttp 4.12.0` and `Okio 3.6.0` as the network-stack safety baseline. This prevents Retrofit 2.8.1's old transitive dependencies from resolving back to OkHttp 3.14.x / Okio 1.x. If your app already owns the network stack, run `./gradlew dependencyInsight --dependency okhttp` and `./gradlew dependencyInsight --dependency okio` to confirm the final dependency resolution, then verify offline, cancellation, connection reset, TLS failure, and raw JSON capture regressions.
+
 Extra Android release requirements:
 
 | Scenario | What to do |

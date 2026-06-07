@@ -29,6 +29,8 @@ import java.lang.reflect.Type
  * 真正的解析仍然走 Gson 的 TypeAdapter 链路；遇到当前库不确定能处理的类型时，默认交回 Gson。
  */
 object GsonSafeParser {
+    private const val RECOMMENDED_MAX_RAW_JSON_CAPTURE_BYTES = 16 * 1024 * 1024
+
     /**
      * 创建可复用的安全解析器。
      *
@@ -203,6 +205,16 @@ object GsonSafeParser {
                 name = "maxRawJsonCaptureBytes",
                 severity = DiagnosticSeverity.WARNING,
                 message = "Raw JSON capture is enabled but maxRawJsonCaptureBytes is not positive."
+            )
+        } else if (
+            config.captureRawJsonInCallbacks &&
+            config.maxRawJsonCaptureBytes > RECOMMENDED_MAX_RAW_JSON_CAPTURE_BYTES
+        ) {
+            checks += GsonSafeDiagnosticCheck(
+                name = "maxRawJsonCaptureBytesTooLarge",
+                severity = DiagnosticSeverity.WARNING,
+                message = "Raw JSON capture limit ${config.maxRawJsonCaptureBytes.toMiBLabel()} exceeds " +
+                    "the recommended ${RECOMMENDED_MAX_RAW_JSON_CAPTURE_BYTES.toMiBLabel()} cap."
             )
         }
         return GsonSafeDiagnostics(
@@ -514,6 +526,10 @@ object GsonSafeParser {
             )
         )
     }
+}
+
+private fun Int.toMiBLabel(): String {
+    return "${this / (1024 * 1024)} MiB"
 }
 
 private fun kotlinReflectCheck(): GsonSafeDiagnosticCheck {

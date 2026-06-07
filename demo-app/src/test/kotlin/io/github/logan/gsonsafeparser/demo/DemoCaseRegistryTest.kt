@@ -5,10 +5,13 @@ import io.github.logan.gsonsafeparser.DiagnosticSeverity
 import io.github.logan.gsonsafeparser.GsonSafeDiagnosticCheck
 import io.github.logan.gsonsafeparser.GsonSafeDiagnostics
 import io.github.logan.gsonsafeparser.demo.page.DemoPageRegistry
+import io.github.logan.gsonsafeparser.demo.support.DemoCase
 import io.github.logan.gsonsafeparser.demo.support.DemoCustomValidator
+import io.github.logan.gsonsafeparser.demo.support.DemoRunResult
 import io.github.logan.gsonsafeparser.demo.support.buildOutputBlockPreview
 import io.github.logan.gsonsafeparser.demo.support.describeEvents
 import io.github.logan.gsonsafeparser.demo.support.describe
+import io.github.logan.gsonsafeparser.demo.support.sanitizeClipboardReportText
 import io.github.logan.gsonsafeparser.ParseExceptionKind
 import io.github.logan.gsonsafeparser.SafeParserEvent
 import io.github.logan.gsonsafeparser.TypeMismatchEvent
@@ -344,6 +347,84 @@ class DemoCaseRegistryTest {
 
         assertTrue("完整报告不应出现连续三行以上空白", !report.contains("\n\n\n"))
         assertTrue("完整报告不应保留 Kotlin 模板缩进导致的大段行首空格", !Regex("(?m)^ {8,}\\S").containsMatchIn(report))
+    }
+
+    @Test
+    fun detailedReportRedactsRawJsonSecretsAndStackTraceBeforeClipboardCopy() {
+        val sensitiveJson = """{"token":"secret-token","password":"hidden","authorization":"Bearer raw-token"}"""
+        val demoCase = DemoCase(
+            title = "敏感输出复制边界",
+            category = "隐私",
+            entryPoint = "DemoCaseRegistry.buildDetailedReport",
+            description = "验证复制报告不会带出敏感 rawJson 或异常栈。",
+            defaultJson = sensitiveJson,
+            expected = "复制报告保留结构化信息，但敏感值和异常栈脱敏。",
+            runner = { error("not used") }
+        )
+        val result = DemoRunResult(
+            pass = false,
+            actual = "解析输出 raw=${sensitiveJson}",
+            expected = "expected token=secret-token",
+            events = "原始 JSON=${sensitiveJson}",
+            contractReport = "contract password=hidden",
+            observerReport = "observer authorization=Bearer raw-token",
+            diagnostics = "diagnostics token=secret-token",
+            error = """
+                java.lang.IllegalStateException: token=secret-token
+                    at io.github.logan.gsonsafeparser.demo.SecretCase.run(SecretCase.kt:42)
+            """.trimIndent()
+        )
+
+        val report = DemoCaseRegistry.buildDetailedReport(listOf(demoCase to result))
+
+        assertTrue("复制报告应保留用例标题，避免脱敏后不可定位", report.contains("敏感输出复制边界"))
+        assertTrue("复制报告应标明内容经过脱敏", report.contains("[已脱敏]"))
+        listOf("secret-token", "hidden", "Bearer raw-token", "IllegalStateException", "SecretCase.kt").forEach { leaked ->
+            assertTrue("复制报告不应包含敏感片段：$leaked", !report.contains(leaked))
+        }
+    }
+
+    @Test
+    fun clipboardReportRedactsQuotedSensitiveValuesContainingSpaces() {
+        val report = sanitizeClipboardReportText(
+            """
+            password="alpha beta gamma"
+            {"token":"secret value with spaces","authorization":"Bearer raw token"}
+            credential='one two three'
+            """.trimIndent()
+        )
+
+        assertTrue("带空格的引号敏感值应整体脱敏", report.contains("[已脱敏]"))
+        listOf("alpha", "beta", "gamma", "secret value", "raw token", "one two three").forEach { leaked ->
+            assertTrue("剪贴板报告不应残留敏感片段：$leaked", !report.contains(leaked))
+        }
+    }
+
+    @Test
+    fun clipboardReportRedactsCommonCredentialHeadersAndAliases() {
+        val report = sanitizeClipboardReportText(
+            """
+            Authorization: Basic dXNlcjpwYXNz
+            X-Api-Key: key with spaces
+            Cookie: session=abc; refresh=def
+            Set-Cookie: session=secret-cookie
+            api_key="quoted api key"
+            access_token=access-secret
+            """.trimIndent()
+        )
+
+        assertTrue("常见凭证头和别名应被脱敏", report.contains("[已脱敏]"))
+        listOf(
+            "dXNlcjpwYXNz",
+            "key with spaces",
+            "session=abc",
+            "refresh=def",
+            "secret-cookie",
+            "quoted api key",
+            "access-secret"
+        ).forEach { leaked ->
+            assertTrue("剪贴板报告不应残留常见凭证片段：$leaked", !report.contains(leaked))
+        }
     }
 
     @Test

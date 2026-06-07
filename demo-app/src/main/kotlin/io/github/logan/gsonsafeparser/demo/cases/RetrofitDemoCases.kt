@@ -43,9 +43,7 @@ import io.github.logan.gsonsafeparser.parseSafe
 import io.github.logan.gsonsafeparser.retrofit.GsonSafeConverterFactory
 import io.github.logan.gsonsafeparser.demo.model.*
 import io.github.logan.gsonsafeparser.demo.support.*
-import okhttp3.MediaType
 import okhttp3.RequestBody
-import okhttp3.ResponseBody
 import okio.Buffer
 import org.json.JSONArray
 import org.json.JSONObject
@@ -332,7 +330,7 @@ internal fun retrofitCreateWithGsonAndConfigCase(): DemoCase = DemoCase(
         emptyArray(),
         retrofit
     )
-    val value = converter?.convert(ResponseBody.create(MediaType.parse("application/json"), ""))
+    val value = converter?.convert("".toResponseBody())
     val pass = value == null
     DemoRunResult(
         pass = pass,

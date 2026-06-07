@@ -16,6 +16,10 @@ The default policy remains `ShapeCoercionPolicy.Disabled`. Coercion runs only wh
 4. Adds `@SafeParseDisableShapeCoercion` for keeping one field on the original fallback behavior even when global coercion is enabled.
 5. Adds `ShapeCoercion` events and reports `shapeCoercionAction`, field path, and discarded item count in contract reports and observer failure reports.
 6. Root objects, root collections, root object arrays, maps, string re-parsing, numbers, booleans, transport failures, and fatal failures are not coerced.
+7. Adds the CI OSV dependency vulnerability scan gate and pins the scanner action to a concrete valid version.
+8. Keeps the Retrofit module on the `Retrofit 2.8.1` API while publishing the `OkHttp 4.12.0` and `Okio 3.6.0` network-stack safety baseline.
+9. Redacts Maven Central deployment failure responses before logging and redacts Demo clipboard reports before copying them.
+10. Adds the `maxRawJsonCaptureBytesTooLarge` diagnostic for unsafe raw JSON capture limits.
 
 ## Usage
 
@@ -59,8 +63,9 @@ data class ApiResponse(
 1. The feature is disabled by default. Without `withShapeCoercionPolicy(...)`, previous parsing results should not change.
 2. Published artifacts remain Android AARs.
 3. The verified matrix remains `minSdk 23`, `compileSdk 36`, `JDK 17`, `Kotlin 2.0.21`, `kotlin-reflect 2.0.21`, and `Gson 2.13.2`.
-4. The Retrofit module is still verified with `Retrofit 2.8.1`.
+4. The Retrofit module is still verified with `Retrofit 2.8.1`, and it explicitly publishes `OkHttp 4.12.0` and `Okio 3.6.0` to prevent dependency resolution from falling back to Retrofit 2.8.1's old OkHttp / Okio transitive baseline.
 5. Release builds with R8 / ProGuard still need business model field names, constructors, and Kotlin Metadata keep rules.
+6. If your app already owns OkHttp or Okio, run `./gradlew dependencyInsight --dependency okhttp` and `./gradlew dependencyInsight --dependency okio` before publishing, then verify offline, cancellation, connection reset, TLS failure, and raw JSON capture regressions.
 
 ## Release Verification
 
@@ -79,5 +84,9 @@ Before publishing, this release should be checked with:
 11. demo debug and release APK builds.
 12. `publishToMavenLocal`.
 13. Maven local AAR, POM, sources, Dokka javadoc, and consumer ProGuard rule verification.
-14. `releaseToMavenCentral --dry-run`.
-15. `git diff --check`.
+14. retrofit POM dependency checks for `okhttp 4.12.0` and `okio 3.6.0`.
+15. OSV dependency vulnerability scan.
+16. Maven Central deployment response redaction and Demo clipboard report redaction.
+17. `maxRawJsonCaptureBytesTooLarge` diagnostics.
+18. `releaseToMavenCentral --dry-run`.
+19. `git diff --check`.

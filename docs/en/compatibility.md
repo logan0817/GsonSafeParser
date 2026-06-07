@@ -8,7 +8,7 @@ Start with the short version:
 
 1. The published artifacts are Android AARs, not plain JVM jars.
 2. The recommended integration baseline is `minSdk 23`, `compileSdk 36`, `JDK 17`, `Kotlin 2.0.21`, and `Gson 2.13.2`.
-3. The Retrofit module is verified with `Retrofit 2.8.1`.
+3. The Retrofit module is verified with `Retrofit 2.8.1`, and it explicitly publishes the `OkHttp 4.12.0` and `Okio 3.6.0` safety baseline.
 4. Retrofit network or transport read failures are not JSON mismatches or empty responses; do not hide them with `emptyResponsePolicy`.
 5. Legacy projects should not go straight to production. Validate them against the matrix below first.
 
@@ -27,6 +27,8 @@ Start with the short version:
 | Gson | `Gson 2.13.2` | Core dependency | A forced downgrade may break GsonBuilder internal-field snapshots, causing Safe Adapters to fall back to native Gson. | Use `Gson 2.13.2`; run `diagnostics()` after overriding. |
 | Retrofit | `Retrofit 2.8.1` | Retrofit module dependency | Older versions may differ in Converter APIs. | Do not go below `2.8.1` for Retrofit integration. |
 | `converter-gson` | `2.8.1` | Retrofit implementation detail | If it differs from the main Retrofit version, converter behavior may differ. | Keep Retrofit and converter-gson aligned. |
+| OkHttp | `OkHttp 4.12.0` | Retrofit network-stack safety baseline | Retrofit 2.8.1 can otherwise resolve back to OkHttp 3.14.x through transitive dependencies. | Let Gradle resolve to `4.12.0` or later, then check with `dependencyInsight --dependency okhttp`. |
+| Okio | `Okio 3.6.0` | Retrofit network-stack safety baseline | Okio 1.x with OkHttp 4.x is outside the verified matrix. | Let Gradle resolve to `3.6.0` or later, then check with `dependencyInsight --dependency okio`. |
 | R8 / ProGuard | Framework rules bundled in AAR | Release stability boundary | If business model field names, constructors, or Kotlin Metadata are stripped, Gson binding changes. | Configure business model keep rules for release builds. |
 
 ## 2. Legacy Project Decision Table
@@ -41,7 +43,7 @@ Start with the short version:
 
 ## 3. Retrofit Version Notes
 
-`gson-safe-parser-retrofit` exposes `Retrofit 2.8.1`.
+`gson-safe-parser-retrofit` exposes `Retrofit 2.8.1`, `OkHttp 4.12.0`, and `Okio 3.6.0`. This keeps the Retrofit 2.x Converter API while preventing consumers that do not declare a network stack from resolving back to Retrofit 2.8.1's OkHttp 3.14.x / Okio 1.x transitive baseline.
 
 If your project already uses a newer Retrofit version, Gradle can usually resolve to the newer version. Before production, verify 4 things:
 
@@ -49,6 +51,8 @@ If your project already uses a newer Retrofit version, Gradle can usually resolv
 2. Empty-body policy matches expectations.
 3. Offline state, request cancellation, connection reset, and TLS failures return to Retrofit / OkHttp error handling and are not recorded as `EmptyResponse`, `RawJsonCaptureSkipped`, or `TypeMismatch`.
 4. Raw JSON capture and oversized-body skip events behave as expected.
+
+If your project already owns OkHttp 5 or another unified network stack, first run `./gradlew dependencyInsight --dependency okhttp` and `./gradlew dependencyInsight --dependency okio` to confirm the final dependency resolution, then rerun offline, cancellation, connection reset, TLS failure, and raw JSON capture regressions.
 
 This release does not upgrade Retrofit right before publishing, because that could introduce new Retrofit / OkHttp behavior changes.
 

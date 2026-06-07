@@ -22,6 +22,7 @@ Run this checklist before publishing `1.0.3`. The goal is to verify Android AAR 
   --warning-mode=fail
 ./gradlew verifyMavenLocalPublicationArtifacts --warning-mode=fail
 ./gradlew releaseToMavenCentral --dry-run --warning-mode=fail
+osv-scanner --recursive .
 git diff --check
 ```
 
@@ -34,8 +35,9 @@ Expected result:
 6. Dokka javadoc.jar is generated offline and does not depend on external package-list URLs.
 7. `verifyMavenLocalPublicationArtifacts` reuses the CI checks for AAR, POM, sources, javadoc, and demo release merged ProGuard configuration.
 8. `releaseToMavenCentral --dry-run` verifies the remote release task graph, signing task wiring, and `clean` ordering.
-9. `git diff --check` reports no whitespace formatting issues.
-10. The build emits no Gradle warning, Kotlin warning, or configuration-time classpath resolution warning.
+9. The OSV dependency vulnerability scan reports no release-blocking findings; CI runs the same gate through `google/osv-scanner-action@v2.3.8`.
+10. `git diff --check` reports no whitespace formatting issues.
+11. The build emits no Gradle warning, Kotlin warning, or configuration-time classpath resolution warning.
 
 ## 2. AAR Artifact Checks
 
@@ -46,6 +48,7 @@ Local Maven artifacts are verified by `verifyMavenLocalPublicationArtifacts` and
 4. The AAR contains `classes.jar`, `proguard.txt`, `META-INF/LICENSE`, and `META-INF/NOTICE`.
 5. `sources.jar` and `javadoc.jar` exist, and the javadoc jar contains Dokka `index.html`.
 6. The retrofit POM depends on `gson-safe-parser-core` with the same release version.
+7. The retrofit POM keeps `okhttp 4.12.0` and `okio 3.6.0` dependencies and does not fall back to Retrofit 2.8.1's old transitive baseline.
 
 ## 3. ProGuard And Legacy Integration Checks
 
@@ -70,6 +73,8 @@ Before publishing, confirm:
 10. `docs/release-notes-1.0.1.md` and `docs/en/release-notes-1.0.1.md` keep the historical stabilization fixes, compatibility boundaries, and release verification.
 11. `docs/release-notes-1.0.0.md` and `docs/en/release-notes-1.0.0.md` keep the initial capabilities, compatibility boundaries, and release verification.
 12. `README.md`, `README_EN.md`, `docs/compatibility.md`, `docs/en/compatibility.md`, `docs/troubleshooting.md`, and `docs/en/troubleshooting.md` all state that network or transport read failures return to Retrofit / OkHttp and must not be hidden with `emptyResponsePolicy`.
+13. `README.md`, `README_EN.md`, `docs/compatibility.md`, and `docs/en/compatibility.md` document the Retrofit network-stack safety baseline, `OkHttp 4.12.0`, `Okio 3.6.0`, `dependencyInsight`, and dependency resolution verification.
+14. `CHANGELOG.md`, the bilingual 1.0.3 release notes, and this checklist record OSV, Maven Central response redaction, Demo clipboard redaction, `maxRawJsonCaptureBytesTooLarge`, and the OkHttp / Okio baseline.
 
 ## 5. Before Remote Publication
 

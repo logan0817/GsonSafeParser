@@ -47,6 +47,47 @@ val centralPublishingType = providers.gradleProperty("centralPublishingType")
     .orElse(providers.environmentVariable("CENTRAL_PUBLISHING_TYPE"))
     .orElse("user_managed")
 
+fun sanitizeMavenCentralResponseBody(responseBody: String): String {
+    if (responseBody.isBlank()) {
+        return "Central Portal deployment response redacted: <empty>"
+    }
+    val compactBody = responseBody.lineSequence()
+        .map { line -> line.trim() }
+        .filter { line -> line.isNotEmpty() }
+        .joinToString(separator = " ")
+    val sensitiveKeyPattern = "(?:password|token|secret|authorization|credential|api[_-]?key|x-api-key|cookie|set-cookie)"
+    val longSensitiveKeyPattern = "(?:authorization|credential|api[_-]?key|x-api-key|cookie|set-cookie)"
+    val bearerRedacted = Regex("(?i)((?:Bearer|Basic)\\s+)[A-Za-z0-9._~+/=-]+")
+        .replace(compactBody) { match -> "${match.groupValues[1]}[redacted]" }
+    val doubleQuotedValueRedacted = Regex(
+        "(?i)(\"?$sensitiveKeyPattern\"?\\s*[:=]\\s*\")((?:\\\\.|[^\"\\\\])*)(\")"
+    ).replace(bearerRedacted) { match ->
+        "${match.groupValues[1]}[redacted]${match.groupValues[3]}"
+    }
+    val singleQuotedValueRedacted = Regex(
+        "(?i)(\"?$sensitiveKeyPattern\"?\\s*[:=]\\s*')((?:\\\\.|[^'\\\\])*)(')"
+    ).replace(doubleQuotedValueRedacted) { match ->
+        "${match.groupValues[1]}[redacted]${match.groupValues[3]}"
+    }
+    val longUnquotedValueRedacted = Regex(
+        "(?i)(\"?$longSensitiveKeyPattern\"?\\s*[:=]\\s*)([^\"'\\n{}]+)"
+    ).replace(singleQuotedValueRedacted) { match ->
+        "${match.groupValues[1]}[redacted]"
+    }
+    val keyValueRedacted = Regex(
+        "(?i)(\"?$sensitiveKeyPattern\"?\\s*[:=]\\s*)([^\"'\\s,;{}]+)"
+    ).replace(longUnquotedValueRedacted) { match ->
+        "${match.groupValues[1]}[redacted]"
+    }
+    val maxExcerptChars = 1024
+    val excerpt = if (keyValueRedacted.length > maxExcerptChars) {
+        keyValueRedacted.take(maxExcerptChars) + "...<truncated>"
+    } else {
+        keyValueRedacted
+    }
+    return "Central Portal deployment response redacted. Sanitized excerpt: $excerpt"
+}
+
 fun Project.remoteMavenPublicationRequested(): Boolean =
     gradle.taskGraph.allTasks.any { task ->
         task.name.startsWith("publish") &&
@@ -284,6 +325,12 @@ tasks.register("verifyMavenLocalPublicationArtifacts") {
         require(pomDependencyVersion(retrofitPom, "gson-safe-parser-core") == versionValue) {
             "Retrofit POM must depend on gson-safe-parser-core $versionValue"
         }
+        require(pomDependencyVersion(retrofitPom, "okhttp") == "4.12.0") {
+            "Retrofit POM must depend on okhttp 4.12.0"
+        }
+        require(pomDependencyVersion(retrofitPom, "okio") == "3.6.0") {
+            "Retrofit POM must depend on okio 3.6.0"
+        }
 
         val demoConfig = file("demo-app/build/outputs/mapping/release/configuration.txt")
         requireFile(demoConfig)
@@ -417,7 +464,7 @@ tasks.register("uploadMavenCentralDeployment") {
         if (responseCode !in 200..299) {
             throw GradleException(
                 "Central Portal deployment creation failed with HTTP $responseCode. " +
-                    "Response body: ${responseBody.ifBlank { "<empty>" }}"
+                    sanitizeMavenCentralResponseBody(responseBody)
             )
         }
 

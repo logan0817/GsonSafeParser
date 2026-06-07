@@ -17,6 +17,8 @@ import okhttp3.RequestBody
 import okhttp3.ResponseBody
 import okio.Buffer
 import okio.BufferedSource
+import okio.ForwardingSource
+import okio.buffer
 import retrofit2.Converter
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -28,7 +30,6 @@ import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Type
 import java.net.ProtocolException
 import java.net.SocketException
-import java.nio.charset.Charset
 import java.util.Collections
 import java.util.Locale
 import java.util.concurrent.CancellationException
@@ -365,35 +366,15 @@ private fun ResponseBody.markTransportIoFailures(): ResponseBody {
 @OptIn(GsonSafeParserLowLevelApi::class)
 private fun BufferedSource.markTransportIoFailures(): BufferedSource {
     val upstream = this
-    return object : BufferedSource by upstream {
-        override fun request(byteCount: Long): Boolean {
-            return markTransportIoFailure { upstream.request(byteCount) }
-        }
-
+    return object : ForwardingSource(upstream) {
         override fun read(sink: Buffer, byteCount: Long): Long {
-            return markTransportIoFailure { upstream.read(sink, byteCount) }
+            return markTransportIoFailure { super.read(sink, byteCount) }
         }
 
-        override fun readString(charset: Charset): String {
-            return markTransportIoFailure { upstream.readString(charset) }
+        override fun close() {
+            markTransportIoFailure { super.close() }
         }
-
-        override fun readUtf8(): String {
-            return markTransportIoFailure { upstream.readUtf8() }
-        }
-
-        override fun readByteArray(): ByteArray {
-            return markTransportIoFailure { upstream.readByteArray() }
-        }
-
-        override fun peek(): BufferedSource {
-            return markTransportIoFailure { upstream.peek().markTransportIoFailures() }
-        }
-
-        override fun inputStream(): InputStream {
-            return upstream.inputStream().markTransportIoFailures()
-        }
-    }
+    }.buffer()
 }
 
 private fun InputStream.markTransportIoFailures(): InputStream {

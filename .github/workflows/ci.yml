@@ -30,6 +30,13 @@ jobs:
       - name: Install Android SDK packages
         run: sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
 
+      - name: Run dependency vulnerability scan
+        uses: google/osv-scanner-action@v2.3.8
+        with:
+          scan-args: |-
+            --recursive
+            .
+
       - name: Run library unit tests
         run: ./gradlew :gson-safe-parser-core:testDebugUnitTest :gson-safe-parser-retrofit:testDebugUnitTest --rerun-tasks --warning-mode=fail
 

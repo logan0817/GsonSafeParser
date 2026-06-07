@@ -15,6 +15,7 @@ import io.github.logan.gsonsafeparser.demo.databinding.IncludeOutputPreviewPanel
 import io.github.logan.gsonsafeparser.demo.databinding.IncludeResultPanelBinding
 import io.github.logan.gsonsafeparser.demo.support.buildOutputBlockPreview
 import io.github.logan.gsonsafeparser.demo.support.cleanDisplayText
+import io.github.logan.gsonsafeparser.demo.support.sanitizeClipboardReportText
 
 internal data class DemoOutputPanelState(
     val statusText: String,
@@ -173,7 +174,9 @@ internal class DemoOutputPanelController(
         detailBinding.detailContentView.text = cleanDisplayText(content)
         detailBinding.copySectionButton.setOnClickListener {
             val clipboard = activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            clipboard.setPrimaryClip(ClipData.newPlainText(title, detailBinding.detailContentView.text))
+            clipboard.setPrimaryClip(
+                ClipData.newPlainText(title, sanitizeClipboardReportText(detailBinding.detailContentView.text.toString()))
+            )
             Toast.makeText(activity, activity.getString(R.string.demo_copy_section_toast), Toast.LENGTH_SHORT).show()
         }
         detailBinding.closeDetailButton.setOnClickListener {

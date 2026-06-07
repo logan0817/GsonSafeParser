@@ -24,6 +24,7 @@ import io.github.logan.gsonsafeparser.demo.ui.DemoOutputPanelController
 import io.github.logan.gsonsafeparser.demo.ui.DemoOutputPanelState
 import io.github.logan.gsonsafeparser.demo.support.formatJsonForDisplay
 import io.github.logan.gsonsafeparser.demo.support.normalizeReportText
+import io.github.logan.gsonsafeparser.demo.support.sanitizeClipboardReportText
 import io.github.logan.gsonsafeparser.demo.support.cleanDisplayText
 import io.github.logan.gsonsafeparser.demo.support.shouldShowModelDefaultValueNote
 import java.util.Locale
@@ -419,14 +420,18 @@ class MainActivity : Activity() {
         return buildString {
             appendLine("${if (isChineseDemo()) "用例" else "Case"}：$currentCaseTitle")
             appendLine("${if (isChineseDemo()) "状态" else "Status"}：${localizedPassLabel(result.pass)}")
-            appendSection(getString(R.string.demo_input_json_section), binding.jsonInput.text.toString())
-            appendSection(getString(R.string.demo_actual_output_section), localizeTechnicalText(result.actual))
-            appendSection(getString(R.string.demo_expected_output_section), localizeTechnicalText(result.expected))
-            appendSection(getString(R.string.demo_events_section), localizeTechnicalText(result.events))
-            appendSection(getString(R.string.demo_contract_section), localizeTechnicalText(result.contractReport))
-            appendSection(getString(R.string.demo_observer_section), localizeTechnicalText(result.observerReport))
-            appendSection(getString(R.string.demo_diagnostics_section), localizeTechnicalText(result.diagnostics))
-            appendSection(getString(R.string.demo_error_section), localizeTechnicalText(result.error ?: getString(R.string.demo_no_exception)))
+            appendSection(getString(R.string.demo_input_json_section), binding.jsonInput.text.toString(), redactForClipboard = true)
+            appendSection(getString(R.string.demo_actual_output_section), localizeTechnicalText(result.actual), redactForClipboard = true)
+            appendSection(getString(R.string.demo_expected_output_section), localizeTechnicalText(result.expected), redactForClipboard = true)
+            appendSection(getString(R.string.demo_events_section), localizeTechnicalText(result.events), redactForClipboard = true)
+            appendSection(getString(R.string.demo_contract_section), localizeTechnicalText(result.contractReport), redactForClipboard = true)
+            appendSection(getString(R.string.demo_observer_section), localizeTechnicalText(result.observerReport), redactForClipboard = true)
+            appendSection(getString(R.string.demo_diagnostics_section), localizeTechnicalText(result.diagnostics), redactForClipboard = true)
+            appendSection(
+                getString(R.string.demo_error_section),
+                localizeTechnicalText(result.error ?: getString(R.string.demo_no_exception)),
+                redactForClipboard = true
+            )
         }.trimEnd()
     }
 
@@ -569,7 +574,7 @@ class MainActivity : Activity() {
         return buildString {
             appendLine("${if (isChineseDemo()) "用例" else "Case"}：$currentCaseTitle")
             appendLine("${if (isChineseDemo()) "状态" else "Status"}：${getString(R.string.demo_status_pending)}")
-            appendSection(getString(R.string.demo_input_json_section), formatJsonForDisplay(json))
+            appendSection(getString(R.string.demo_input_json_section), formatJsonForDisplay(json), redactForClipboard = true)
         }.trimEnd()
     }
 
@@ -592,14 +597,18 @@ class MainActivity : Activity() {
                 appendLine("${index + 1}. ${localizedPassLabel(result.pass)} - ${localizedCaseTitle(demoCase)}")
                 appendSection("Feature category:", localizeTechnicalText(demoCase.category))
                 appendSection("Covered API:", demoCase.entryPoint)
-                appendSection("Input JSON:", demoCase.defaultJson.ifBlank { "<empty response>" })
-                appendSection("Expected result:", localizeTechnicalText(result.expected))
-                appendSection("Parsed output:", localizeTechnicalText(result.actual))
-                appendSection("Event stream:", localizeTechnicalText(result.events))
-                appendSection("Contract report:", localizeTechnicalText(result.contractReport))
-                appendSection("Observer failure report:", localizeTechnicalText(result.observerReport))
-                appendSection("Diagnostics:", localizeTechnicalText(result.diagnostics))
-                appendSection("Exception details:", localizeTechnicalText(result.error ?: getString(R.string.demo_no_exception)))
+                appendSection("Input JSON:", demoCase.defaultJson.ifBlank { "<empty response>" }, redactForClipboard = true)
+                appendSection("Expected result:", localizeTechnicalText(result.expected), redactForClipboard = true)
+                appendSection("Parsed output:", localizeTechnicalText(result.actual), redactForClipboard = true)
+                appendSection("Event stream:", localizeTechnicalText(result.events), redactForClipboard = true)
+                appendSection("Contract report:", localizeTechnicalText(result.contractReport), redactForClipboard = true)
+                appendSection("Observer failure report:", localizeTechnicalText(result.observerReport), redactForClipboard = true)
+                appendSection("Diagnostics:", localizeTechnicalText(result.diagnostics), redactForClipboard = true)
+                appendSection(
+                    "Exception details:",
+                    localizeTechnicalText(result.error ?: getString(R.string.demo_no_exception)),
+                    redactForClipboard = true
+                )
             }
         }.trimEnd()
     }
@@ -619,10 +628,11 @@ class MainActivity : Activity() {
      *
      * 内容直接从行首开始追加，不使用 Kotlin 三引号模板，避免多行 JSON 让整段文本带上模板缩进。
      */
-    private fun StringBuilder.appendSection(title: String, body: String) {
+    private fun StringBuilder.appendSection(title: String, body: String, redactForClipboard: Boolean = false) {
         if (isNotEmpty()) appendLine().appendLine()
         appendLine(title)
-        appendLine(normalizeReportText(cleanDisplayText(body)))
+        val normalized = normalizeReportText(cleanDisplayText(body))
+        appendLine(if (redactForClipboard) sanitizeClipboardReportText(normalized) else normalized)
     }
 
     private fun localizedPassLabel(pass: Boolean): String {
