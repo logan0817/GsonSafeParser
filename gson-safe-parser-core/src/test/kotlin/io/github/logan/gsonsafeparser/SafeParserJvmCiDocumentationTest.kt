@@ -205,7 +205,7 @@ class SafeParserJvmCiDocumentationTest {
             { assertTrue(publicBehaviorDocs.contains("`Strict` 优先级最高")) },
             { assertTrue(publicBehaviorDocs.contains("Gson fallback path")) },
             { assertTrue(publicBehaviorDocs.contains("RequiredConstructorParameterPolicy.GsonCompatible")) },
-            { assertTrue(publicBehaviorDocs.contains("MapItemKeyPolicy.Hash")) },
+            { assertTrue(publicBehaviorDocs.contains("MapItemKeyPolicy.Omit")) },
             { assertTrue(publicBehaviorDocs.contains("ShapeCoercionPolicy.Disabled")) },
             { assertTrue(publicBehaviorDocs.contains("ShapeCoercionPolicy.ObjectAndCollection")) },
             { assertTrue(publicBehaviorDocs.contains("@SafeParseShapeCoercion")) },

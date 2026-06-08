@@ -144,6 +144,7 @@ class GsonSafeDiagnosticsTest {
             .map { it.name }
 
         assertTrue("skippedPlatformTypePrefixes" in warnings)
+        assertTrue("rawJsonCaptureEnabled" in warnings)
         assertTrue("maxRawJsonCaptureBytes" in warnings)
         assertFalse(diagnostics.hasErrors)
     }

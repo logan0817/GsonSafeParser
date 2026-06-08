@@ -31,7 +31,7 @@ class SafeParserPresetConfigTest {
         assertEquals(EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly, config.emptyResponsePolicy)
         assertEquals(NullValuePolicy.WriteExplicitNulls, config.nullValuePolicy)
         assertEquals(RequiredConstructorParameterPolicy.GsonCompatible, config.requiredConstructorParameterPolicy)
-        assertEquals(MapItemKeyPolicy.Hash, config.mapItemKeyPolicy)
+        assertEquals(MapItemKeyPolicy.Omit, config.mapItemKeyPolicy)
         assertFalse(config.useJdkUnsafe)
     }
 
@@ -50,7 +50,7 @@ class SafeParserPresetConfigTest {
         assertEquals(EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly, config.emptyResponsePolicy)
         assertEquals(NullValuePolicy.WriteExplicitNulls, config.nullValuePolicy)
         assertEquals(RequiredConstructorParameterPolicy.GsonCompatible, config.requiredConstructorParameterPolicy)
-        assertEquals(MapItemKeyPolicy.Hash, config.mapItemKeyPolicy)
+        assertEquals(MapItemKeyPolicy.Omit, config.mapItemKeyPolicy)
         assertFalse(config.useJdkUnsafe)
         assertFalse(config.captureRawJsonInCallbacks)
         assertFalse(diagnostics.checks.any { it.name == "skippedPlatformTypePrefixes" })

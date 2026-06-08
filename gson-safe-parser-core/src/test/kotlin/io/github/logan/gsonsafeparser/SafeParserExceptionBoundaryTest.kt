@@ -117,6 +117,10 @@ class SafeParserExceptionBoundaryTest {
         val values: List<StreamResetValue> = emptyList()
     )
 
+    data class StreamResetArrayContainer(
+        val values: Array<StreamResetValue> = emptyArray()
+    )
+
     data class StreamResetMapContainer(
         val values: Map<String, StreamResetValue> = emptyMap()
     )
@@ -152,6 +156,10 @@ class SafeParserExceptionBoundaryTest {
 
     data class EnumContainer(
         val value: BoundaryEnum = BoundaryEnum.OK
+    )
+
+    data class EnumArrayContainer(
+        val values: Array<BoundaryEnum> = emptyArray()
     )
 
     enum class BoundaryEnum {
@@ -524,6 +532,52 @@ class SafeParserExceptionBoundaryTest {
     }
 
     /**
+     * A marked stream reset inside an object array is still transport I/O, not an array shape fallback.
+     */
+    @Test
+    fun `marked array item stream reset is rethrown without mismatch event`() {
+        val events = mutableListOf<TypeMismatchEvent>()
+        val config = SafeParserConfig(onTypeMismatch = events::add)
+        val gson = GsonSafeParser.create(config)
+
+        TransportIoContext.withTransportIoMarkers {
+            assertThrows(IOException::class.java) {
+                GsonSafeParser.fromJson<StreamResetArrayContainer>(
+                    gson = gson,
+                    json = """{"values":["remote"]}""",
+                    type = StreamResetArrayContainer::class.java,
+                    config = config
+                )
+            }
+        }
+
+        assertTrue(events.isEmpty())
+    }
+
+    /**
+     * Root object arrays use SafeArrayAdapterFactory too, so transport I/O must not be wrapped as JsonIOException.
+     */
+    @Test
+    fun `marked root array stream reset is rethrown without mismatch event`() {
+        val events = mutableListOf<TypeMismatchEvent>()
+        val config = SafeParserConfig(onTypeMismatch = events::add)
+        val gson = GsonSafeParser.create(config)
+
+        TransportIoContext.withTransportIoMarkers {
+            assertThrows(IOException::class.java) {
+                GsonSafeParser.fromJson<Array<StreamResetValue>>(
+                    gson = gson,
+                    json = """["remote"]""",
+                    type = Array<StreamResetValue>::class.java,
+                    config = config
+                )
+            }
+        }
+
+        assertTrue(events.isEmpty())
+    }
+
+    /**
      * A marked stream reset inside one map value must not be hidden as a malformed map entry.
      */
     @Test
@@ -574,6 +628,41 @@ class SafeParserExceptionBoundaryTest {
                 gson = gson,
                 json = """{"value":"remote"}""",
                 type = StreamResetFieldContainer::class.java,
+                config = config
+            )
+        }
+
+        assertTrue(events.isEmpty())
+    }
+
+    /**
+     * Interrupted I/O from an array item must keep the original transport/control-flow signal.
+     */
+    @Test
+    fun `array item interrupted io is rethrown without mismatch event`() {
+        val events = mutableListOf<TypeMismatchEvent>()
+        val config = SafeParserConfig(onTypeMismatch = events::add)
+        val gson = GsonBuilder()
+            .registerTypeAdapter(
+                StreamResetValue::class.java,
+                object : TypeAdapter<StreamResetValue>() {
+                    override fun write(out: JsonWriter, value: StreamResetValue?) {
+                        out.value(value?.text)
+                    }
+
+                    override fun read(reader: JsonReader): StreamResetValue {
+                        throw InterruptedIOException("socket timeout")
+                    }
+                }
+            )
+            .enableSafeParser(config)
+            .create()
+
+        assertThrows(InterruptedIOException::class.java) {
+            GsonSafeParser.fromJson<StreamResetArrayContainer>(
+                gson = gson,
+                json = """{"values":["remote"]}""",
+                type = StreamResetArrayContainer::class.java,
                 config = config
             )
         }
@@ -716,6 +805,30 @@ class SafeParserExceptionBoundaryTest {
 
         assertThrows(LinkageError::class.java) {
             gson.fromJson("""{"value":"OK"}""", EnumContainer::class.java)
+        }
+
+        assertTrue(events.isEmpty())
+    }
+
+    /**
+     * JsonParseException raised while reading an array item may still wrap a fatal cause.
+     */
+    @Test
+    fun `array item wrapped fatal is rethrown as fatal cause without mismatch event`() {
+        val events = mutableListOf<TypeMismatchEvent>()
+        val config = SafeParserConfig(onTypeMismatch = events::add)
+        val gson = GsonBuilder()
+            .registerTypeAdapterFactory(WrappedFatalEnumAdapterFactory())
+            .enableSafeParser(config)
+            .create()
+
+        assertThrows(LinkageError::class.java) {
+            GsonSafeParser.fromJson<EnumArrayContainer>(
+                gson = gson,
+                json = """{"values":["OK"]}""",
+                type = EnumArrayContainer::class.java,
+                config = config
+            )
         }
 
         assertTrue(events.isEmpty())

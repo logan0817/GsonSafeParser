@@ -404,6 +404,8 @@ class OpenSourcePublicationTest {
         assertTrue(releaseDocs.contains("剪贴板") || releaseDocs.contains("clipboard"))
         assertTrue(releaseDocs.contains("脱敏") || releaseDocs.contains("redaction"))
         assertTrue(releaseDocs.contains("maxRawJsonCaptureBytesTooLarge"))
+        assertTrue(releaseDocs.contains("rawJsonCaptureEnabled"))
+        assertTrue(releaseDocs.contains("MapItemKeyPolicy.Hash"))
         assertTrue(releaseDocs.contains("OkHttp 4.12.0"))
         assertTrue(releaseDocs.contains("Okio 3.6.0"))
         assertTrue(releaseChecklist.contains("osv-scanner") || releaseChecklist.contains("OSV"))
@@ -466,6 +468,33 @@ class OpenSourcePublicationTest {
         assertTrue(rootBuildFile.contains("fun sanitizeMavenCentralResponseBody("))
         assertTrue(rootBuildFile.contains("Central Portal deployment response redacted"))
         assertTrue(!rootBuildFile.contains("Response body: \${responseBody"))
+    }
+
+    /**
+     * 发布任务携带 Maven Central 凭据，覆盖上传端点时必须先做 host 和 https 校验。
+     */
+    @Test
+    fun `maven central publishing rejects unsafe custom endpoints before credentials`() {
+        val rootBuildFile = File("../build.gradle.kts").readText()
+
+        val validationIndex = rootBuildFile.indexOf("fun validateCentralPortalBaseUrl(")
+        val releaseRepositoryIndex = rootBuildFile.indexOf("url = uri(validateCentralPortalBaseUrl(centralRepositoryUrl.get()))")
+        val repositoryCredentialsIndex = rootBuildFile.indexOf("credentials {")
+        val taskGraphValidationIndex = rootBuildFile.indexOf("gradle.taskGraph.whenReady")
+        val uploadUrlIndex = rootBuildFile.indexOf("val uploadUrl = validateCentralPortalBaseUrl(")
+        val authHeaderIndex = rootBuildFile.indexOf("connection.setRequestProperty(\"Authorization\"")
+
+        assertTrue(validationIndex >= 0)
+        assertTrue(releaseRepositoryIndex >= 0)
+        assertTrue(repositoryCredentialsIndex > releaseRepositoryIndex)
+        assertTrue(taskGraphValidationIndex > validationIndex)
+        assertTrue(uploadUrlIndex >= 0)
+        assertTrue(authHeaderIndex > uploadUrlIndex)
+        assertTrue(rootBuildFile.contains("central.sonatype.com"))
+        assertFalse(rootBuildFile.contains("allowUnsafePublishingEndpoint"))
+        assertFalse(rootBuildFile.contains("ALLOW_UNSAFE_PUBLISHING_ENDPOINT"))
+        assertTrue(rootBuildFile.contains("Central Portal base URL must use HTTPS"))
+        assertTrue(rootBuildFile.contains("Central Portal base URL must use a Sonatype Central host"))
     }
 
     /**

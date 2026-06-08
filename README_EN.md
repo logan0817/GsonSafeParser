@@ -35,7 +35,7 @@ The default config is meant for existing Gson projects. The library handles only
 | `emptyResponsePolicy` | `EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly` |
 | `useJdkUnsafe` | `false` |
 | `requiredConstructorParameterPolicy` | `RequiredConstructorParameterPolicy.GsonCompatible` |
-| `mapItemKeyPolicy` | `MapItemKeyPolicy.Hash` |
+| `mapItemKeyPolicy` | `MapItemKeyPolicy.Omit` |
 
 ### Optional Capability State
 
@@ -305,7 +305,7 @@ val config = SafeParserConfig(
     skippedPlatformTypePrefixes = setOf("android."), // Skips Android platform types to avoid reflecting system objects; do not add business model package prefixes here.
     nullValuePolicy = NullValuePolicy.WriteExplicitNulls, // Writes explicit JSON null only to nullable fields.
     requiredConstructorParameterPolicy = RequiredConstructorParameterPolicy.GsonCompatible, // Keeps Gson-compatible behavior for missing non-null Kotlin constructor parameters.
-    mapItemKeyPolicy = MapItemKeyPolicy.Hash, // Emits stable hashed map item keys in events.
+    mapItemKeyPolicy = MapItemKeyPolicy.Omit, // Omits Map item keys by default; opt into Hash only when aggregation needs it.
     captureRawJsonInCallbacks = false, // Avoids attaching raw JSON to events in production.
     maxRawJsonCaptureBytes = 1024 * 1024, // Limits raw JSON capture to 1 MiB.
     onEvent = { event -> println(event) }, // Observes all unified safe parser events.
@@ -325,7 +325,7 @@ val lowInterference = SafeParserConfig.lowInterference() // Low-interference con
 
 | Preset | Best for | Main behavior | Trade-off |
 | --- | --- | --- | --- |
-| `production()` | Default production traffic. | Observes events, hashes Map item keys, and does not attach full raw JSON. | Enough signals for operations with lower memory and privacy risk. |
+| `production()` | Default production traffic. | Observes events, omits Map item keys by default, and does not attach full raw JSON. | Enough signals for operations with lower memory and privacy risk. |
 | `debug()` | Integration testing and API troubleshooting. | Uses the production read policy but attaches bounded raw JSON. | Easier diagnosis, not recommended for long-term production use. |
 | `lowInterference()` | Gradual rollout and low-interference adoption. | Whole-field, collection, and Map mismatches prefer `null`; primitives delegate to native Gson. | Closer to Gson, but fewer safe default values. |
 

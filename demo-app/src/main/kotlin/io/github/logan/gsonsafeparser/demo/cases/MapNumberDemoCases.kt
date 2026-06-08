@@ -21,6 +21,7 @@ import io.github.logan.gsonsafeparser.EmptyResponsePolicy
 import io.github.logan.gsonsafeparser.EmptyResponseEvent
 import io.github.logan.gsonsafeparser.FallbackPolicy
 import io.github.logan.gsonsafeparser.GsonSafeParser
+import io.github.logan.gsonsafeparser.MapItemKeyPolicy
 import io.github.logan.gsonsafeparser.ObserverFailureEvent
 import io.github.logan.gsonsafeparser.ParseExceptionKind
 import io.github.logan.gsonsafeparser.PrimitiveParsingPolicy
@@ -79,15 +80,18 @@ internal fun mapBadKeyNestedEntryCase(): DemoCase = DemoCase(
     capabilityIds = setOf("map-field-mismatch"),
     category = "Map",
     entryPoint = "SafeMapAdapterFactory key parsing / nested array entry",
-    description = "非 String key 解析失败时只跳过坏 entry，并把脱敏后的 mapItemKey 带到事件里；嵌套 Map 仍支持 [[key,value]] entry 形式。",
+    description = "非 String key 解析失败时只跳过坏 entry；显式开启 Hash 策略后会把脱敏后的 mapItemKey 带到事件里；嵌套 Map 仍支持 [[key,value]] entry 形式。",
     defaultJson = """{"values":{"abc":"bad","1":"ok"},"nested":{"inner":[[2,"two"]]}}""",
-    expected = "values 只保留 1=ok，事件 mapItemKey 为 sha256 哈希；nested.inner[2]=two。"
+    expected = "values 只保留 1=ok，显式 Hash 时事件 mapItemKey 为 sha256 哈希；nested.inner[2]=two。"
 ) { json ->
     val events = mutableListOf<SafeParserEvent>()
     val value = GsonSafeParser.fromJson(
         json = json,
         type = MapEdgeResponse::class.java,
-        config = SafeParserConfig(onEvent = events::add)
+        config = SafeParserConfig(
+            mapItemKeyPolicy = MapItemKeyPolicy.Hash,
+            onEvent = events::add
+        )
     )
     val badKeyEvent = events.firstNotNullOfOrNull { event ->
         event.typeMismatchDetail()?.takeIf { detail ->

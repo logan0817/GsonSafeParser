@@ -27,7 +27,7 @@ import java.math.BigDecimal
  * @property skippedPlatformTypePrefixes 默认跳过的平台类型包名前缀，例如 Android 平台对象；配置创建时会保存快照。
  * @property nullValuePolicy 后端显式返回 null 时是否写入 nullable 字段。
  * @property requiredConstructorParameterPolicy Kotlin 非空必填构造参数没有默认值时的处理策略。
- * @property mapItemKeyPolicy Map item 事件里的 key 输出策略，默认输出稳定哈希。
+ * @property mapItemKeyPolicy Map item 事件里的 key 输出策略，默认不输出 key。
  * @property captureRawJsonInCallbacks 是否在错配回调里附带原始 JSON。线上默认关闭。
  * @property maxRawJsonCaptureBytes rawJson 最大捕获长度。普通 Gson 解析按 UTF-8 字节数安全截断；
  * Retrofit 已知长度响应按 `contentLength` 判断，未知长度响应按 `max + 1` 字节有界探测，
@@ -50,7 +50,7 @@ class SafeParserConfig(
     val nullValuePolicy: NullValuePolicy = NullValuePolicy.WriteExplicitNulls,
     val requiredConstructorParameterPolicy: RequiredConstructorParameterPolicy =
         RequiredConstructorParameterPolicy.GsonCompatible,
-    val mapItemKeyPolicy: MapItemKeyPolicy = MapItemKeyPolicy.Hash,
+    val mapItemKeyPolicy: MapItemKeyPolicy = MapItemKeyPolicy.Omit,
     val captureRawJsonInCallbacks: Boolean = false,
     val maxRawJsonCaptureBytes: Int = 1024 * 1024,
     val onEvent: (SafeParserEvent) -> Unit = {},
@@ -165,7 +165,7 @@ class SafeParserConfig(
         /**
          * 线上推荐预设。
          *
-         * 使用契约优先读策略、关闭 rawJson 捕获，并默认对 Map item key 做哈希脱敏。
+         * 使用契约优先读策略、关闭 rawJson 捕获，并默认不输出 Map item key。
          *
          * @param observerPolicy 观察策略。线上通常只接结构化事件，不开启 rawJson。
          * @param emptyResponsePolicy Retrofit 空响应策略，默认只有 Unit/Void 使用空值。
@@ -173,7 +173,7 @@ class SafeParserConfig(
          */
         fun production(
             observerPolicy: SafeObserverPolicy = SafeObserverPolicy(
-                mapItemKeyPolicy = MapItemKeyPolicy.Hash
+                mapItemKeyPolicy = MapItemKeyPolicy.Omit
             ),
             emptyResponsePolicy: EmptyResponsePolicy = EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly
         ): SafeParserConfig {
@@ -187,7 +187,7 @@ class SafeParserConfig(
          */
         fun contractFirst(
             observerPolicy: SafeObserverPolicy = SafeObserverPolicy(
-                mapItemKeyPolicy = MapItemKeyPolicy.Hash
+                mapItemKeyPolicy = MapItemKeyPolicy.Omit
             ),
             emptyResponsePolicy: EmptyResponsePolicy = EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly
         ): SafeParserConfig {
@@ -371,7 +371,7 @@ data class SafeWritePolicy(
 class SafeObserverPolicy(
     val captureRawJsonInCallbacks: Boolean = false,
     val maxRawJsonCaptureBytes: Int = 1024 * 1024,
-    val mapItemKeyPolicy: MapItemKeyPolicy = MapItemKeyPolicy.Hash,
+    val mapItemKeyPolicy: MapItemKeyPolicy = MapItemKeyPolicy.Omit,
     val onEvent: (SafeParserEvent) -> Unit = {},
     val onAdapterCreationFailure: (AdapterCreationFailureEvent) -> Unit = {},
     val onTypeMismatch: (TypeMismatchEvent) -> Unit = {},
@@ -499,7 +499,7 @@ enum class RequiredConstructorParameterPolicy {
 enum class MapItemKeyPolicy {
     /** 明文输出，适合本地联调。 */
     PlainText,
-    /** 输出稳定哈希，适合线上聚合。 */
+    /** 输出稳定哈希，适合非低熵 key 的线上聚合。 */
     Hash,
     /** 不输出 key，适合高敏感场景。 */
     Omit
@@ -796,20 +796,21 @@ private fun SafeParserConfig.dispatchEvent(
     event: SafeParserEvent,
     collectForParseSafe: Boolean
 ) {
+    val safeEvent = event.withSafeReasons()
     if (collectForParseSafe) {
         // 只收集解析链路产生的真实事件；外部手动注入事件不进入 parseSafe 快照。
-        SafeParseEventContext.emit(event)
+        SafeParseEventContext.emit(safeEvent)
     }
     // 每个观察者独立执行，一个回调坏了不能影响另一个回调，更不能影响主解析流程。
-    notifyObserver("onEvent", event) {
-        onEvent(event)
+    notifyObserver("onEvent", safeEvent) {
+        onEvent(safeEvent)
     }
-    when (event) {
-        is SafeParserEvent.TypeMismatch -> notifyObserver("onTypeMismatch", event) {
-            onTypeMismatch(event.detail)
+    when (safeEvent) {
+        is SafeParserEvent.TypeMismatch -> notifyObserver("onTypeMismatch", safeEvent) {
+            onTypeMismatch(safeEvent.detail)
         }
-        is SafeParserEvent.AdapterCreationFailure -> notifyObserver("onAdapterCreationFailure", event) {
-            onAdapterCreationFailure(event.detail)
+        is SafeParserEvent.AdapterCreationFailure -> notifyObserver("onAdapterCreationFailure", safeEvent) {
+            onAdapterCreationFailure(safeEvent.detail)
         }
         is SafeParserEvent.ShapeCoercion,
         is SafeParserEvent.EmptyResponse,
@@ -837,7 +838,7 @@ private fun SafeParserConfig.notifyObserver(
                 callbackName = callbackName,
                 eventName = sourceEvent.eventName,
                 sourceEvent = sourceEvent,
-                reason = error.message ?: error.javaClass.name,
+                reason = (error.message ?: error.javaClass.name).safeEventReason(),
                 error = error
             )
         )
@@ -855,6 +856,55 @@ private fun SafeParserConfig.notifyObserverFailure(event: ObserverFailureEvent) 
         onObserverFailure(event)
     }
 }
+
+private fun SafeParserEvent.withSafeReasons(): SafeParserEvent {
+    return when (this) {
+        is SafeParserEvent.TypeMismatch -> copy(
+            detail = detail.copy(reason = detail.reason.safeEventReason())
+        )
+        is SafeParserEvent.ShapeCoercion -> copy(
+            detail = detail.copy(reason = detail.reason.safeEventReason())
+        )
+        is SafeParserEvent.AdapterCreationFailure -> copy(
+            detail = detail.copy(reason = detail.reason.safeEventReason())
+        )
+        is SafeParserEvent.EmptyResponse,
+        is SafeParserEvent.RawJsonCaptureSkipped -> this
+        else -> this
+    }
+}
+
+private fun String.safeEventReason(): String {
+    if (isBlank()) return this
+    return sensitiveReasonPatterns.fold(this) { sanitized, pattern ->
+        pattern.replace(sanitized) { match ->
+            val label = match.groups[1]?.value ?: match.value.substringBefore(match.value.last())
+            "$label[REDACTED]"
+        }
+    }
+}
+
+private val sensitiveReasonPatterns = listOf(
+    Regex(
+        pattern = "(?i)\\b(authorization\\s*:\\s*)(\"[^\"]*\"|'[^']*'|[^\\n,;]+)"
+    ),
+    Regex(
+        pattern = "(?i)\\b((?:set-cookie|cookie)\\s*:\\s*)(\"[^\"]*\"|'[^']*'|[^\\n]+)"
+    ),
+    Regex(
+        pattern = "(?i)\\b((?:bearer|basic)\\s+)((?=[A-Z0-9._~+/=-]{6,})(?=[A-Z0-9._~+/=-]*[._~+/=-])[A-Z0-9._~+/=-]+)"
+    ),
+    Regex(
+        pattern = "(?i)\\b((?:token|password|passwd|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|session[_-]?id|sid)\\s*=\\s*)(\"[^\"]*\"|'[^']*'|[^\\s,;&}]+)"
+    ),
+    Regex(
+        pattern = "(?i)(\"(?:token|password|passwd|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|session[_-]?id|sid)\"\\s*:\\s*)(\"[^\"]*\"|[^\\s,}]+)"
+    ),
+    Regex(
+        pattern = "()\\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}\\b",
+        option = RegexOption.IGNORE_CASE
+    )
+)
 
 /**
  * 本库默认的 Object 数字策略。
@@ -884,7 +934,8 @@ object GsonSafeAutoNumberStrategy : ToNumberStrategy {
         // value 先用 BigDecimal 保存，避免一开始就转 Double 丢精度。
         val value = BigDecimal(reader.nextString())
         if (value.scale() > 0) {
-            return value.toDouble()
+            val doubleValue = value.toDouble()
+            return if (doubleValue.isFinite()) doubleValue else value
         }
         if (value >= intMinValue && value <= intMaxValue) return value.toInt()
         if (value >= longMinValue && value <= longMaxValue) return value.toLong()

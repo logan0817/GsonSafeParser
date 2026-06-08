@@ -4,6 +4,7 @@ import java.math.BigDecimal
 import java.math.BigInteger
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -54,6 +55,11 @@ class SafeParserPrimitiveMismatchTest {
     /** 测试模型：布尔数字只接受明确的 0/1 表示。 */
     data class BooleanNumberDefaults(
         val enabled: Boolean = false
+    )
+
+    /** 测试模型：敏感字段被错配成 Boolean 时，事件原因不能带出原始值。 */
+    data class SensitiveBooleanPayload(
+        val token: Boolean = false
     )
 
     /** 测试模型：BigInteger 允许大整数，但不能把小数截断成整数。 */
@@ -164,6 +170,44 @@ class SafeParserPrimitiveMismatchTest {
 
         assertEquals(1.5f, result.ratio)
         assertEquals(2.5, result.amount)
+    }
+
+    /**
+     * 测试方法说明：验证“floating point overflow keeps defaults and emits mismatch events”这个具体行为。
+     * 过大的指数数值不能静默进入业务字段成为 Infinity。
+     */
+    @Test
+    fun `floating point overflow keeps defaults and emits mismatch events`() {
+        val result = GsonSafeParser.parseSafe<FloatingDefaults>(
+            """{"ratio":1e400,"amount":1e400}""",
+            safePrimitiveConfig
+        )
+
+        assertEquals(FloatingDefaults(), result.value)
+        val details = result.events.map { event -> (event as SafeParserEvent.TypeMismatch).detail }
+        assertEquals(setOf("ratio", "amount"), details.mapNotNull { it.fieldName }.toSet())
+        assertTrue(details.all { detail -> detail.reason.contains("finite") })
+    }
+
+    /**
+     * 测试方法说明：验证“primitive mismatch reasons do not expose raw sensitive scalar values”这个具体行为。
+     * reason 会进入事件、契约报告和 demo 展示，所以不能包含 token 原文。
+     */
+    @Test
+    fun `primitive mismatch reason does not expose raw sensitive scalar value`() {
+        val result = GsonSafeParser.parseSafe<SensitiveBooleanPayload>(
+            """{"token":"secret-token"}""",
+            safePrimitiveConfig
+        )
+
+        val event = result.events.single() as SafeParserEvent.TypeMismatch
+        val markdown = result.contractReport().toMarkdown()
+
+        assertEquals("token", event.detail.fieldName)
+        assertFalse(event.detail.reason.contains("secret-token"))
+        assertFalse(event.detail.reason.contains("Expected boolean but was secret-token"))
+        assertFalse(markdown.contains("secret-token"))
+        assertTrue(event.detail.reason.contains("boolean"))
     }
 
     /**

@@ -18,7 +18,7 @@ val config = SafeParserConfig( // 创建一份完整的安全解析配置。
     skippedPlatformTypePrefixes = setOf("android."), // 跳过 Android 平台类型，避免反射系统对象；不要把业务模型包名前缀放这里。
     nullValuePolicy = NullValuePolicy.WriteExplicitNulls, // 显式 JSON null 只写入 nullable 字段。
     requiredConstructorParameterPolicy = RequiredConstructorParameterPolicy.GsonCompatible, // Kotlin 非空必填构造参数缺失时保持 Gson 兼容。
-    mapItemKeyPolicy = MapItemKeyPolicy.Hash, // Map item 事件默认输出稳定哈希。
+    mapItemKeyPolicy = MapItemKeyPolicy.Omit, // 默认不输出 Map item key；需要聚合时再显式改成 Hash。
     captureRawJsonInCallbacks = false, // 默认不在回调里携带原始 JSON。
     maxRawJsonCaptureBytes = 1024 * 1024 // 限制 raw JSON 最大捕获体积为 1 MiB。
 ) // 结束安全解析配置。
@@ -38,7 +38,7 @@ val config = SafeParserConfig( // 创建一份完整的安全解析配置。
 | `skippedPlatformTypePrefixes` | `setOf("android.")` | 只用于跳过平台类型；不要放业务模型包名前缀。 |
 | `nullValuePolicy` | `WriteExplicitNulls` | 后端显式返回 `null` 时，需要调整 nullable 字段写入策略时再改。 |
 | `requiredConstructorParameterPolicy` | `GsonCompatible` | 已有项目希望保持 Gson 宽松行为时用默认值；新接口想强约束缺字段时改成 `Strict`。 |
-| `mapItemKeyPolicy` | `Hash` | 本地排障想看到 Map 原始 key 时，可以在 debug 配置中改。 |
+| `mapItemKeyPolicy` | `Omit` | 线上默认不输出 Map key；需要聚合时可显式改成 `Hash`，低熵敏感 key 不建议使用裸哈希。 |
 | `captureRawJsonInCallbacks` | `false` | 排障时临时打开，线上默认关闭。 |
 | `maxRawJsonCaptureBytes` | `1 MiB` | raw JSON 排障需要更小或更大的捕获上限时再改。 |
 
@@ -101,7 +101,7 @@ val lowInterference = SafeParserConfig.lowInterference() // 创建低误伤配�
 
 | 预设 | 适合场景 | 主要行为 |
 | --- | --- | --- |
-| `production()` | 线上默认接入。 | 契约优先读策略、Map item key 哈希、事件观测，不携带整段 raw JSON。 |
+| `production()` | 线上默认接入。 | 契约优先读策略、默认不输出 Map item key、事件观测，不携带整段 raw JSON。 |
 | `debug()` | 联调、测试和接口排障。 | 与线上读策略一致，但开启有限长度 raw JSON 捕获，并输出明文 Map item key。 |
 | `lowInterference()` | 灰度接入和低干预优先。 | 字段、集合、Map 整体形状不一致优先 `null`，基础类型交回 Gson 原生 Adapter，空响应默认 `null`。 |
 
@@ -286,7 +286,7 @@ data class FlexibleResponse( // 定义允许局部形态转换的响应模型。
 | `emptyResponsePolicy` | `EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly` |
 | `useJdkUnsafe` | `false` |
 | `requiredConstructorParameterPolicy` | `RequiredConstructorParameterPolicy.GsonCompatible` |
-| `mapItemKeyPolicy` | `MapItemKeyPolicy.Hash` |
+| `mapItemKeyPolicy` | `MapItemKeyPolicy.Omit` |
 | JSON 形态转换 | 默认关闭，状态为 `ShapeCoercionPolicy.Disabled`；调用 `withShapeCoercionPolicy(...)` 或字段注解后才启用。 |
 
 默认处理重点：

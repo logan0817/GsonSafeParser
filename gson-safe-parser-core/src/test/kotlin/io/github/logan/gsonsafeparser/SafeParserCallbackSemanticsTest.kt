@@ -72,7 +72,7 @@ class SafeParserCallbackSemanticsTest {
     }
 
     /**
-     * 测试方法说明：验证“map item parse exception exposes map item category field name and hashed key”这个具体行为。
+     * 测试方法说明：验证“map item parse exception exposes map item category field name and explicit hashed key”这个具体行为。
      * 阅读时可以按准备数据、执行解析、断言结果的顺序跟下来。
      */
     @Test
@@ -80,7 +80,12 @@ class SafeParserCallbackSemanticsTest {
         // events 用来收集回调事件，后面的断言会检查事件是否按预期产生。
         val events = mutableListOf<TypeMismatchEvent>()
         // gson 是本用例使用的解析器，默认情况下已经注册 Safe Adapter。
-        val gson = GsonSafeParser.create(SafeParserConfig(onTypeMismatch = events::add))
+        val gson = GsonSafeParser.create(
+            SafeParserConfig(
+                mapItemKeyPolicy = MapItemKeyPolicy.Hash,
+                onTypeMismatch = events::add
+            )
+        )
 
         assertEquals(Response(), gson.fromJson("""{"profile":{"main":[]}}""", Response::class.java))
 

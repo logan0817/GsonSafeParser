@@ -48,8 +48,12 @@ internal object SafePrimitiveAdapters {
             rawType == Boolean::class.javaObjectType || rawType == java.lang.Boolean.TYPE -> booleanAdapter(type, rawType, config)
             rawType == Int::class.javaObjectType || rawType == java.lang.Integer.TYPE -> numberAdapter(type, rawType, config) { it.toExactInt() }
             rawType == Long::class.javaObjectType || rawType == java.lang.Long.TYPE -> numberAdapter(type, rawType, config) { it.toExactLong() }
-            rawType == Float::class.javaObjectType || rawType == java.lang.Float.TYPE -> numberAdapter(type, rawType, config) { it.toFloat() }
-            rawType == Double::class.javaObjectType || rawType == java.lang.Double.TYPE -> numberAdapter(type, rawType, config) { it.toDouble() }
+            rawType == Float::class.javaObjectType || rawType == java.lang.Float.TYPE -> numberAdapter(type, rawType, config) {
+                it.toFiniteFloat()
+            }
+            rawType == Double::class.javaObjectType || rawType == java.lang.Double.TYPE -> numberAdapter(type, rawType, config) {
+                it.toFiniteDouble()
+            }
             rawType == Short::class.javaObjectType || rawType == java.lang.Short.TYPE -> numberAdapter(type, rawType, config) { it.toExactShort() }
             rawType == Byte::class.javaObjectType || rawType == java.lang.Byte.TYPE -> numberAdapter(type, rawType, config) { it.toExactByte() }
             rawType == BigDecimal::class.java -> numberAdapter(type, rawType, config) { it.toBigDecimalOrZero() }
@@ -158,7 +162,7 @@ internal object SafePrimitiveAdapters {
                             value.compareTo(BigDecimal.ZERO) == 0 -> false
                             value.compareTo(BigDecimal.ONE) == 0 -> true
                             else -> {
-                                notify(config, type, reader, JsonToken.NUMBER, "Expected boolean number 0 or 1 but was $value")
+                                notify(config, type, reader, JsonToken.NUMBER, "Expected boolean number 0 or 1")
                                 structuralMismatchFallback(isRootValue, type, rawType, config)
                             }
                         }
@@ -173,7 +177,7 @@ internal object SafePrimitiveAdapters {
                                 type = type,
                                 rawType = rawType,
                                 config = config,
-                                reason = "Expected boolean but was $value"
+                                reason = "Expected boolean-compatible value"
                             )
                         }
                     }
@@ -238,7 +242,7 @@ internal object SafePrimitiveAdapters {
                                     type = type,
                                     rawType = rawType,
                                     config = config,
-                                    reason = it.message ?: it.javaClass.name,
+                                    reason = numericMismatchReason(it),
                                     cause = it
                                 )
                             }
@@ -280,6 +284,22 @@ internal object SafePrimitiveAdapters {
         return value.toLong()
     }
 
+    private fun String.toFiniteFloat(): Float {
+        val value = toFloat()
+        require(value.isFinite()) {
+            "Floating point value must be finite"
+        }
+        return value
+    }
+
+    private fun String.toFiniteDouble(): Double {
+        val value = toDouble()
+        require(value.isFinite()) {
+            "Floating point value must be finite"
+        }
+        return value
+    }
+
     private fun String.toExactShort(): Short {
         val value = toExactBigInteger()
         require(value >= BigInteger.valueOf(Short.MIN_VALUE.toLong()) && value <= BigInteger.valueOf(Short.MAX_VALUE.toLong())) {
@@ -298,6 +318,16 @@ internal object SafePrimitiveAdapters {
 
     private fun String.toExactBigInteger(): BigInteger {
         return toBigDecimalOrZero().toBigIntegerExact()
+    }
+
+    private fun numericMismatchReason(error: Throwable): String {
+        val message = error.message.orEmpty()
+        return when {
+            message.contains("range") -> message
+            message.contains("Rounding necessary") -> message
+            message.contains("finite") -> message
+            else -> "Expected numeric value"
+        }
     }
 
     /**

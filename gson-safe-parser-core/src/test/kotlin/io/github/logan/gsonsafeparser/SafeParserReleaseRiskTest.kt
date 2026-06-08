@@ -34,6 +34,7 @@ class SafeParserReleaseRiskTest {
     data class PrimitiveArrayResponse(val values: IntArray = intArrayOf(9))
     data class MapValueResponse(val values: Map<String, User> = emptyMap())
     data class RawJsonResponse(val child: User = User())
+    data class SensitiveReasonResponse(val value: SensitiveReasonValue = SensitiveReasonValue())
     data class GenericBox<T>(val value: T? = null)
     data class ExplicitJsonAdapterShapeResponse(
         @field:SafeParseShapeCoercion(ShapeCoercionPolicy.ObjectFromFirstArrayItem)
@@ -49,6 +50,9 @@ class SafeParserReleaseRiskTest {
     class NativeJsonAdapterOnly {
         var name: String = "local"
     }
+
+    @JsonAdapter(SensitiveReasonValueAdapter::class)
+    data class SensitiveReasonValue(val text: String = "local")
 
     class NativeJsonAdapterOnlyAdapter : TypeAdapter<NativeJsonAdapterOnly>() {
         override fun write(out: JsonWriter, value: NativeJsonAdapterOnly?) {
@@ -68,6 +72,19 @@ class SafeParserReleaseRiskTest {
             }
             reader.endObject()
             return result
+        }
+    }
+
+    class SensitiveReasonValueAdapter : TypeAdapter<SensitiveReasonValue>() {
+        override fun write(out: JsonWriter, value: SensitiveReasonValue?) {
+            out.value(value?.text)
+        }
+
+        override fun read(reader: JsonReader): SensitiveReasonValue {
+            val text = reader.nextString()
+            throw IllegalStateException(
+                "adapter failed token=$text password=hunter2 Authorization: Bearer abc.def Cookie: sid=xyz"
+            )
         }
     }
 
@@ -222,6 +239,110 @@ class SafeParserReleaseRiskTest {
     }
 
     @Test
+    fun `default and production configs omit map item keys for release safety`() {
+        val defaultEvents = mutableListOf<TypeMismatchEvent>()
+        val productionEvents = mutableListOf<TypeMismatchEvent>()
+
+        GsonSafeParser.fromJson(
+            """{"values":{"user@example.com":[]}}""",
+            MapValueResponse::class.java,
+            SafeParserConfig(onTypeMismatch = defaultEvents::add)
+        )
+        GsonSafeParser.fromJson(
+            """{"values":{"user@example.com":[]}}""",
+            MapValueResponse::class.java,
+            SafeParserConfig.production(
+                observerPolicy = SafeObserverPolicy(onTypeMismatch = productionEvents::add)
+            )
+        )
+
+        assertNull(defaultEvents.single().mapItemKey)
+        assertNull(productionEvents.single().mapItemKey)
+    }
+
+    @Test
+    fun `event reasons redact sensitive values before callbacks and parse safe snapshots`() {
+        val callbackEvents = mutableListOf<SafeParserEvent>()
+        val compatibilityEvents = mutableListOf<TypeMismatchEvent>()
+        val parser = GsonSafeParser.parser(
+            SafeParserConfig(
+                onEvent = callbackEvents::add,
+                onTypeMismatch = compatibilityEvents::add
+            )
+        )
+
+        val result = parser.parseSafe<SensitiveReasonResponse>(
+            """{"value":"secret-token"}""",
+            SensitiveReasonResponse::class.java
+        )
+
+        val callbackReason = (callbackEvents.single() as SafeParserEvent.TypeMismatch).detail.reason
+        val compatibilityReason = compatibilityEvents.single().reason
+        val snapshotReason = (result.events.single() as SafeParserEvent.TypeMismatch).detail.reason
+        listOf(callbackReason, compatibilityReason, snapshotReason).forEach { reason ->
+            assertFalse(reason.contains("secret-token"))
+            assertFalse(reason.contains("hunter2"))
+            assertFalse(reason.contains("abc.def"))
+            assertFalse(reason.contains("sid=xyz"))
+            assertTrue(reason.contains("[REDACTED]"))
+        }
+    }
+
+    @OptIn(GsonSafeParserLowLevelApi::class)
+    @Test
+    fun `manual low level events redact sensitive reasons before observers`() {
+        val events = mutableListOf<SafeParserEvent>()
+        val adapterFailures = mutableListOf<AdapterCreationFailureEvent>()
+        val observerFailures = mutableListOf<ObserverFailureEvent>()
+        val config = SafeParserConfig(
+            onEvent = { event ->
+                events += event
+                error("logger failed api_key=observer-secret")
+            },
+            onAdapterCreationFailure = adapterFailures::add,
+            onObserverFailure = observerFailures::add
+        )
+
+        config.dispatchEvent(
+            SafeParserEvent.AdapterCreationFailure(
+                AdapterCreationFailureEvent(
+                    typeName = SensitiveReasonResponse::class.java.name,
+                    reason = "duplicate field password=adapter-secret Authorization: Bearer adapter-token",
+                    error = IllegalArgumentException("duplicate field password=adapter-secret")
+                )
+            )
+        )
+
+        val event = events.single() as SafeParserEvent.AdapterCreationFailure
+        assertFalse(event.detail.reason.contains("adapter-secret"))
+        assertFalse(event.detail.reason.contains("adapter-token"))
+        assertEquals(event.detail.reason, adapterFailures.single().reason)
+        assertFalse(observerFailures.single().reason.contains("observer-secret"))
+        assertTrue(observerFailures.single().reason.contains("[REDACTED]"))
+    }
+
+    @OptIn(GsonSafeParserLowLevelApi::class)
+    @Test
+    fun `reason redaction keeps ordinary basic diagnostic wording`() {
+        val events = mutableListOf<SafeParserEvent>()
+        val config = SafeParserConfig(onEvent = events::add)
+
+        config.dispatchEvent(
+            SafeParserEvent.TypeMismatch(
+                TypeMismatchEvent(
+                    expectedType = SensitiveReasonResponse::class.java.name,
+                    actualToken = com.google.gson.stream.JsonToken.STRING,
+                    path = "$.value",
+                    reason = "Expected basic type value but got a nested object"
+                )
+            )
+        )
+
+        val reason = (events.single() as SafeParserEvent.TypeMismatch).detail.reason
+        assertEquals("Expected basic type value but got a nested object", reason)
+    }
+
+    @Test
     fun `raw json context is restored after malformed json failure`() {
         val malformedConfig = SafeParserConfig(captureRawJsonInCallbacks = true)
         assertThrows(JsonParseException::class.java) {
@@ -295,5 +416,21 @@ class SafeParserReleaseRiskTest {
         assertEquals("""{"child":[]}""", debugEvents.single().rawJson)
         assertFalse(debugEvents.single().rawJsonTruncated)
         assertNull(productionEvents.single().rawJson)
+    }
+
+    @Test
+    fun `diagnostics warns whenever raw json capture is explicitly enabled`() {
+        val diagnostics = GsonSafeParser.diagnostics(
+            SafeParserConfig(
+                captureRawJsonInCallbacks = true,
+                maxRawJsonCaptureBytes = 1024
+            )
+        )
+
+        val warning = diagnostics.checks.single { it.name == "rawJsonCaptureEnabled" }
+
+        assertEquals(DiagnosticSeverity.WARNING, warning.severity)
+        assertTrue(warning.message.contains("Raw JSON capture is enabled"))
+        assertFalse(diagnostics.hasErrors)
     }
 }

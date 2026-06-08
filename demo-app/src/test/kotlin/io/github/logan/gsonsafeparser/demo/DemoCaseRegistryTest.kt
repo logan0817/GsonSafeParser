@@ -2,8 +2,10 @@ package io.github.logan.gsonsafeparser.demo
 
 import com.google.gson.stream.JsonToken
 import io.github.logan.gsonsafeparser.DiagnosticSeverity
+import io.github.logan.gsonsafeparser.FallbackPolicy
 import io.github.logan.gsonsafeparser.GsonSafeDiagnosticCheck
 import io.github.logan.gsonsafeparser.GsonSafeDiagnostics
+import io.github.logan.gsonsafeparser.GsonSafeParser
 import io.github.logan.gsonsafeparser.demo.page.DemoPageRegistry
 import io.github.logan.gsonsafeparser.demo.support.DemoCase
 import io.github.logan.gsonsafeparser.demo.support.DemoCustomValidator
@@ -13,8 +15,11 @@ import io.github.logan.gsonsafeparser.demo.support.describeEvents
 import io.github.logan.gsonsafeparser.demo.support.describe
 import io.github.logan.gsonsafeparser.demo.support.sanitizeClipboardReportText
 import io.github.logan.gsonsafeparser.ParseExceptionKind
+import io.github.logan.gsonsafeparser.PrimitiveParsingPolicy
+import io.github.logan.gsonsafeparser.SafeParserConfig
 import io.github.logan.gsonsafeparser.SafeParserEvent
 import io.github.logan.gsonsafeparser.TypeMismatchEvent
+import io.github.logan.gsonsafeparser.parseSafe
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -24,6 +29,10 @@ import org.junit.Test
  * 它不替代真机页面测试，但能保证 demo 页面引用的每个用例默认输入都能实际跑通。
  */
 class DemoCaseRegistryTest {
+    data class SensitiveBooleanPayload(
+        val token: Boolean = false
+    )
+
     @Test
     fun demoCasesCoverPublicFeatureEntrypoints() {
         assertTrue(DemoCaseRegistry.cases.size >= 12)
@@ -425,6 +434,23 @@ class DemoCaseRegistryTest {
         ).forEach { leaked ->
             assertTrue("剪贴板报告不应残留常见凭证片段：$leaked", !report.contains(leaked))
         }
+    }
+
+    @Test
+    fun demoEventDescriptionDoesNotExposeSensitivePrimitiveReason() {
+        val result = GsonSafeParser.parseSafe<SensitiveBooleanPayload>(
+            json = """{"token":"secret-token"}""",
+            config = SafeParserConfig(
+                fallbackPolicy = FallbackPolicy.Default,
+                primitiveParsingPolicy = PrimitiveParsingPolicy.Safe
+            )
+        )
+        val events = result.events.describeEvents()
+        val clipboard = sanitizeClipboardReportText(events)
+
+        assertTrue("demo 事件应仍展示错配原因标签", events.contains("原因="))
+        assertTrue("demo 事件不应展示敏感原始值", !events.contains("secret-token"))
+        assertTrue("复制后的事件文本也不应展示敏感原始值", !clipboard.contains("secret-token"))
     }
 
     @Test

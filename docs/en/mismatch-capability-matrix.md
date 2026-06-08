@@ -21,7 +21,7 @@ Out-of-the-box defaults and optional capability states:
 | `emptyResponsePolicy = EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly` | Empty Retrofit bodies return empty values only for `Unit` / `Void`. |
 | `useJdkUnsafe = false` | In compatible mode, SafeParser itself does not use JDK Unsafe for object construction by default; after `Strict` is enabled, Unsafe is disabled for both SafeParser and the Gson fallback path. |
 | `requiredConstructorParameterPolicy = RequiredConstructorParameterPolicy.GsonCompatible` | Missing non-null Kotlin constructor parameters keep Gson-compatible behavior; reference fields stay `null`, and primitives keep JVM defaults. |
-| `mapItemKeyPolicy = MapItemKeyPolicy.Hash` | Map item events emit stable hashes by default. |
+| `mapItemKeyPolicy = MapItemKeyPolicy.Omit` | Map item events omit keys by default; opt into `Hash` only when aggregation needs it. |
 | JSON shape coercion | Disabled by default, with state `ShapeCoercionPolicy.Disabled`; enabled only by calling `withShapeCoercionPolicy(...)` or using a field annotation. |
 
 The "Default handling" rows below describe these default states. Empty collections, empty maps, primitive safe values, and object-array shape coercion are used only when callers explicitly choose `FallbackPolicy.Default`, `PrimitiveParsingPolicy.Safe`, or `ShapeCoercionPolicy.*`.
@@ -71,7 +71,7 @@ Overview:
 
 1. Backend returns: `""`, `false`, or bad key/value inside array-entry form.
 2. Default handling: whole-Map shape mismatches return `null`; reflective field reading does not overwrite an already constructed field default with `null`. Individual bad entries inside a Map are skipped.
-3. Evidence: `TypeMismatch`, field path, and a `sha256:` hashed `mapItemKey` for map item mismatches by default.
+3. Evidence: `TypeMismatch` and field path; Map item keys are omitted by default, and only explicit `MapItemKeyPolicy.Hash` emits a `sha256:` hashed `mapItemKey`.
 4. Boundary: `[]` can be read as Gson's complex-map-key array-entry form; an empty array becomes an empty map and may not emit a mismatch event.
 
 ### 2.5 `Int` / `Long` / `Short` / `Byte`

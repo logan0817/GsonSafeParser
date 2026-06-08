@@ -14,7 +14,10 @@ Explicit JSON shape coercion for field-level object and collection drift.
 6. Publishes the Retrofit module with `OkHttp 4.12.0` and `Okio 3.6.0` as the documented network-stack safety baseline.
 7. Redacts Maven Central deployment failure responses before logging and redacts Demo clipboard reports before copying them.
 8. Adds the `maxRawJsonCaptureBytesTooLarge` diagnostic for unsafe raw JSON capture limits.
-9. Aligns Gradle publishing version, Demo version, dependency snippets, compatibility docs, release checklist, and release notes with `1.0.3`.
+9. Redacts SafeParser event `reason` values before observer callbacks or `parseSafe` snapshots can log sensitive tokens.
+10. Tightens the default `mapItemKeyPolicy` to `Omit`; use `MapItemKeyPolicy.Hash` explicitly when stable Map item aggregation is required.
+11. Adds the `rawJsonCaptureEnabled` diagnostic warning whenever raw JSON capture is enabled.
+12. Aligns Gradle publishing version, Demo version, dependency snippets, compatibility docs, release checklist, and release notes with `1.0.3`.
 
 Details: [中文](docs/release-notes-1.0.3.md) / [English](docs/en/release-notes-1.0.3.md)
 

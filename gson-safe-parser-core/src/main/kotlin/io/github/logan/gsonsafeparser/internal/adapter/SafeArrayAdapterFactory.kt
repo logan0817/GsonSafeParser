@@ -14,6 +14,7 @@ import io.github.logan.gsonsafeparser.ShapeCoercionAction
 import io.github.logan.gsonsafeparser.internal.FallbackValues
 import io.github.logan.gsonsafeparser.internal.TokenRules
 import io.github.logan.gsonsafeparser.internal.runRecovering
+import io.github.logan.gsonsafeparser.internal.throwIfFatal
 import java.io.IOException
 import java.lang.reflect.GenericArrayType
 import java.lang.reflect.Array
@@ -72,12 +73,16 @@ internal object SafeArrayAdapterFactory {
                 return try {
                     delegate.read(reader)
                 } catch (error: IllegalStateException) {
+                    error.throwIfFatal()
                     recover(reader, type, rawType, error, token, pathBeforeRead)
                 } catch (error: NumberFormatException) {
+                    error.throwIfFatal()
                     recover(reader, type, rawType, error, token, pathBeforeRead)
                 } catch (error: JsonParseException) {
+                    error.throwIfFatal()
                     recover(reader, type, rawType, error, token, pathBeforeRead)
                 } catch (error: IOException) {
+                    error.throwIfFatal()
                     throw JsonIOException(error)
                 }
             }

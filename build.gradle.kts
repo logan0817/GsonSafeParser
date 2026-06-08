@@ -1,4 +1,5 @@
 import com.android.build.gradle.LibraryExtension
+import org.gradle.api.GradleException
 import org.gradle.api.component.SoftwareComponent
 import org.gradle.api.Project
 import org.gradle.api.tasks.Copy
@@ -88,6 +89,32 @@ fun sanitizeMavenCentralResponseBody(responseBody: String): String {
     return "Central Portal deployment response redacted. Sanitized excerpt: $excerpt"
 }
 
+fun validateCentralPortalBaseUrl(
+    baseUrl: String
+): String {
+    val trimmedBaseUrl = baseUrl.trim().trimEnd('/')
+    val uri = URI(trimmedBaseUrl)
+    if (!uri.scheme.equals("https", ignoreCase = true)) {
+        throw GradleException("Central Portal base URL must use HTTPS.")
+    }
+    val host = uri.host?.lowercase().orEmpty()
+    if (host != "central.sonatype.com" && !host.endsWith(".central.sonatype.com")) {
+        throw GradleException("Central Portal base URL must use a Sonatype Central host.")
+    }
+    return trimmedBaseUrl
+}
+
+gradle.taskGraph.whenReady {
+    val createsCentralDeployment = allTasks.any { task ->
+        task.path == ":uploadMavenCentralDeployment" ||
+            task.path == ":publishToMavenCentral" ||
+            task.path == ":releaseToMavenCentral"
+    }
+    if (createsCentralDeployment) {
+        validateCentralPortalBaseUrl(centralPortalBaseUrl.get())
+    }
+}
+
 fun Project.remoteMavenPublicationRequested(): Boolean =
     gradle.taskGraph.allTasks.any { task ->
         task.name.startsWith("publish") &&
@@ -127,7 +154,7 @@ fun Project.configurePublishingRepositories() {
             maven {
                 // 默认直接指向 Central Portal 的 OSSRH 兼容发布地址；需要切换仓库时再用属性覆盖。
                 name = "ReleaseRepository"
-                url = uri(centralRepositoryUrl.get())
+                url = uri(validateCentralPortalBaseUrl(centralRepositoryUrl.get()))
                 credentials {
                     username = providers.gradleProperty("mavenCentralUsername")
                         .orElse(providers.environmentVariable("MAVEN_CENTRAL_USERNAME"))
@@ -429,10 +456,14 @@ tasks.register("uploadMavenCentralDeployment") {
         }
 
         // Gradle maven-publish 上传后，还需要调用 manual upload，Central Portal 页面才会出现 deployment。
-        val uploadUrl = URI(
-            "${centralPortalBaseUrl.get().trimEnd('/')}/manual/upload/defaultRepository/" +
-                "${centralPortalNamespace.get()}?publishing_type=${centralPublishingType.get()}"
-        ).toURL()
+        val uploadUrl = validateCentralPortalBaseUrl(
+            centralPortalBaseUrl.get()
+        ).let { safeCentralPortalBaseUrl ->
+            URI(
+                "$safeCentralPortalBaseUrl/manual/upload/defaultRepository/" +
+                    "${centralPortalNamespace.get()}?publishing_type=${centralPublishingType.get()}"
+            ).toURL()
+        }
         // Sonatype 这里使用 Bearer + base64(username:password)，不要改成 Basic 认证。
         val bearerToken = Base64.getEncoder().encodeToString("$username:$password".toByteArray(StandardCharsets.UTF_8))
 

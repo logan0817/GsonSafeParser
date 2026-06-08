@@ -200,6 +200,13 @@ object GsonSafeParser {
                 message = "Platform type skipping is disabled."
             )
         }
+        if (config.captureRawJsonInCallbacks) {
+            checks += GsonSafeDiagnosticCheck(
+                name = "rawJsonCaptureEnabled",
+                severity = DiagnosticSeverity.WARNING,
+                message = "Raw JSON capture is enabled; use only for local debugging or tightly controlled diagnostics."
+            )
+        }
         if (config.captureRawJsonInCallbacks && config.maxRawJsonCaptureBytes <= 0) {
             checks += GsonSafeDiagnosticCheck(
                 name = "maxRawJsonCaptureBytes",

@@ -35,7 +35,7 @@ GsonSafeParser 会尽量把问题隔离在当前字段，让外层对象继续�
 | `emptyResponsePolicy` | `EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly` |
 | `useJdkUnsafe` | `false` |
 | `requiredConstructorParameterPolicy` | `RequiredConstructorParameterPolicy.GsonCompatible` |
-| `mapItemKeyPolicy` | `MapItemKeyPolicy.Hash` |
+| `mapItemKeyPolicy` | `MapItemKeyPolicy.Omit` |
 
 ### 可选能力状态
 
@@ -307,7 +307,7 @@ val config = SafeParserConfig(
     skippedPlatformTypePrefixes = setOf("android."), // 跳过 Android 平台类型，避免反射系统对象；不要把业务模型包名前缀放这里。
     nullValuePolicy = NullValuePolicy.WriteExplicitNulls, // 显式 JSON null 只写入 nullable 字段。
     requiredConstructorParameterPolicy = RequiredConstructorParameterPolicy.GsonCompatible, // Kotlin 非空必填构造参数缺失时保持 Gson 兼容。
-    mapItemKeyPolicy = MapItemKeyPolicy.Hash, // Map item 事件默认输出稳定哈希。
+    mapItemKeyPolicy = MapItemKeyPolicy.Omit, // 默认不输出 Map item key；需要聚合时再显式改成 Hash。
     captureRawJsonInCallbacks = false, // 线上默认不在事件中携带原始 JSON。
     maxRawJsonCaptureBytes = 1024 * 1024, // 限制 raw JSON 最大捕获体积为 1 MiB。
     onEvent = { event -> println(event) }, // 监听统一解析事件。
@@ -327,7 +327,7 @@ val lowInterference = SafeParserConfig.lowInterference() // 低干预配置，�
 
 | 预设 | 适合场景 | 主要行为 | 风险取舍 |
 | --- | --- | --- | --- |
-| `production()` | 正式上线默认配置。 | 开启事件观测，Map item key 默认哈希，不携带整段 raw JSON。 | 排障信息够用，长期内存和隐私风险更低。 |
+| `production()` | 正式上线默认配置。 | 开启事件观测，默认不输出 Map item key，不携带整段 raw JSON。 | 排障信息够用，长期内存和隐私风险更低。 |
 | `debug()` | 联调、测试、接口排障。 | 和线上读策略一致，但会在上限内携带 raw JSON。 | 更容易定位问题，不建议长期用于线上。 |
 | `lowInterference()` | 灰度接入、低干预优先。 | 字段、集合、Map 整体形状不一致优先返回 `null`，基础类型交回 Gson 原生 Adapter。 | 更接近原生 Gson，但安全默认值更少。 |
 

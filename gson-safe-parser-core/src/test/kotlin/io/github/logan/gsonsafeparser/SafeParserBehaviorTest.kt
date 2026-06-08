@@ -3,7 +3,6 @@ package io.github.logan.gsonsafeparser
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
-import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -432,8 +431,7 @@ class SafeParserBehaviorTest {
         assertEquals("values", event.fieldName)
         assertEquals("$.values[0][1]", event.path)
         assertEquals("Map entry value is missing", event.reason)
-        assertNotEquals("1", event.mapItemKey)
-        assertEquals(true, event.mapItemKey?.startsWith("sha256:"))
+        assertNull(event.mapItemKey)
     }
 
     /**
@@ -472,8 +470,7 @@ class SafeParserBehaviorTest {
 
         assertEquals(mapOf(1 to "ok"), result.values)
         assertEquals(ParseExceptionKind.MAP_ITEM, events.single().kind)
-        assertNotEquals("abc", events.single().mapItemKey)
-        assertEquals(true, events.single().mapItemKey?.startsWith("sha256:"))
+        assertNull(events.single().mapItemKey)
     }
 
     /**

@@ -5,6 +5,7 @@ import com.google.gson.reflect.TypeToken
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertInstanceOf
 import org.junit.jupiter.api.Test
+import java.math.BigDecimal
 import java.math.BigInteger
 
 /**
@@ -159,5 +160,25 @@ class SafeParserObjectNumberStrategyTest {
         assertEquals(2147483648L, result[1])
         assertInstanceOf(Double::class.javaObjectType, result[2])
         assertEquals(1.5, result[2])
+    }
+
+    /**
+     * 测试方法说明：验证“object decimal overflow stays finite and exact”这个具体行为。
+     * 动态 Any 字段不能把超大 JSON 小数静默转成 Infinity。
+     */
+    @Test
+    fun `object decimal overflow stays finite and exact`() {
+        val gson = GsonSafeParser.create()
+        val hugeDecimal = "1".repeat(400) + ".1"
+
+        val result = gson.fromJson(
+            """{"decimal":$hugeDecimal,"values":{"huge":$hugeDecimal}}""",
+            AnyResponse::class.java
+        )
+
+        assertInstanceOf(BigDecimal::class.java, result.decimal)
+        assertEquals(BigDecimal(hugeDecimal), result.decimal)
+        assertInstanceOf(BigDecimal::class.java, result.values["huge"])
+        assertEquals(BigDecimal(hugeDecimal), result.values["huge"])
     }
 }

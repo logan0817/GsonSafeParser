@@ -20,6 +20,9 @@
 8. Retrofit 模块继续保持 `Retrofit 2.8.1` API，同时发布 `OkHttp 4.12.0` 和 `Okio 3.6.0` 网络栈安全基线。
 9. Maven Central 发布失败日志会对服务端响应做脱敏处理，Demo 剪贴板报告也会先脱敏再复制。
 10. raw JSON 捕获配置新增 `maxRawJsonCaptureBytesTooLarge` 诊断，避免发布版本接受过大的原始响应缓存上限。
+11. 事件 `reason` 会在进入 `onEvent`、兼容回调和 `parseSafe` 快照前统一脱敏，避免 token、password、Authorization、Cookie 等敏感片段进入日志。
+12. `mapItemKeyPolicy` 默认值从 `Hash` 收紧为 `Omit`；如果线上聚合仍需要稳定哈希，请显式配置 `MapItemKeyPolicy.Hash`，低熵敏感 key 不建议使用裸哈希。
+13. raw JSON 捕获显式开启时新增 `rawJsonCaptureEnabled` 诊断 warning，提醒只在本地排障或受控诊断链路中使用。
 
 ## 使用方式
 
@@ -60,12 +63,13 @@ data class ApiResponse(
 
 ## 兼容边界
 
-1. 默认行为保持关闭，不调用 `withShapeCoercionPolicy(...)` 时，旧版本解析结果不应变化。
-2. 发布产物仍是 Android AAR。
-3. 当前验证矩阵仍是 `minSdk 23`、`compileSdk 36`、`JDK 17`、`Kotlin 2.0.21`、`kotlin-reflect 2.0.21`、`Gson 2.13.2`。
-4. Retrofit 模块当前验证版本仍是 `Retrofit 2.8.1`，并显式携带 `OkHttp 4.12.0` 和 `Okio 3.6.0`，防止依赖解析回退到 Retrofit 2.8.1 的旧 OkHttp / Okio 传递依赖。
-5. release 包开启 R8 / ProGuard 时，业务模型仍要按文档保留字段名、构造方法和 Kotlin Metadata。
-6. 如果业务项目已经统一接管 OkHttp 或 Okio，发布前先用 `./gradlew dependencyInsight --dependency okhttp` 和 `./gradlew dependencyInsight --dependency okio` 确认最终依赖解析结果，再跑断网、取消、连接重置、TLS 失败和 raw JSON 捕获回归。
+1. shape coercion 默认保持关闭，不调用 `withShapeCoercionPolicy(...)` 时，解析结果不应因形态转换变化。
+2. 观测字段默认行为有安全收紧：Map item key 默认不再输出；依赖旧哈希聚合的接入方需要显式配置 `MapItemKeyPolicy.Hash`。
+3. 发布产物仍是 Android AAR。
+4. 当前验证矩阵仍是 `minSdk 23`、`compileSdk 36`、`JDK 17`、`Kotlin 2.0.21`、`kotlin-reflect 2.0.21`、`Gson 2.13.2`。
+5. Retrofit 模块当前验证版本仍是 `Retrofit 2.8.1`，并显式携带 `OkHttp 4.12.0` 和 `Okio 3.6.0`，防止依赖解析回退到 Retrofit 2.8.1 的旧 OkHttp / Okio 传递依赖。
+6. release 包开启 R8 / ProGuard 时，业务模型仍要按文档保留字段名、构造方法和 Kotlin Metadata。
+7. 如果业务项目已经统一接管 OkHttp 或 Okio，发布前先用 `./gradlew dependencyInsight --dependency okhttp` 和 `./gradlew dependencyInsight --dependency okio` 确认最终依赖解析结果，再跑断网、取消、连接重置、TLS 失败和 raw JSON 捕获回归。
 
 ## 发布验证
 
@@ -87,6 +91,7 @@ data class ApiResponse(
 14. retrofit POM 中 `okhttp 4.12.0` 和 `okio 3.6.0` 依赖版本校验。
 15. OSV 依赖漏洞扫描。
 16. Maven Central 发布失败响应脱敏和 Demo 剪贴板报告脱敏。
-17. `maxRawJsonCaptureBytesTooLarge` 诊断。
-18. `releaseToMavenCentral --dry-run`。
-19. `git diff --check`。
+17. SafeParser 事件 reason 脱敏、Map item key 默认省略和显式 Hash 迁移路径。
+18. `maxRawJsonCaptureBytesTooLarge` 与 `rawJsonCaptureEnabled` 诊断。
+19. `releaseToMavenCentral --dry-run`。
+20. `git diff --check`。

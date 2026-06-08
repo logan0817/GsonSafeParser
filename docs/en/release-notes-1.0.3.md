@@ -20,6 +20,9 @@ The default policy remains `ShapeCoercionPolicy.Disabled`. Coercion runs only wh
 8. Keeps the Retrofit module on the `Retrofit 2.8.1` API while publishing the `OkHttp 4.12.0` and `Okio 3.6.0` network-stack safety baseline.
 9. Redacts Maven Central deployment failure responses before logging and redacts Demo clipboard reports before copying them.
 10. Adds the `maxRawJsonCaptureBytesTooLarge` diagnostic for unsafe raw JSON capture limits.
+11. Redacts event `reason` values before they enter `onEvent`, compatibility callbacks, or `parseSafe` snapshots, covering token, password, Authorization, Cookie, and similar sensitive fragments.
+12. Tightens the default `mapItemKeyPolicy` from `Hash` to `Omit`; integrations that still need stable hash aggregation should explicitly configure `MapItemKeyPolicy.Hash`, and avoid bare hashes for low-entropy sensitive keys.
+13. Adds the `rawJsonCaptureEnabled` diagnostic warning whenever raw JSON capture is enabled, so it stays limited to local debugging or controlled diagnostics.
 
 ## Usage
 
@@ -60,12 +63,13 @@ data class ApiResponse(
 
 ## Compatibility Boundaries
 
-1. The feature is disabled by default. Without `withShapeCoercionPolicy(...)`, previous parsing results should not change.
-2. Published artifacts remain Android AARs.
-3. The verified matrix remains `minSdk 23`, `compileSdk 36`, `JDK 17`, `Kotlin 2.0.21`, `kotlin-reflect 2.0.21`, and `Gson 2.13.2`.
-4. The Retrofit module is still verified with `Retrofit 2.8.1`, and it explicitly publishes `OkHttp 4.12.0` and `Okio 3.6.0` to prevent dependency resolution from falling back to Retrofit 2.8.1's old OkHttp / Okio transitive baseline.
-5. Release builds with R8 / ProGuard still need business model field names, constructors, and Kotlin Metadata keep rules.
-6. If your app already owns OkHttp or Okio, run `./gradlew dependencyInsight --dependency okhttp` and `./gradlew dependencyInsight --dependency okio` before publishing, then verify offline, cancellation, connection reset, TLS failure, and raw JSON capture regressions.
+1. Shape coercion remains disabled by default. Without `withShapeCoercionPolicy(...)`, parsing results should not change because of coercion.
+2. Observation defaults are tightened for safety: Map item keys are omitted by default; integrations relying on the previous hash aggregation should explicitly configure `MapItemKeyPolicy.Hash`.
+3. Published artifacts remain Android AARs.
+4. The verified matrix remains `minSdk 23`, `compileSdk 36`, `JDK 17`, `Kotlin 2.0.21`, `kotlin-reflect 2.0.21`, and `Gson 2.13.2`.
+5. The Retrofit module is still verified with `Retrofit 2.8.1`, and it explicitly publishes `OkHttp 4.12.0` and `Okio 3.6.0` to prevent dependency resolution from falling back to Retrofit 2.8.1's old OkHttp / Okio transitive baseline.
+6. Release builds with R8 / ProGuard still need business model field names, constructors, and Kotlin Metadata keep rules.
+7. If your app already owns OkHttp or Okio, run `./gradlew dependencyInsight --dependency okhttp` and `./gradlew dependencyInsight --dependency okio` before publishing, then verify offline, cancellation, connection reset, TLS failure, and raw JSON capture regressions.
 
 ## Release Verification
 
@@ -87,6 +91,7 @@ Before publishing, this release should be checked with:
 14. retrofit POM dependency checks for `okhttp 4.12.0` and `okio 3.6.0`.
 15. OSV dependency vulnerability scan.
 16. Maven Central deployment response redaction and Demo clipboard report redaction.
-17. `maxRawJsonCaptureBytesTooLarge` diagnostics.
-18. `releaseToMavenCentral --dry-run`.
-19. `git diff --check`.
+17. SafeParser event reason redaction, Map item key omission by default, and the explicit Hash migration path.
+18. `maxRawJsonCaptureBytesTooLarge` and `rawJsonCaptureEnabled` diagnostics.
+19. `releaseToMavenCentral --dry-run`.
+20. `git diff --check`.

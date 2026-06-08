@@ -18,7 +18,7 @@ val config = SafeParserConfig( // Creates a complete safe parsing config.
     skippedPlatformTypePrefixes = setOf("android."), // Skips Android platform types to avoid reflecting system objects; do not add business model package prefixes here.
     nullValuePolicy = NullValuePolicy.WriteExplicitNulls, // Writes explicit JSON null only to nullable fields.
     requiredConstructorParameterPolicy = RequiredConstructorParameterPolicy.GsonCompatible, // Keeps Gson-compatible behavior for missing non-null Kotlin constructor parameters.
-    mapItemKeyPolicy = MapItemKeyPolicy.Hash, // Emits stable hashed map item keys in events.
+    mapItemKeyPolicy = MapItemKeyPolicy.Omit, // Omits Map item keys by default; opt into Hash only when aggregation needs it.
     captureRawJsonInCallbacks = false, // Does not attach raw JSON to callbacks by default.
     maxRawJsonCaptureBytes = 1024 * 1024 // Limits raw JSON capture to 1 MiB.
 ) // Ends safe parsing config.
@@ -38,7 +38,7 @@ The default config is low-interference: field-level problems fall back locally, 
 | `skippedPlatformTypePrefixes` | `setOf("android.")` | Use for platform types only. Do not add business model package prefixes here. |
 | `nullValuePolicy` | `WriteExplicitNulls` | Change when explicit backend `null` needs a different nullable-field write policy. |
 | `requiredConstructorParameterPolicy` | `GsonCompatible` | Keep the default for existing Gson projects; switch to `Strict` only when missing non-null Kotlin constructor parameters should fail fast. |
-| `mapItemKeyPolicy` | `Hash` | Change in debug when raw Map keys are needed for diagnosis. |
+| `mapItemKeyPolicy` | `Omit` | Production omits Map keys by default; opt into `Hash` only for aggregation, and avoid bare hashes for low-entropy sensitive keys. |
 | `captureRawJsonInCallbacks` | `false` | Enable temporarily for troubleshooting. |
 | `maxRawJsonCaptureBytes` | `1 MiB` | Tune when raw JSON capture needs a smaller or larger bound. |
 
@@ -101,7 +101,7 @@ Presets:
 
 | Preset | Best for | Main behavior |
 | --- | --- | --- |
-| `production()` | Default production integration. | Contract-first reads, hashed Map item keys, event observation, and no full raw JSON in callbacks. |
+| `production()` | Default production integration. | Contract-first reads, Map item keys omitted by default, event observation, and no full raw JSON in callbacks. |
 | `debug()` | Integration testing and API troubleshooting. | Same read policy as production, bounded raw JSON capture, and plain-text Map item keys. |
 | `lowInterference()` | Gradual rollout and low-interference adoption. | Whole-field, collection, and Map mismatches prefer `null`; primitives delegate to Gson; empty bodies return `null`. |
 
@@ -288,7 +288,7 @@ Out-of-the-box defaults and optional capability states:
 | `emptyResponsePolicy` | `EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly` |
 | `useJdkUnsafe` | `false` |
 | `requiredConstructorParameterPolicy` | `RequiredConstructorParameterPolicy.GsonCompatible` |
-| `mapItemKeyPolicy` | `MapItemKeyPolicy.Hash` |
+| `mapItemKeyPolicy` | `MapItemKeyPolicy.Omit` |
 | JSON shape coercion | Disabled by default, with state `ShapeCoercionPolicy.Disabled`; enabled only by calling `withShapeCoercionPolicy(...)` or using a field annotation. |
 
 Remember these defaults:
