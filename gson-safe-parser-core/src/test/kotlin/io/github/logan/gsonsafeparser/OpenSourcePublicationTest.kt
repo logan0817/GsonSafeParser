@@ -13,13 +13,29 @@ import java.io.File
  */
 class OpenSourcePublicationTest {
     /**
+     * 根构建脚本只保留插件入口和脚本编排，发布细节放到 gradle 目录下的专用脚本。
+     */
+    @Test
+    fun `root build script stays slim and delegates release logic`() {
+        val rootBuildFile = File("../build.gradle.kts")
+        val content = rootBuildFile.readText()
+
+        assertTrue(rootBuildFile.readLines().size <= 120)
+        assertTrue(content.contains("""apply(from = "gradle/release-publishing.gradle.kts")"""))
+        assertTrue(content.contains("""apply(from = "gradle/release-verification.gradle.kts")"""))
+        assertFalse(content.contains("fun sanitizeMavenCentralResponseBody("))
+        assertFalse(content.contains("tasks.register(\"verifyMavenLocalPublicationArtifacts\")"))
+        assertFalse(content.contains("tasks.register(\"uploadMavenCentralDeployment\")"))
+    }
+
+    /**
      * Maven 坐标需要匹配 Central Portal 已验证的 namespace，公开 API 包名则保持无数字。
      *
      * 这样发布能通过 `io.github.logan0817` namespace 校验，用户代码 import 仍然使用 `io.github.logan.gsonsafeparser`。
      */
     @Test
     fun `published group matches central namespace while public api package stays clean`() {
-        val rootBuildFile = File("../build.gradle.kts").readText()
+        val rootBuildFile = releaseBuildLogicContent()
 
         assertTrue(rootBuildFile.contains("group = \"io.github.logan0817\""))
         assertEquals("io.github.logan.gsonsafeparser", GsonSafeParser::class.java.packageName)
@@ -32,7 +48,7 @@ class OpenSourcePublicationTest {
      */
     @Test
     fun `root publishing config includes release repository and signing hooks`() {
-        val rootBuildFile = File("../build.gradle.kts").readText()
+        val rootBuildFile = releaseBuildLogicContent()
 
         assertTrue(rootBuildFile.contains("id(\"signing\")"))
         assertTrue(rootBuildFile.contains("releaseRepositoryUrl"))
@@ -59,7 +75,7 @@ class OpenSourcePublicationTest {
      */
     @Test
     fun `local maven publication skips signing requirement`() {
-        val rootBuildFile = File("../build.gradle.kts").readText()
+        val rootBuildFile = releaseBuildLogicContent()
 
         assertTrue(rootBuildFile.contains("fun Project.remoteMavenPublicationRequested()"))
         assertTrue(rootBuildFile.contains("tasks.withType<Sign>().configureEach"))
@@ -94,7 +110,7 @@ class OpenSourcePublicationTest {
      */
     @Test
     fun `ci workflow includes dependency vulnerability scan gate`() {
-        val rootBuildFile = File("../build.gradle.kts").readText()
+        val rootBuildFile = releaseBuildLogicContent()
         val ciWorkflow = File("../.github/workflows/ci.yml").readText()
 
         assertTrue(rootBuildFile.contains("tasks.register(\"writeOsvReleaseRuntimeLockfile\")"))
@@ -227,7 +243,7 @@ class OpenSourcePublicationTest {
      */
     @Test
     fun `local publication artifact verification uses shared gradle task`() {
-        val rootBuildFile = File("../build.gradle.kts").readText()
+        val rootBuildFile = releaseBuildLogicContent()
         val ciWorkflow = File("../.github/workflows/ci.yml").readText()
         val releaseChecklist = File("../docs/release-checklist.md").readText()
         val englishReleaseChecklist = File("../docs/en/release-checklist.md").readText()
@@ -249,7 +265,7 @@ class OpenSourcePublicationTest {
      */
     @Test
     fun `root publishing config packages dokka html into javadoc jar`() {
-        val rootBuildFile = File("../build.gradle.kts").readText()
+        val rootBuildFile = releaseBuildLogicContent()
 
         assertTrue(rootBuildFile.contains("id(\"org.jetbrains.dokka\")"))
         assertTrue(rootBuildFile.contains("dokkaGeneratePublicationHtml"))
@@ -284,7 +300,7 @@ class OpenSourcePublicationTest {
      */
     @Test
     fun `library modules publish android aar release variants`() {
-        val rootBuildFile = File("../build.gradle.kts").readText()
+        val rootBuildFile = releaseBuildLogicContent()
         val coreBuildFile = File("build.gradle.kts").readText()
         val retrofitBuildFile = File("../gson-safe-parser-retrofit/build.gradle.kts").readText()
 
@@ -336,7 +352,7 @@ class OpenSourcePublicationTest {
      */
     @Test
     fun `published aar artifacts include license and notice files`() {
-        val rootBuildFile = File("../build.gradle.kts").readText()
+        val rootBuildFile = releaseBuildLogicContent()
 
         assertTrue(rootBuildFile.contains("tasks.withType<Jar>().configureEach"))
         assertTrue(rootBuildFile.contains("tasks.withType<Zip>()"))
@@ -357,7 +373,7 @@ class OpenSourcePublicationTest {
     fun `gradle config avoids known gradle 9 deprecation warnings`() {
         val coreBuildFile = File("build.gradle.kts").readText()
         val retrofitBuildFile = File("../gson-safe-parser-retrofit/build.gradle.kts").readText()
-        val rootBuildFile = File("../build.gradle.kts").readText()
+        val rootBuildFile = releaseBuildLogicContent()
 
         assertTrue(!rootBuildFile.contains("dependencySubstitution"))
         assertTrue(!coreBuildFile.contains("api(\"org.json:json"))
@@ -377,7 +393,7 @@ class OpenSourcePublicationTest {
      */
     @Test
     fun `retrofit and demo dependencies keep okhttp and okio as runtime safety baselines`() {
-        val rootBuildFile = File("../build.gradle.kts").readText()
+        val rootBuildFile = releaseBuildLogicContent()
         val retrofitBuildFile = File("../gson-safe-parser-retrofit/build.gradle.kts").readText()
         val demoBuildFile = File("../demo-app/build.gradle.kts").readText()
         val dependencyFiles = retrofitBuildFile + "\n" + demoBuildFile
@@ -501,7 +517,7 @@ class OpenSourcePublicationTest {
      */
     @Test
     fun `maven central deployment failure output redacts raw response body`() {
-        val rootBuildFile = File("../build.gradle.kts").readText()
+        val rootBuildFile = releaseBuildLogicContent()
 
         assertTrue(rootBuildFile.contains("fun sanitizeMavenCentralResponseBody("))
         assertTrue(rootBuildFile.contains("Central Portal deployment response redacted"))
@@ -513,7 +529,7 @@ class OpenSourcePublicationTest {
      */
     @Test
     fun `maven central publishing rejects unsafe custom endpoints before credentials`() {
-        val rootBuildFile = File("../build.gradle.kts").readText()
+        val rootBuildFile = releaseBuildLogicContent()
 
         val validationIndex = rootBuildFile.indexOf("fun validateCentralPortalBaseUrl(")
         val releaseRepositoryIndex = rootBuildFile.indexOf("url = uri(validateCentralPortalBaseUrl(centralRepositoryUrl.get()))")
@@ -540,7 +556,7 @@ class OpenSourcePublicationTest {
      */
     @Test
     fun `maven central response redaction does not use whitespace truncated secret values`() {
-        val rootBuildFile = File("../build.gradle.kts").readText()
+        val rootBuildFile = releaseBuildLogicContent()
 
         assertTrue(!rootBuildFile.contains("([^\\\"\\\\s,;{}]+)"))
         assertTrue(rootBuildFile.contains("api[_-]?key"))
@@ -831,5 +847,15 @@ class OpenSourcePublicationTest {
         assertTrue(structuredRows.contains("category=TypeMismatch"))
         assertTrue(observerMarkdown.contains("No safe parser observer failures").not())
         assertTrue(diagnosticsMessages.contains("Platform type skipping is disabled."))
+    }
+
+    private fun releaseBuildLogicContent(): String {
+        return listOf(
+            "../build.gradle.kts",
+            "../gradle/release-publishing.gradle.kts",
+            "../gradle/release-verification.gradle.kts"
+        ).joinToString(separator = "\n") { path ->
+            File(path).readText()
+        }
     }
 }
