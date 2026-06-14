@@ -242,14 +242,15 @@ class SafeParserReleaseRiskTest {
     fun `default and production configs omit map item keys for release safety`() {
         val defaultEvents = mutableListOf<TypeMismatchEvent>()
         val productionEvents = mutableListOf<TypeMismatchEvent>()
+        val sensitiveKey = "user@example.com"
 
         GsonSafeParser.fromJson(
-            """{"values":{"user@example.com":[]}}""",
+            """{"values":{"$sensitiveKey":[]}}""",
             MapValueResponse::class.java,
             SafeParserConfig(onTypeMismatch = defaultEvents::add)
         )
         GsonSafeParser.fromJson(
-            """{"values":{"user@example.com":[]}}""",
+            """{"values":{"$sensitiveKey":[]}}""",
             MapValueResponse::class.java,
             SafeParserConfig.production(
                 observerPolicy = SafeObserverPolicy(onTypeMismatch = productionEvents::add)
@@ -258,6 +259,27 @@ class SafeParserReleaseRiskTest {
 
         assertNull(defaultEvents.single().mapItemKey)
         assertNull(productionEvents.single().mapItemKey)
+        assertFalse(defaultEvents.single().path.contains(sensitiveKey))
+        assertFalse(productionEvents.single().path.contains(sensitiveKey))
+    }
+
+    @Test
+    fun `shape coercion events redact sensitive map item path segments`() {
+        val events = mutableListOf<SafeParserEvent>()
+        val sensitiveKey = "user@example.com"
+        val config = SafeParserConfig(onEvent = events::add)
+            .withShapeCoercionPolicy(ShapeCoercionPolicy.ObjectAndCollection)
+
+        val result = GsonSafeParser.fromJson(
+            """{"values":{"$sensitiveKey":[{"id":9,"name":"safe"}]}}""",
+            MapValueResponse::class.java,
+            config
+        )
+
+        assertEquals(User(9L, "safe"), result?.values?.get(sensitiveKey))
+        val coercion = events.single { event -> event is SafeParserEvent.ShapeCoercion } as SafeParserEvent.ShapeCoercion
+        assertFalse(coercion.detail.path.contains(sensitiveKey))
+        assertTrue(coercion.detail.path.contains("$.values"))
     }
 
     @Test

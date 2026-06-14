@@ -44,7 +44,8 @@ internal object SafeCollectionAdapterFactory {
         // elementAdapter 负责读写单个元素，集合 Adapter 只负责数组结构和局部容错。
         val elementAdapter = gson.getAdapter(elementTypeToken) as TypeAdapter<Any?>
         val elementRawType = elementTypeToken.rawType
-        val elementUsesJsonAdapter = elementRawType.getAnnotation(JsonAdapter::class.java) != null
+        val elementHandlesOwnShape =
+            elementRawType.getAnnotation(JsonAdapter::class.java) != null || elementAdapter.handlesOwnInputShape()
         val elementAcceptsObject = TokenRules.accepts(elementType, elementRawType, JsonToken.BEGIN_OBJECT)
         val rawType = type.rawType
 
@@ -107,7 +108,7 @@ internal object SafeCollectionAdapterFactory {
                 while (reader.hasNext()) {
                     // itemToken 是当前元素的 JSON 形状，先判断形状可以避免错误元素破坏整个列表读取。
                     val itemToken = reader.peek()
-                    if (!elementUsesJsonAdapter && !TokenRules.accepts(elementType, elementRawType, itemToken)) {
+                    if (!elementHandlesOwnShape && !TokenRules.accepts(elementType, elementRawType, itemToken)) {
                         // item 级错配只影响当前元素，集合本身和后续元素都应该继续保留。
                         notify(
                             config = config,

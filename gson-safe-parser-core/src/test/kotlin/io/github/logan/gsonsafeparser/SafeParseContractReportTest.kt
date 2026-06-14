@@ -362,6 +362,97 @@ class SafeParseContractReportTest {
         assertEquals("bad", report.issues[1].mapItemKey)
     }
 
+    @Test
+    fun `contract report redacts sensitive plain map item keys from outputs`() {
+        val sensitiveKey = "user@example.com"
+        val result = SafeParseResult<Unit>(
+            value = Unit,
+            events = listOf(
+                SafeParserEvent.TypeMismatch(
+                    TypeMismatchEvent(
+                        expectedType = "com.example.Profile",
+                        actualToken = JsonToken.BEGIN_ARRAY,
+                        path = "$.profiles.$sensitiveKey",
+                        reason = "Unexpected JSON token",
+                        kind = ParseExceptionKind.MAP_ITEM,
+                        fieldName = "profiles",
+                        mapItemKey = sensitiveKey
+                    )
+                )
+            )
+        )
+
+        val report = result.contractReport()
+        val issue = report.issues.single()
+        val markdown = report.toMarkdown()
+        val backendMarkdown = report.toBackendMarkdown()
+        val structuredFields = report.toStructuredRows().single().fields
+
+        assertFalse(issue.stableKey.contains(sensitiveKey))
+        assertFalse(markdown.contains(sensitiveKey))
+        assertFalse(backendMarkdown.contains(sensitiveKey))
+        assertTrue(structuredFields.values.none { value -> value.contains(sensitiveKey) })
+        assertTrue(issue.mapItemKey?.startsWith("sha256:") == true)
+        assertTrue(structuredFields.getValue("mapItemKey").startsWith("sha256:"))
+    }
+
+    @Test
+    fun `contract report redacts only trailing map item key in path`() {
+        val result = SafeParseResult<Unit>(
+            value = Unit,
+            events = listOf(
+                SafeParserEvent.TypeMismatch(
+                    TypeMismatchEvent(
+                        expectedType = "com.example.Profile",
+                        actualToken = JsonToken.BEGIN_ARRAY,
+                        path = "$.tokens.token",
+                        reason = "Unexpected JSON token",
+                        kind = ParseExceptionKind.MAP_ITEM,
+                        fieldName = "tokens",
+                        mapItemKey = "token"
+                    )
+                )
+            )
+        )
+
+        val issue = result.contractReport().issues.single()
+
+        assertEquals("$.tokens", issue.path?.substringBeforeLast('.'))
+        assertTrue(issue.path?.substringAfterLast('.')?.startsWith("sha256:") == true)
+        assertTrue(issue.mapItemKey?.startsWith("sha256:") == true)
+    }
+
+    @Test
+    fun `contract report redacts sensitive shape coercion path segments`() {
+        val sensitiveKey = "user@example.com"
+        val result = SafeParseResult<Unit>(
+            value = Unit,
+            events = listOf(
+                SafeParserEvent.ShapeCoercion(
+                    ShapeCoercionEvent(
+                        expectedType = "com.example.Profile",
+                        actualToken = JsonToken.BEGIN_ARRAY,
+                        path = "$.profiles.$sensitiveKey",
+                        action = ShapeCoercionAction.ObjectFromFirstArrayItem
+                    )
+                )
+            )
+        )
+
+        val report = result.contractReport()
+        val issue = report.issues.single()
+        val markdown = report.toMarkdown()
+        val backendMarkdown = report.toBackendMarkdown()
+        val structuredFields = report.toStructuredRows().single().fields
+
+        assertFalse(issue.stableKey.contains(sensitiveKey))
+        assertFalse(issue.path.orEmpty().contains(sensitiveKey))
+        assertFalse(markdown.contains(sensitiveKey))
+        assertFalse(backendMarkdown.contains(sensitiveKey))
+        assertTrue(structuredFields.values.none { value -> value.contains(sensitiveKey) })
+        assertTrue(issue.path?.substringAfterLast('.')?.startsWith("sha256:") == true)
+    }
+
     /**
      * 测试方法说明：验证“contract report maps non parsing events without exposing throwable”这个具体行为。
      * 阅读时可以按准备数据、执行解析、断言结果的顺序跟下来。

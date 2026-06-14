@@ -8,7 +8,7 @@ Start with the short version:
 
 1. The published artifacts are Android AARs, not plain JVM jars.
 2. The recommended integration baseline is `minSdk 23`, `compileSdk 36`, `JDK 17`, `Kotlin 2.0.21`, and `Gson 2.13.2`.
-3. The Retrofit module is verified with `Retrofit 2.8.1`, and it explicitly publishes the `OkHttp 4.12.0` and `Okio 3.6.0` safety baseline.
+3. The Retrofit module is verified with `Retrofit 2.8.1`, and it carries the `OkHttp 4.12.0` and `Okio 3.6.0` safety baselines as runtime dependencies.
 4. Retrofit network or transport read failures are not JSON mismatches or empty responses; do not hide them with `emptyResponsePolicy`.
 5. Legacy projects should not go straight to production. Validate them against the matrix below first.
 
@@ -43,7 +43,7 @@ Start with the short version:
 
 ## 3. Retrofit Version Notes
 
-`gson-safe-parser-retrofit` exposes `Retrofit 2.8.1`, `OkHttp 4.12.0`, and `Okio 3.6.0`. This keeps the Retrofit 2.x Converter API while preventing consumers that do not declare a network stack from resolving back to Retrofit 2.8.1's OkHttp 3.14.x / Okio 1.x transitive baseline.
+`gson-safe-parser-retrofit` exposes `Retrofit 2.8.1`, while carrying `OkHttp 4.12.0` and `Okio 3.6.0` as runtime dependencies. This keeps the Retrofit 2.x Converter API while preventing consumers that do not declare a network stack from resolving back to Retrofit 2.8.1's OkHttp 3.14.x / Okio 1.x transitive baseline, without expanding the converter module's compile-time API to the network stack.
 
 If your project already uses a newer Retrofit version, Gradle can usually resolve to the newer version. Before production, verify 4 things:
 

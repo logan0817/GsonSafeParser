@@ -29,7 +29,8 @@ import java.lang.reflect.Modifier
  * 这里的默认策略是保守的：自定义类级 @JsonAdapter、Gson 内置类型、抽象类型和接口都不抢解析权。
  */
 internal class SafeTypeAdapterFactory(
-    private val config: SafeParserConfig
+    private val config: SafeParserConfig,
+    private val nativeFactories: List<TypeAdapterFactory> = emptyList()
 ) : TypeAdapterFactory {
     /**
      * 根据目标类型创建对应的 Safe Adapter。
@@ -59,6 +60,9 @@ internal class SafeTypeAdapterFactory(
 
         // 集合、数组、Map、普通对象都可能在创建 Adapter 时遇到反射限制或字段冲突，所以统一走 createSafely。
         if (rawType.isArray && !rawType.componentType.isPrimitive) {
+            if (hasKnownNativeFactoryAdapter(type)) {
+                return null
+            }
             return createSafely(config, type) {
                 SafeArrayAdapterFactory.create(
                     gson = gson,
@@ -70,15 +74,24 @@ internal class SafeTypeAdapterFactory(
         }
 
         if (Collection::class.java.isAssignableFrom(rawType)) {
+            if (hasKnownNativeFactoryAdapter(type)) {
+                return null
+            }
             return createSafely(config, type) { SafeCollectionAdapterFactory.create(gson, type, config) }
         }
 
         if (Map::class.java.isAssignableFrom(rawType)) {
+            if (hasKnownNativeFactoryAdapter(type)) {
+                return null
+            }
             return createSafely(config, type) { SafeMapAdapterFactory.create(gson, type, config) }
         }
 
         if (TokenRules.isObjectLike(rawType)) {
             if (rawType.isInterface || Modifier.isAbstract(rawType.modifiers)) return null
+            if (hasKnownNativeFactoryAdapter(type)) {
+                return null
+            }
             return createSafely(config, type) {
                 SafeReflectiveAdapterFactory.create(
                     gson = gson,
@@ -123,5 +136,52 @@ internal class SafeTypeAdapterFactory(
             )
             null
         }
+    }
+
+    /**
+     * 如果 GsonBuilder 已经为当前类型注册了显式 adapter，就交回 Gson 原生链路。
+     */
+    private fun <T> hasKnownNativeFactoryAdapter(type: TypeToken<T>): Boolean {
+        return nativeFactories.any { factory -> factory.knownRegisteredTypeMatch(type) == true }
+    }
+
+    private fun TypeAdapterFactory.knownRegisteredTypeMatch(type: TypeToken<*>): Boolean? {
+        return when (javaClass.name) {
+            GSON_SINGLE_TYPE_FACTORY_NAME -> {
+                runRecovering {
+                    val exactType = fieldValue("exactType") as? TypeToken<*>
+                    val matchRawType = fieldValue("matchRawType") as? Boolean ?: false
+                    val hierarchyType = fieldValue("hierarchyType") as? Class<*>
+                    when {
+                        exactType != null -> exactType == type || (matchRawType && exactType.rawType == type.rawType)
+                        hierarchyType != null -> hierarchyType.isAssignableFrom(type.rawType)
+                        else -> false
+                    }
+                }.getOrNull()
+            }
+            GSON_EXACT_TYPE_ADAPTER_FACTORY_NAME -> {
+                runRecovering {
+                    fieldValue("val\$type") as? TypeToken<*> == type
+                }.getOrNull()
+            }
+            GSON_HIERARCHY_TYPE_ADAPTER_FACTORY_NAME -> {
+                runRecovering {
+                    (fieldValue("val\$clazz") as? Class<*>)?.isAssignableFrom(type.rawType) == true
+                }.getOrNull()
+            }
+            else -> null
+        }
+    }
+
+    private fun TypeAdapterFactory.fieldValue(name: String): Any? {
+        val field = javaClass.getDeclaredField(name)
+        field.isAccessible = true
+        return field.get(this)
+    }
+
+    private companion object {
+        private const val GSON_SINGLE_TYPE_FACTORY_NAME = "com.google.gson.internal.bind.TreeTypeAdapter\$SingleTypeFactory"
+        private const val GSON_EXACT_TYPE_ADAPTER_FACTORY_NAME = "com.google.gson.internal.bind.TypeAdapters\$28"
+        private const val GSON_HIERARCHY_TYPE_ADAPTER_FACTORY_NAME = "com.google.gson.internal.bind.TypeAdapters\$32"
     }
 }

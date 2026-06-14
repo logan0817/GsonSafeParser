@@ -8,20 +8,22 @@ This document covers config fields, constructor policy, presets, events, contrac
 
 ## 1. Base Config
 
+The example below is copyable and keeps every field visible. The table after it explains what each option controls and when to change it.
+
 ```kotlin
-val config = SafeParserConfig( // Creates a complete safe parsing config.
-    fallbackPolicy = FallbackPolicy.NullOnly, // Returns null or keeps constructed defaults for mismatched fields.
-    emptyResponsePolicy = EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly, // Returns empty values only for Unit/Void Retrofit bodies.
-    primitiveParsingPolicy = PrimitiveParsingPolicy.DelegateToGson, // Delegates primitive values to native Gson adapters.
-    complexMapKeySerialization = false, // Keeps complex Map key array-entry writing disabled by default.
-    useJdkUnsafe = false, // SafeParser itself does not bypass constructors with Unsafe by default.
-    skippedPlatformTypePrefixes = setOf("android."), // Skips Android platform types to avoid reflecting system objects; do not add business model package prefixes here.
-    nullValuePolicy = NullValuePolicy.WriteExplicitNulls, // Writes explicit JSON null only to nullable fields.
-    requiredConstructorParameterPolicy = RequiredConstructorParameterPolicy.GsonCompatible, // Keeps Gson-compatible behavior for missing non-null Kotlin constructor parameters.
-    mapItemKeyPolicy = MapItemKeyPolicy.Omit, // Omits Map item keys by default; opt into Hash only when aggregation needs it.
-    captureRawJsonInCallbacks = false, // Does not attach raw JSON to callbacks by default.
-    maxRawJsonCaptureBytes = 1024 * 1024 // Limits raw JSON capture to 1 MiB.
-) // Ends safe parsing config.
+val config = SafeParserConfig(
+    fallbackPolicy = FallbackPolicy.NullOnly,
+    emptyResponsePolicy = EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly,
+    primitiveParsingPolicy = PrimitiveParsingPolicy.DelegateToGson,
+    complexMapKeySerialization = false,
+    useJdkUnsafe = false,
+    skippedPlatformTypePrefixes = setOf("android."),
+    nullValuePolicy = NullValuePolicy.WriteExplicitNulls,
+    requiredConstructorParameterPolicy = RequiredConstructorParameterPolicy.GsonCompatible,
+    mapItemKeyPolicy = MapItemKeyPolicy.Omit,
+    captureRawJsonInCallbacks = false,
+    maxRawJsonCaptureBytes = 1024 * 1024
+)
 ```
 
 The default config is low-interference: field-level problems fall back locally, and anything unsafe or uncertain goes back to Gson.
@@ -92,9 +94,9 @@ The object may be created, but Kotlin defaults, non-null constraints, and constr
 ## 3. Presets
 
 ```kotlin
-val production = SafeParserConfig.production() // Creates the production default config.
-val debug = SafeParserConfig.debug() // Creates an integration config with raw JSON capture enabled by default.
-val lowInterference = SafeParserConfig.lowInterference() // Creates a conservative config closer to native Gson behavior.
+val production = SafeParserConfig.production()
+val debug = SafeParserConfig.debug()
+val lowInterference = SafeParserConfig.lowInterference()
 ```
 
 Presets:
@@ -107,25 +109,25 @@ Presets:
 
 ## 4. Layered Policies
 
+Layered policies separate read behavior, write behavior, and observation. They are useful when a team wraps a shared config internally.
+
 ```kotlin
-val config = SafeParserConfig.fromPolicies( // Creates config from layered policies.
-    readPolicy = SafeReadPolicy( // Configures JSON read behavior.
-        fallbackPolicy = FallbackPolicy.NullOnly, // Returns null or keeps constructed defaults for mismatched fields.
-        primitiveParsingPolicy = PrimitiveParsingPolicy.DelegateToGson, // Delegates primitive values to native Gson adapters.
-        useJdkUnsafe = false // SafeParser itself does not bypass constructors with Unsafe.
-    ), // Ends read policy.
-    writePolicy = SafeWritePolicy( // Configures JSON write behavior.
-        complexMapKeySerialization = false // Keeps complex Map key writing disabled by default.
-    ), // Ends write policy.
-    observerPolicy = SafeObserverPolicy( // Configures parse-event observation.
-        onEvent = { event -> // Receives unified parse events.
-            println(event) // Prints the event for logs or monitoring.
-        } // Ends event callback.
-    ) // Ends observer policy.
-) // Ends layered config creation.
+val config = SafeParserConfig.fromPolicies(
+    readPolicy = SafeReadPolicy(
+        fallbackPolicy = FallbackPolicy.NullOnly,
+        primitiveParsingPolicy = PrimitiveParsingPolicy.DelegateToGson,
+        useJdkUnsafe = false
+    ),
+    writePolicy = SafeWritePolicy(
+        complexMapKeySerialization = false
+    ),
+    observerPolicy = SafeObserverPolicy(
+        onEvent = { event -> println(event) }
+    )
+)
 ```
 
-Layered policies are useful when a team wraps a shared config internally. They separate read behavior, write behavior, and observation so one constructor does not carry every concern.
+This avoids one large constructor carrying every concern, and lets separate modules own read, write, and observation policy.
 
 ## 5. JSON Shape Coercion
 
@@ -179,21 +181,23 @@ Boundaries:
 
 ## 6. Event Observation
 
+The example below combines the unified event stream with compatibility callbacks. The numbered list after it explains what each callback is for.
+
 ```kotlin
-val config = SafeParserConfig( // Creates safe parsing config with event callbacks.
-    onEvent = { event -> // Receives unified parse events.
-        println(event) // Prints the event object.
-    }, // Ends unified event callback.
-    onTypeMismatch = { event -> // Receives field type mismatch events.
-        println("${event.path}: ${event.actualToken} -> ${event.expectedType}") // Prints path, actual token, and expected type.
-    }, // Ends type mismatch callback.
-    onAdapterCreationFailure = { event -> // Receives Safe Adapter creation failure events.
-        println("${event.typeName}: ${event.reason}") // Prints failed type and reason.
-    }, // Ends Adapter creation failure callback.
-    onObserverFailure = { event -> // Receives failures thrown by business callbacks.
-        println("${event.callbackName}: ${event.reason}") // Prints failed callback name and reason.
-    } // Ends observer failure callback.
-) // Ends event config.
+val config = SafeParserConfig(
+    onEvent = { event ->
+        println(event)
+    },
+    onTypeMismatch = { event ->
+        println("${event.path}: ${event.actualToken} -> ${event.expectedType}")
+    },
+    onAdapterCreationFailure = { event ->
+        println("${event.typeName}: ${event.reason}")
+    },
+    onObserverFailure = { event ->
+        println("${event.callbackName}: ${event.reason}")
+    }
+)
 ```
 
 1. `onEvent` is the unified event stream. It receives type mismatches, ShapeCoercion events, Adapter creation failures, empty responses, raw JSON capture skips, and other observable events.
@@ -214,17 +218,19 @@ A manual call does not write into the current `parseSafe` event snapshot, and it
 ## 7. Contract Report
 
 ```kotlin
-val result = GsonSafeParser.parseSafe<ApiResponse>("""{"code":200,"data":[]}""") // Parses JSON with an object-field mismatch.
-val report = result.contractReport() // Converts parse events into a contract report.
+val result = GsonSafeParser.parseSafe<ApiResponse>("""{"code":200,"data":[]}""")
+val report = result.contractReport()
 
-if (report.hasIssues) { // Checks whether this parse found contract issues.
-    println(report.toMarkdown()) // Prints the report in Markdown.
-    println(report.toBackendMarkdown()) // Prints the backend-facing contract report for API fixes.
-    println(report.summary.warningCount) // Prints warning count for CI or logging decisions.
-    println(report.toStructuredRows().firstOrNull()?.stableKey) // Prints a stable fingerprint for online grouping.
-    println(report.toStructuredRows().firstOrNull()?.fields?.get("captureSkipReason")) // Prints the raw JSON capture skip reason.
-} // Ends issue report output.
+if (report.hasIssues) {
+    println(report.toMarkdown())
+    println(report.toBackendMarkdown())
+    println(report.summary.warningCount)
+    println(report.toStructuredRows().firstOrNull()?.stableKey)
+    println(report.toStructuredRows().firstOrNull()?.fields?.get("captureSkipReason"))
+}
 ```
+
+These outputs are for human review, backend fixes, CI decisions, online grouping, and raw JSON capture diagnosis.
 
 The contract report only consumes events from the current parse. It does not parse JSON again and does not modify the parsed value. Use it for logs, CI reports, and API issue review.
 
@@ -237,37 +243,39 @@ Machine-side integrations should prefer `summary`, each issue's `stableKey`, and
 ## 8. Observer Failure Report
 
 ```kotlin
-val observerFailures = mutableListOf<ObserverFailureEvent>() // Creates a list for observer failure events.
+val observerFailures = mutableListOf<ObserverFailureEvent>()
 
-val gson = GsonSafeParser.create( // Creates a Gson with observer failure collection.
-    SafeParserConfig( // Creates safe parsing config.
-        onObserverFailure = observerFailures::add // Adds observer failure events to the list.
-    ) // Ends safe parsing config.
-) // Ends Gson creation.
+val gson = GsonSafeParser.create(
+    SafeParserConfig(
+        onObserverFailure = observerFailures::add
+    )
+)
 
-println(observerFailures.observerFailureReport().toMarkdown()) // Prints the redacted observer failure report.
+println(observerFailures.observerFailureReport().toMarkdown())
 ```
+
+`observerFailureReport()` prints a redacted report for failures thrown by logging, analytics, or other observer callbacks.
 
 The report redacts and summarizes failed callback names, source event types, field paths, and exception types. It does not directly output raw JSON or stack traces. `ShapeCoercion` events reuse the mismatch category while preserving the event name, path, and field details, so they do not fall into Unknown.
 
 ## 9. Annotations
 
 ```kotlin
-@SafeParseDelegateToGson // Lets this type use native Gson Adapter directly.
-class StrictModel // Defines a model that should stay strict under native Gson behavior.
+@SafeParseDelegateToGson
+class StrictModel
 
-data class PageState( // Defines a page model with runtime state.
-    @field:SafeParseSkip // Tells Safe Reflective to skip this field.
-    val runtimeCache: Any? = null // Stores runtime cache that should not be read from JSON.
-) // Ends page model.
+data class PageState(
+    @field:SafeParseSkip
+    val runtimeCache: Any? = null
+)
 
-data class FlexibleResponse( // Defines a response model with local shape coercion.
+data class FlexibleResponse(
     @field:SafeParseShapeCoercion(ShapeCoercionPolicy.ObjectFromFirstArrayItem)
-    val data: User? = null, // Allows only data to recover from the first object in an array.
+    val data: User? = null,
 
     @field:SafeParseDisableShapeCoercion
-    val signedPayload: SignedPayload = SignedPayload() // Keeps a strict-contract field on the original fallback behavior even when the global policy is enabled.
-) // Ends response model.
+    val signedPayload: SignedPayload = SignedPayload()
+)
 ```
 
 1. `@SafeParseDelegateToGson` is used on classes and makes that type use the native Gson Adapter directly.

@@ -15,10 +15,12 @@ import com.google.gson.stream.JsonWriter
 import io.github.logan.gsonsafeparser.FallbackPolicy
 import io.github.logan.gsonsafeparser.ParseExceptionKind
 import io.github.logan.gsonsafeparser.SafeParserConfig
+import io.github.logan.gsonsafeparser.ShapeCoercionAction
 import io.github.logan.gsonsafeparser.internal.TokenRules
 import io.github.logan.gsonsafeparser.internal.objectcreation.SafeObjectConstructor
 import io.github.logan.gsonsafeparser.internal.runRecovering
 import java.lang.reflect.Type
+import java.util.Collection
 
 /**
  * Map 系列的安全 Adapter。
@@ -44,7 +46,8 @@ internal object SafeMapAdapterFactory {
         val keyAdapter = keyAdapter(gson, keyValueTypes.first) as TypeAdapter<Any?>
         val valueAdapter = gson.getAdapter(valueTypeToken) as TypeAdapter<Any?>
         val valueRawType = valueTypeToken.rawType
-        val valueUsesJsonAdapter = valueRawType.getAnnotation(JsonAdapter::class.java) != null
+        val valueHandlesOwnShape =
+            valueRawType.getAnnotation(JsonAdapter::class.java) != null || valueAdapter.handlesOwnInputShape()
         val rawType = type.rawType
         val complexMapKeySerialization = config.complexMapKeySerialization
 
@@ -138,7 +141,12 @@ internal object SafeMapAdapterFactory {
                             continue
                         }
                         val valueToken = reader.peek()
-                        if (!valueUsesJsonAdapter && !TokenRules.accepts(keyValueTypes.second, valueRawType, valueToken)) {
+                        val pathBeforeRead = reader.path
+                        if (
+                            !valueHandlesOwnShape &&
+                            !TokenRules.accepts(keyValueTypes.second, valueRawType, valueToken) &&
+                            !canCoerceMapValue(valueRawType, valueToken, config)
+                        ) {
                             // value 错形只影响当前 entry，Map 里的其他 key 仍然可以继续解析。
                             notify(
                                 config = config,
@@ -151,9 +159,23 @@ internal object SafeMapAdapterFactory {
                             reader.skipValue()
                             continue
                         }
-                        val pathBeforeRead = reader.path
-                        runRecovering { valueAdapter.read(reader) }
-                            .onSuccess { values[(key as ParsedMapKey.Success).value] = it }
+                        runRecovering {
+                            when (
+                                val value = readMapValue(
+                                    reader = reader,
+                                    valueType = valueTypeToken,
+                                    valueAdapter = valueAdapter,
+                                    valueToken = valueToken,
+                                    valueRawType = valueRawType,
+                                    valueHandlesOwnShape = valueHandlesOwnShape,
+                                    pathBeforeRead = pathBeforeRead,
+                                    config = config
+                                )
+                            ) {
+                                is ParsedMapValue.Success -> values[(key as ParsedMapKey.Success).value] = value.value
+                                ParsedMapValue.Skipped -> Unit
+                            }
+                        }
                             .onFailure {
                                 // valueAdapter 可能已经消费了一半对象，先把 reader 修正到当前 entry 后面。
                                 reader.skipUnreadValueIfPossible(pathBeforeRead)
@@ -207,7 +229,11 @@ internal object SafeMapAdapterFactory {
                                     mapItemKey = key?.toString() ?: "null",
                                     path = pathBeforeRead
                                 )
-                            } else if (!valueUsesJsonAdapter && !TokenRules.accepts(keyValueTypes.second, valueRawType, failureToken)) {
+                            } else if (
+                                !valueHandlesOwnShape &&
+                                !TokenRules.accepts(keyValueTypes.second, valueRawType, failureToken) &&
+                                !canCoerceMapValue(valueRawType, failureToken, config)
+                            ) {
                                 notify(
                                     config = config,
                                     type = valueTypeToken,
@@ -218,7 +244,21 @@ internal object SafeMapAdapterFactory {
                                 )
                                 reader.skipValue()
                             } else {
-                                values[key] = valueAdapter.read(reader)
+                                when (
+                                    val value = readMapValue(
+                                        reader = reader,
+                                        valueType = valueTypeToken,
+                                        valueAdapter = valueAdapter,
+                                        valueToken = failureToken,
+                                        valueRawType = valueRawType,
+                                        valueHandlesOwnShape = valueHandlesOwnShape,
+                                        pathBeforeRead = pathBeforeRead,
+                                        config = config
+                                    )
+                                ) {
+                                    is ParsedMapValue.Success -> values[key] = value.value
+                                    ParsedMapValue.Skipped -> Unit
+                                }
                             }
                         }.onFailure {
                             reader.skipUnreadValueIfPossible(pathBeforeRead)
@@ -286,6 +326,143 @@ internal object SafeMapAdapterFactory {
         }.getOrElse {
             ParsedMapKey.Failure(it.message ?: it.javaClass.name)
         }
+    }
+
+    /**
+     * Map value 本身不是字段，但它处在 Map 字段读取期间时可以继承字段级 shape coercion 策略。
+     */
+    private fun canCoerceMapValue(
+        valueRawType: Class<*>,
+        token: JsonToken,
+        config: SafeParserConfig
+    ): Boolean {
+        val policy = ShapeCoercionReadContext.currentPolicy(config)
+        return when {
+            token == JsonToken.BEGIN_ARRAY &&
+                policy.supportsObjectFromArray() &&
+                TokenRules.isObjectLike(valueRawType) -> true
+            token == JsonToken.BEGIN_OBJECT &&
+                policy.supportsCollectionFromObject() &&
+                (Collection::class.java.isAssignableFrom(valueRawType) || valueRawType.isArray) -> true
+            else -> false
+        }
+    }
+
+    private fun readMapValue(
+        reader: JsonReader,
+        valueType: TypeToken<*>,
+        valueAdapter: TypeAdapter<Any?>,
+        valueToken: JsonToken,
+        valueRawType: Class<*>,
+        valueHandlesOwnShape: Boolean,
+        pathBeforeRead: String,
+        config: SafeParserConfig
+    ): ParsedMapValue {
+        if (
+            !valueHandlesOwnShape &&
+            valueToken == JsonToken.BEGIN_ARRAY &&
+            ShapeCoercionReadContext.currentPolicy(config).supportsObjectFromArray() &&
+            TokenRules.isObjectLike(valueRawType)
+        ) {
+            return readObjectMapValueFromFirstArrayItem(
+                reader = reader,
+                valueType = valueType,
+                valueAdapter = valueAdapter,
+                valueToken = valueToken,
+                pathBeforeRead = pathBeforeRead,
+                config = config
+            )
+        }
+        return ParsedMapValue.Success(valueAdapter.read(reader))
+    }
+
+    private fun readObjectMapValueFromFirstArrayItem(
+        reader: JsonReader,
+        valueType: TypeToken<*>,
+        valueAdapter: TypeAdapter<Any?>,
+        valueToken: JsonToken,
+        pathBeforeRead: String,
+        config: SafeParserConfig
+    ): ParsedMapValue {
+        reader.beginArray()
+        if (!reader.hasNext()) {
+            reader.endArray()
+            dispatchShapeCoercion(
+                config = config,
+                type = valueType,
+                reader = reader,
+                token = valueToken,
+                action = ShapeCoercionAction.EmptyArrayForObjectSkipped,
+                path = pathBeforeRead
+            )
+            return ParsedMapValue.Skipped
+        }
+
+        val firstItemPath = reader.path
+        val firstItemToken = reader.peek()
+        if (firstItemToken != JsonToken.BEGIN_OBJECT) {
+            reader.skipValue()
+            while (reader.hasNext()) {
+                reader.skipValue()
+            }
+            reader.endArray()
+            dispatchShapeCoercion(
+                config = config,
+                type = valueType,
+                reader = reader,
+                token = valueToken,
+                action = ShapeCoercionAction.CoercionFailed,
+                reason = "First array item is $firstItemToken, not an object value",
+                path = pathBeforeRead
+            )
+            return ParsedMapValue.Skipped
+        }
+
+        val value = runRecovering { valueAdapter.read(reader) }
+            .getOrElse { error ->
+                reader.skipUnreadValueIfPossible(firstItemPath)
+                while (runRecovering { reader.hasNext() }.getOrDefault(false)) {
+                    reader.skipValue()
+                }
+                reader.endArray()
+                dispatchShapeCoercion(
+                    config = config,
+                    type = valueType,
+                    reader = reader,
+                    token = valueToken,
+                    action = ShapeCoercionAction.CoercionFailed,
+                    reason = error.message ?: error.javaClass.name,
+                    path = pathBeforeRead
+                )
+                return ParsedMapValue.Skipped
+            }
+
+        dispatchShapeCoercion(
+            config = config,
+            type = valueType,
+            reader = reader,
+            token = valueToken,
+            action = ShapeCoercionAction.ObjectFromFirstArrayItem,
+            path = pathBeforeRead
+        )
+        var discardedItemCount = 0
+        while (reader.hasNext()) {
+            reader.skipValue()
+            discardedItemCount++
+        }
+        reader.endArray()
+        if (discardedItemCount > 0) {
+            dispatchShapeCoercion(
+                config = config,
+                type = valueType,
+                reader = reader,
+                token = valueToken,
+                action = ShapeCoercionAction.ArrayExtraItemsSkipped,
+                discardedItemCount = discardedItemCount,
+                path = pathBeforeRead
+            )
+        }
+        return ParsedMapValue.Success(value)
     }
 
     /**
@@ -357,5 +534,10 @@ internal object SafeMapAdapterFactory {
         data class Success(val value: Any?) : ParsedMapKey
         /** key 解析失败，reason 会进入错配事件，帮助定位是哪个 key 不合法。 */
         data class Failure(val reason: String) : ParsedMapKey
+    }
+
+    private sealed interface ParsedMapValue {
+        data class Success(val value: Any?) : ParsedMapValue
+        data object Skipped : ParsedMapValue
     }
 }

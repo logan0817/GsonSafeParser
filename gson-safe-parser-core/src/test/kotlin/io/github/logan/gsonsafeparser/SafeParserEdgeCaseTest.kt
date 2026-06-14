@@ -19,6 +19,8 @@ import java.util.ArrayList
 import java.util.SortedSet
 import java.util.TreeSet
 import java.util.concurrent.CancellationException
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentMap
 
 /**
  * 验证不容易归到单一模块的边界场景。
@@ -87,6 +89,10 @@ class SafeParserEdgeCaseTest {
     /** 测试模型：对象形式 Map，key 需要经过自定义 Adapter 读取。 */
     data class EscapedKeyMapContainer(
         val values: Map<EscapedKey, String> = emptyMap()
+    )
+    /** 测试模型：ConcurrentMap 不接受 null value，用来验证单个 entry 写入失败不会拖垮整次解析。 */
+    data class ConcurrentNullableMapContainer(
+        val values: ConcurrentMap<String, String?> = ConcurrentHashMap()
     )
 
     /** 测试模型：读取时可能半消费失败的 Map value。 */
@@ -282,6 +288,26 @@ class SafeParserEdgeCaseTest {
         assertEquals("slash", result.values[EscapedKey("""a\b""")])
         assertEquals("newline", result.values[EscapedKey("line\nkey")])
         assertEquals("quote", result.values[EscapedKey("quote\"key")])
+    }
+
+    @Test
+    fun `map object form skips entry when target map rejects value write`() {
+        val events = mutableListOf<TypeMismatchEvent>()
+
+        val result = GsonSafeParser.fromJson(
+            json = """{"values":{"bad":null,"ok":"next"}}""",
+            type = ConcurrentNullableMapContainer::class.java,
+            config = SafeParserConfig(
+                mapItemKeyPolicy = MapItemKeyPolicy.PlainText,
+                onTypeMismatch = events::add
+            )
+        )
+
+        assertEquals(mapOf("ok" to "next"), result?.values)
+        val event = events.single()
+        assertEquals(ParseExceptionKind.MAP_ITEM, event.kind)
+        assertEquals("$.values.bad", event.path)
+        assertEquals("bad", event.mapItemKey)
     }
 
     /**

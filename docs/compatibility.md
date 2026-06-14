@@ -8,7 +8,7 @@
 
 1. 当前产物是 Android AAR，不是普通 JVM Jar。
 2. 推荐接入环境是 `minSdk 23`、`compileSdk 36`、`JDK 17`、`Kotlin 2.0.21`、`Gson 2.13.2`。
-3. Retrofit 模块当前验证版本是 `Retrofit 2.8.1`，并显式携带 `OkHttp 4.12.0` 和 `Okio 3.6.0` 安全基线。
+3. Retrofit 模块当前验证版本是 `Retrofit 2.8.1`，并以运行时依赖携带 `OkHttp 4.12.0` 和 `Okio 3.6.0` 安全基线。
 4. Retrofit 网络或传输读流异常不属于 JSON 错形，也不属于空响应；不要用 `emptyResponsePolicy` 隐藏这类异常。
 5. 低版本项目不要直接上线，先按下面表格做兼容验证。
 
@@ -43,7 +43,7 @@
 
 ## 3. Retrofit 版本说明
 
-`gson-safe-parser-retrofit` 公开依赖 `Retrofit 2.8.1`，并显式公开 `OkHttp 4.12.0`、`Okio 3.6.0`。这样做是为了保留 Retrofit 2.x Converter API 的同时，避免消费者在没有声明网络栈版本时解析到 Retrofit 2.8.1 自带的 OkHttp 3.14.x / Okio 1.x。
+`gson-safe-parser-retrofit` 公开依赖 `Retrofit 2.8.1`，并以运行时依赖携带 `OkHttp 4.12.0`、`Okio 3.6.0`。这样做是为了保留 Retrofit 2.x Converter API 的同时，避免消费者在没有声明网络栈版本时解析到 Retrofit 2.8.1 自带的 OkHttp 3.14.x / Okio 1.x，也避免把网络栈类型扩成 converter 模块的编译期 API。
 
 如果业务项目已经使用更高 Retrofit 版本，通常可以由 Gradle 解析到更高版本，但上线前必须验证 4 件事：
 

@@ -28,7 +28,7 @@ Plain Gson usage:
 Latest version: [![Maven Central: core](https://img.shields.io/maven-central/v/io.github.logan0817/gson-safe-parser-core?label=core)](https://central.sonatype.com/artifact/io.github.logan0817/gson-safe-parser-core)
 
 ```kotlin
-implementation("io.github.logan0817:gson-safe-parser-core:1.0.3") // Adds the core GsonSafeParser parsing library.
+implementation("io.github.logan0817:gson-safe-parser-core:1.0.3")
 ```
 
 If the project uses Retrofit, only add:
@@ -36,7 +36,7 @@ If the project uses Retrofit, only add:
 Latest version: [![Maven Central: retrofit](https://img.shields.io/maven-central/v/io.github.logan0817/gson-safe-parser-retrofit?label=retrofit)](https://central.sonatype.com/artifact/io.github.logan0817/gson-safe-parser-retrofit)
 
 ```kotlin
-implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.3") // Adds the Retrofit converter integration and transitively includes core.
+implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.3")
 ```
 
 ## 2. Plain Gson Integration
@@ -69,20 +69,24 @@ println(result.contractReport().toBackendMarkdown())
 ```
 
 ```kotlin
-val gson = GsonSafeParser.create() // Creates a Gson instance with safe parsing enabled.
-val response = gson.fromJson(json, ApiResponse::class.java) // Parses a business response with safe Gson.
+val gson = GsonSafeParser.create()
+val response = gson.fromJson(json, ApiResponse::class.java)
 ```
+
+`GsonSafeParser.create()` returns a Gson instance with Safe Adapters registered. Use it when you do not need a custom `GsonBuilder`.
 
 The default entry does not read `GsonBuilder` internals, so it is the lower-risk choice when you do not need a custom GsonBuilder.
 
 If you already own a `GsonBuilder`:
 
 ```kotlin
-val gson = GsonBuilder() // Creates a custom GsonBuilder.
-    .serializeNulls() // Keeps the Gson serialization option you already need.
-    .enableSafeParser() // Registers safe parsing on the current Builder.
-    .create() // Creates the final Gson instance.
+val gson = GsonBuilder()
+    .serializeNulls()
+    .enableSafeParser()
+    .create()
 ```
+
+This keeps your existing Gson options and registers field-level safe parsing on the same Builder.
 
 `enableSafeParser()` registers safe parsing on the current `GsonBuilder` while preserving the Gson options you already configured.
 
@@ -93,8 +97,8 @@ Repeated calls on the same `GsonBuilder` do not register duplicate Safe Adapters
 ## 3. Kotlin Convenience APIs
 
 ```kotlin
-val value = GsonSafeParser.fromJsonSafe<ApiResponse>(json) // Parses and returns the business object.
-val result = GsonSafeParser.parseSafe<ApiResponse>(json) // Parses and returns the value, events, and report entry.
+val value = GsonSafeParser.fromJsonSafe<ApiResponse>(json)
+val result = GsonSafeParser.parseSafe<ApiResponse>(json)
 ```
 
 `fromJsonSafe<T>()` is for cases that only need the parsed value. `parseSafe<T>()` also returns parse events for logging, monitoring, and API contract review.
@@ -122,13 +126,15 @@ field-level adapter read failures emit events and keep the outer object parsing 
 Direct `gson.fromJson(...)` calls keep Gson's native top-level exception wrapping. This preserves native Gson entry semantics.
 
 ```kotlin
-val result = GsonSafeParser.parseSafe<ApiResponse>("""{"code":200,"data":[]}""") // Parses JSON with an object-field mismatch.
+val result = GsonSafeParser.parseSafe<ApiResponse>("""{"code":200,"data":[]}""")
 
-println(result.value) // Prints the fallback business object.
-println(result.events) // Prints events produced during parsing.
-println(result.contractReport().toMarkdown()) // Prints the contract report in Markdown.
-println(result.contractReport().toBackendMarkdown()) // Prints a backend-facing contract report for API fixes.
+println(result.value)
+println(result.events)
+println(result.contractReport().toMarkdown())
+println(result.contractReport().toBackendMarkdown())
 ```
+
+These outputs show the parsed value, parse events, general Markdown report, and backend-facing contract report.
 
 ## 4. JSON Shape Coercion
 
@@ -164,20 +170,24 @@ Root objects, root collections, root object arrays, maps, string re-parsing, num
 
 Kotlin reified APIs are Kotlin-only. Java, reflected `Type`, and explicit type passing should use the `Class` or `Type` entries:
 
-```java
-SafeParserConfig config = new SafeParserConfig(); // Java usage needs an explicit config object.
-ApiResponse value = GsonSafeParser.INSTANCE.fromJson(json, ApiResponse.class, config); // Parses with a Java Class.
+Java usage needs explicit type passing, and non-reified APIs are the right choice when you are not calling from Kotlin.
 
-GsonSafeParser.Parser parser = GsonSafeParser.INSTANCE.parser(config); // Creates a reusable Parser.
-SafeParseResult<ApiResponse> result = parser.parseSafe(json, ApiResponse.class); // Uses a non-reified entry and returns value plus events.
+```java
+SafeParserConfig config = new SafeParserConfig();
+ApiResponse value = GsonSafeParser.INSTANCE.fromJson(json, ApiResponse.class, config);
+
+GsonSafeParser.Parser parser = GsonSafeParser.INSTANCE.parser(config);
+SafeParseResult<ApiResponse> result = parser.parseSafe(json, ApiResponse.class);
 ```
 
 Use Gson `TypeToken` for generic types:
 
 ```java
-Type listType = new TypeToken<List<ApiResponse>>() {}.getType(); // Keeps generic type information.
-SafeParseResult<List<ApiResponse>> result = parser.parseSafe(json, listType); // Non-reified generic parsing.
+Type listType = new TypeToken<List<ApiResponse>>() {}.getType();
+SafeParseResult<List<ApiResponse>> result = parser.parseSafe(json, listType);
 ```
+
+Java calls, reflected `Type`, and generic parsing must pass explicit types. Kotlin reified entries are Kotlin-only conveniences.
 
 ## 6. Reusable Parser
 
@@ -186,24 +196,26 @@ The convenience entry `GsonSafeParser.fromJson(json, type, config)` is useful fo
 In repositories, data sources, or batch jobs that repeatedly parse with the same config, create a parser once and reuse it.
 
 ```kotlin
-val config = SafeParserConfig.production() // Creates the config reused in this business scenario.
-val parser = GsonSafeParser.parser(config) // Creates a reusable Parser with one internal safe Gson.
+val config = SafeParserConfig.production()
+val parser = GsonSafeParser.parser(config)
 
-val first = parser.fromJson(json, ApiResponse::class.java) // Parses once with the Parser's internal Gson.
-val second = parser.fromJsonSafe<ApiResponse>(json) // Kotlin reified API, also using the same internal Gson.
-val result = parser.parseSafe<ApiResponse>(json) // Reuses the Parser and returns events plus the report entry.
+val first = parser.fromJson(json, ApiResponse::class.java)
+val second = parser.fromJsonSafe<ApiResponse>(json)
+val result = parser.parseSafe<ApiResponse>(json)
 ```
 
 If the project already maintains a shared Gson instance, enable SafeParser on the Builder first and then wrap the Gson as a Parser:
 
 ```kotlin
-val gson = GsonBuilder() // Creates the shared GsonBuilder owned by the project.
-    .serializeNulls() // Keeps existing project Gson options.
-    .enableSafeParser(config) // Registers SafeParser with the same config.
-    .create() // Creates the shared Gson.
+val gson = GsonBuilder()
+    .serializeNulls()
+    .enableSafeParser(config)
+    .create()
 
-val parser = GsonSafeParser.parserWithExternalGson(gson, config) // Wraps existing Gson without recreating, replacing, or auto-registering it.
+val parser = GsonSafeParser.parserWithExternalGson(gson, config)
 ```
+
+`parserWithExternalGson(gson, config)` wraps an existing Gson only; it does not recreate, replace, or auto-register it.
 
 Parser and Gson instances can be reused as singletons, DI objects, or repository members.
 
@@ -222,53 +234,55 @@ External Gson rules:
 ## 7. Retrofit Integration
 
 ```kotlin
-val retrofit = Retrofit.Builder() // Creates a Retrofit builder.
-    .baseUrl("https://example.com/") // Sets the API base URL.
-    .addConverterFactory(GsonSafeConverterFactory.create()) // Registers the GsonSafeParser response converter.
-    .build() // Builds Retrofit.
+val retrofit = Retrofit.Builder()
+    .baseUrl("https://example.com/")
+    .addConverterFactory(GsonSafeConverterFactory.create())
+    .build()
 ```
 
 Custom config:
 
 ```kotlin
-val config = SafeParserConfig.production( // Creates the recommended production config.
-    observerPolicy = SafeObserverPolicy( // Configures parse-event observation.
-        onEvent = { event -> // Receives unified parse events.
-            println(event) // Prints the event for logs or monitoring.
-        } // Ends event callback.
-    ) // Ends observer policy.
-) // Ends config creation.
+val config = SafeParserConfig.production(
+    observerPolicy = SafeObserverPolicy(
+        onEvent = { event -> println(event) }
+    )
+)
 
-val retrofit = Retrofit.Builder() // Creates a Retrofit builder.
-    .baseUrl("https://example.com/") // Sets the API base URL.
-    .addConverterFactory(GsonSafeConverterFactory.create(config)) // Registers the converter with custom config.
-    .build() // Builds Retrofit.
+val retrofit = Retrofit.Builder()
+    .baseUrl("https://example.com/")
+    .addConverterFactory(GsonSafeConverterFactory.create(config))
+    .build()
 ```
+
+`onEvent` receives the unified parse event stream and is typically connected to logs, metrics, or contract reports.
 
 If the project already maintains a shared GsonBuilder, prefer the builder-first entry so the factory registers Safe Adapter before `.create()`:
 
 ```kotlin
-val config = SafeParserConfig.debug() // Controls SafeParser behavior for both Gson and Retrofit.
-val retrofit = Retrofit.Builder() // Creates a Retrofit builder.
-    .baseUrl("https://example.com/") // Sets the API base URL.
-    .addConverterFactory(GsonSafeConverterFactory.create(GsonBuilder().serializeNulls(), config)) // Keeps Builder options and enables field-level Safe Adapter.
-    .build() // Builds Retrofit.
+val config = SafeParserConfig.debug()
+val retrofit = Retrofit.Builder()
+    .baseUrl("https://example.com/")
+    .addConverterFactory(GsonSafeConverterFactory.create(GsonBuilder().serializeNulls(), config))
+    .build()
 ```
 
 If the project already maintains a created shared Gson instance and still needs Retrofit-level empty-response, raw JSON, and event policies:
 
 ```kotlin
-val config = SafeParserConfig.debug() // Controls SafeParser behavior for both Gson and Retrofit.
-val gson = GsonBuilder() // Creates the shared project GsonBuilder.
-    .serializeNulls() // Keeps caller-owned Gson options.
-    .enableSafeParser(config) // Registers the same SafeParserConfig on Gson.
-    .create() // Creates the final Gson.
+val config = SafeParserConfig.debug()
+val gson = GsonBuilder()
+    .serializeNulls()
+    .enableSafeParser(config)
+    .create()
 
-val retrofit = Retrofit.Builder() // Creates a Retrofit builder.
-    .baseUrl("https://example.com/") // Sets the API base URL.
-    .addConverterFactory(GsonSafeConverterFactory.create(gson, config)) // Reuses existing Gson and Retrofit-level SafeParserConfig.
-    .build() // Builds Retrofit.
+val retrofit = Retrofit.Builder()
+    .baseUrl("https://example.com/")
+    .addConverterFactory(GsonSafeConverterFactory.create(gson, config))
+    .build()
 ```
+
+This form reuses the existing Gson and keeps Retrofit-level empty response, raw JSON, and event policies.
 
 Choose the entry by what you currently have:
 
@@ -281,16 +295,18 @@ Choose the entry by what you currently have:
 ## 8. CI Self-Check
 
 ```kotlin
-val diagnostics = GsonSafeParser.diagnostics(SafeParserConfig.production()) // Checks GsonBuilder compatibility and high-risk config.
-val externalGsonDiagnostics = GsonSafeParser.diagnostics(gson) // Checks whether an external Gson has the field-level Safe Adapter.
-val integrationCheck = GsonSafeParser.integrationCheck(SafeParserConfig.production()) // Runs the built-in integration self-check.
+val diagnostics = GsonSafeParser.diagnostics(SafeParserConfig.production())
+val externalGsonDiagnostics = GsonSafeParser.diagnostics(gson)
+val integrationCheck = GsonSafeParser.integrationCheck(SafeParserConfig.production())
 
-integrationCheck.checks.forEach { item -> // Iterates over every check result.
-    println("${item.severity}: ${item.name} - ${item.message}") // Prints severity, name, and message.
-} // Ends check result iteration.
+integrationCheck.checks.forEach { item ->
+    println("${item.severity}: ${item.name} - ${item.message}")
+}
 
-check(integrationCheck.hasErrors.not()) // Fails the test or CI if blocking issues exist.
+check(integrationCheck.hasErrors.not())
 ```
+
+`diagnostics()` checks the environment and external Gson state; `integrationCheck()` runs built-in probes; the final `check(...)` turns blocking issues into test or CI failures.
 
 `diagnostics()` checks Gson reflection compatibility and configuration risks, which is useful after forcing a different Gson version. It reports `GsonBuilder` internal compatibility per field: failed `critical` fields block builder-first safe registration, while failed `optional` fields only degrade inherited configuration.
 
@@ -301,20 +317,22 @@ It is suitable for JVM unit tests that confirm Safe Adapter creation, event flow
 To put legacy release obfuscation risk into CI, pass a few key business model probes. Probe failures are converted into `checks`; they do not throw obfuscation-related exceptions out of the self-check call:
 
 ```kotlin
-val modelProbe = GsonSafeModelProbe( // Select one key response model as a release field-name probe.
-    name = "coreApiResponse", // Use an API or model name for diagnosis.
-    json = """{"code":200}""", // Minimal business JSON.
-    type = ApiResponse::class.java, // Real business model type.
-    expectedFields = mapOf("code" to 200) // Original field name and expected value.
-) // Ends business model probe.
+val modelProbe = GsonSafeModelProbe(
+    name = "coreApiResponse",
+    json = """{"code":200}""",
+    type = ApiResponse::class.java,
+    expectedFields = mapOf("code" to 200)
+)
 
-val releaseCheck = GsonSafeParser.integrationCheck( // Runs built-in checks plus business model probes.
-    config = SafeParserConfig.production(), // Uses the production config.
-    modelProbes = listOf(modelProbe) // Probe key models first; do not require full-project Bean coverage.
-) // Ends release self-check.
+val releaseCheck = GsonSafeParser.integrationCheck(
+    config = SafeParserConfig.production(),
+    modelProbes = listOf(modelProbe)
+)
 
-check(releaseCheck.hasErrors.not()) // Fails CI if suspected model field obfuscation is reported.
+check(releaseCheck.hasErrors.not())
 ```
+
+`modelProbes` should cover only key response models. They detect whether release obfuscation still preserves field names and construction paths needed by real JSON.
 
 Use 4 integration layers:
 

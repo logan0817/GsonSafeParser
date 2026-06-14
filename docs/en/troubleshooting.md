@@ -11,10 +11,10 @@ An empty response means the body is actually empty. It does not include offline 
 Choose the policy by business semantics:
 
 ```kotlin
-SafeParserConfig(emptyResponsePolicy = EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly) // Default: empty values only for Unit/Void.
-SafeParserConfig(emptyResponsePolicy = EmptyResponsePolicy.DefaultValue) // Empty model responses return default objects.
-SafeParserConfig(emptyResponsePolicy = EmptyResponsePolicy.Null) // Empty response returns null directly.
-SafeParserConfig(emptyResponsePolicy = EmptyResponsePolicy.DelegateToGson) // Empty response delegates to native Gson behavior.
+SafeParserConfig(emptyResponsePolicy = EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly)
+SafeParserConfig(emptyResponsePolicy = EmptyResponsePolicy.DefaultValue)
+SafeParserConfig(emptyResponsePolicy = EmptyResponsePolicy.Null)
+SafeParserConfig(emptyResponsePolicy = EmptyResponsePolicy.DelegateToGson)
 ```
 
 | Policy | Empty model body | Empty `Unit` / `Void` body |
@@ -37,15 +37,17 @@ Network failures do not use `emptyResponsePolicy`:
 Raw JSON capture is disabled by default to avoid extra memory cost for large responses. Enable it temporarily while troubleshooting:
 
 ```kotlin
-SafeParserConfig( // Creates troubleshooting config.
-    captureRawJsonInCallbacks = true, // Attaches raw JSON to callback events.
-    maxRawJsonCaptureBytes = 1024 * 1024, // Limits raw JSON capture to 1 MiB.
-    onTypeMismatch = { event -> // Receives field type mismatch events.
-        println(event.rawJson) // Prints the raw JSON for this parse.
-        println(event.rawJsonTruncated) // Prints whether raw JSON was truncated.
-    } // Ends type mismatch callback.
-) // Ends troubleshooting config.
+SafeParserConfig(
+    captureRawJsonInCallbacks = true,
+    maxRawJsonCaptureBytes = 1024 * 1024,
+    onTypeMismatch = { event ->
+        println(event.rawJson)
+        println(event.rawJsonTruncated)
+    }
+)
 ```
+
+`rawJson` contains the captured raw response for the current parse, and `rawJsonTruncated` tells whether it was cut by the size limit.
 
 Raw JSON capture depends on the scenario:
 
@@ -64,12 +66,14 @@ When Safe Adapter creation fails, the library emits an event and then delegates 
 This is a fixed safety baseline and does not need an extra switch. It prevents the extension layer from becoming a new crash source during Adapter creation:
 
 ```kotlin
-SafeParserConfig( // Creates config that observes Adapter creation failures.
-    onAdapterCreationFailure = { event -> // Receives Safe Adapter creation failure events.
-        println("${event.typeName}: ${event.reason}") // Prints failed type and reason.
-    } // Ends Adapter creation failure callback.
-) // Ends safe parsing config.
+SafeParserConfig(
+    onAdapterCreationFailure = { event ->
+        println("${event.typeName}: ${event.reason}")
+    }
+)
 ```
+
+`typeName` points to the target type whose Safe Adapter failed to initialize, and `reason` is the redacted failure reason.
 
 If the business wants to expose this strictly, collect events in tests and fail the test. Online traffic should keep the default "creation failure delegates back to Gson" baseline.
 
@@ -91,15 +95,15 @@ If you do not need a custom `GsonBuilder`, prefer `GsonSafeParser.create(config)
 Primitive types delegate to native Gson by default, staying close to Gson behavior. Enable SafeParser primitive parsing explicitly only when you need the previous lenient handling for string numbers, empty strings, and type mismatch defaults:
 
 ```kotlin
-SafeParserConfig( // Creates config with lenient primitive parsing enabled.
-    primitiveParsingPolicy = PrimitiveParsingPolicy.Safe // Uses SafeParser's local fallback for primitive mismatches.
-) // Ends safe parsing config.
+SafeParserConfig(
+    primitiveParsingPolicy = PrimitiveParsingPolicy.Safe
+)
 ```
 
 To keep low intervention, no extra config is required. You can also use:
 
 ```kotlin
-SafeParserConfig.lowInterference() // Uses the low-interference preset.
+SafeParserConfig.lowInterference()
 ```
 
 ## 6. Direct gson.fromJson And SafeParser Entries Report Different Exceptions
@@ -113,10 +117,12 @@ The top-level entry is still Gson, so Gson may wrap adapter-thrown `Cancellation
 Recommended usage:
 
 ```kotlin
-val parser = GsonSafeParser.parser(config) // Reuses one Parser in high-frequency parsing paths.
-val value = parser.fromJson<ApiResponse>(json, ApiResponse::class.java) // Parses through the SafeParser entry.
-val result = parser.parseSafe<ApiResponse>(json) // Also returns the event snapshot.
+val parser = GsonSafeParser.parser(config)
+val value = parser.fromJson<ApiResponse>(json, ApiResponse::class.java)
+val result = parser.parseSafe<ApiResponse>(json)
 ```
+
+Reuse a Parser in high-frequency paths. `fromJson(...)` returns the value, while `parseSafe(...)` also returns the event snapshot.
 
 If your project already owns a Gson instance, enable Safe Adapter first and then wrap it:
 
@@ -134,8 +140,10 @@ Keeping direct `gson.fromJson(...)` on Gson's native top-level exception wrappin
 The default config skips `android.*` fields to avoid platform-object reflection risk. Do not add business model package prefixes here, or matching business fields will be skipped:
 
 ```kotlin
-SafeParserConfig(skippedPlatformTypePrefixes = setOf("android.")) // Skips Android platform types to avoid reflecting system objects; do not add business model package prefixes here.
+SafeParserConfig(skippedPlatformTypePrefixes = setOf("android."))
 ```
+
+This setting is only for Android platform types. Do not add business model package prefixes here.
 
 If you change it to an empty set, related fields behave closer to native Gson, but platform-class reflection failures are more likely. Business model packages should be protected through ProGuard keep rules, not through skipped prefixes.
 
@@ -155,14 +163,16 @@ Fields not declared by the Bean are not injected automatically. Recommended opti
 2. Log raw responses through an OkHttp interceptor.
 3. Explicitly declare fields that need to be passed through in the business model.
 
-## 9. Gson version compatibility
+## 10. Gson version compatibility
 
 The current published config depends on Gson `2.13.2`. Safe Adapter setup reflects part of `GsonBuilder` internals so it can inherit caller-owned Gson options. After forcing a Gson downgrade or upgrade, run:
 
 ```kotlin
-val diagnostics = GsonSafeParser.diagnostics(SafeParserConfig.production()) // Checks whether GsonBuilder internals are still readable.
-val check = GsonSafeParser.integrationCheck(SafeParserConfig.production()) // Runs built-in parse probes.
+val diagnostics = GsonSafeParser.diagnostics(SafeParserConfig.production())
+val check = GsonSafeParser.integrationCheck(SafeParserConfig.production())
 ```
+
+`diagnostics()` checks whether GsonBuilder internals are still readable, and `integrationCheck()` runs built-in parse probes.
 
 If `GsonSafeParser.diagnostics(config).safeAdapterAvailable` is `false`, GsonBuilder internals are not readable.
 
@@ -172,7 +182,7 @@ If `GsonSafeParser.diagnostics(gson)` reports `externalGsonSafeAdapter` as `WARN
 
 If `integrationCheck().hasErrors` is `true`, do not ship that dependency combination yet.
 
-## 10. Release And Debug Behave Differently
+## 11. Release And Debug Behave Differently
 
 Check these first:
 
@@ -186,7 +196,7 @@ If `GsonSafeModelProbe` is already integrated and reports `modelFieldObfuscation
 
 Then compare the same JSON in debug and release builds.
 
-## 11. Kotlin data class defaults fail after an AGP upgrade
+## 12. Kotlin data class defaults fail after an AGP upgrade
 
 The typical symptom is that debug builds work, but release builds on AGP 8.6+ or R8 full mode no longer preserve data class default values.
 

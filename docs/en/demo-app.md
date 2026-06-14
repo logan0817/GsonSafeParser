@@ -7,21 +7,25 @@ The repository includes `demo-app` for validating GsonSafeParser's public behavi
 ## 1. Build And Install
 
 ```bash
-./gradlew :demo-app:assembleDebug # Builds the debug Demo App.
-./gradlew :demo-app:installDebug # Installs the debug Demo App on a connected device.
-adb shell am start -n io.github.logan.gsonsafeparser.demo/.MainActivity # Opens the Demo App main screen.
+./gradlew :demo-app:assembleDebug
+./gradlew :demo-app:installDebug
+adb shell am start -n io.github.logan.gsonsafeparser.demo/.MainActivity
 ```
+
+These commands build the debug Demo, install it on a connected device, and open the Demo main screen.
 
 To verify the Android ProGuard example, run:
 
 ```bash
-./gradlew :demo-app:assembleRelease # Builds the release Demo App with R8 minify enabled.
+./gradlew :demo-app:assembleRelease
 ```
+
+This command builds the release Demo App with R8 minify enabled.
 
 Debug APK path:
 
 ```text
-demo-app/build/outputs/apk/debug/demo-app-debug.apk # Debug APK output path.
+demo-app/build/outputs/apk/debug/demo-app-debug.apk
 ```
 
 ## 2. Screen Structure

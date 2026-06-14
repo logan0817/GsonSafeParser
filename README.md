@@ -98,7 +98,7 @@ GsonSafeParser 会尽量把问题隔离在当前字段，让外层对象继续�
 最新版本：[![Maven Central: core](https://img.shields.io/maven-central/v/io.github.logan0817/gson-safe-parser-core?label=core)](https://central.sonatype.com/artifact/io.github.logan0817/gson-safe-parser-core)
 
 ```kotlin
-implementation("io.github.logan0817:gson-safe-parser-core:1.0.3") // 接入 GsonSafeParser 核心解析能力。
+implementation("io.github.logan0817:gson-safe-parser-core:1.0.3")
 ```
 
 如果项目使用 Retrofit，只依赖 retrofit 模块即可；它会传递带上 core：
@@ -106,10 +106,10 @@ implementation("io.github.logan0817:gson-safe-parser-core:1.0.3") // 接入 Gson
 最新版本：[![Maven Central: retrofit](https://img.shields.io/maven-central/v/io.github.logan0817/gson-safe-parser-retrofit?label=retrofit)](https://central.sonatype.com/artifact/io.github.logan0817/gson-safe-parser-retrofit)
 
 ```kotlin
-implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.3") // 接入 Retrofit Converter 扩展，并自动带上 core。
+implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.3")
 ```
 
-Retrofit 模块仍保持 `Retrofit 2.8.1` API 兼容，同时会显式携带 `OkHttp 4.12.0` 和 `Okio 3.6.0` 安全基线，避免 Retrofit 2.8.1 的旧传递依赖落回 OkHttp 3.14.x / Okio 1.x。接入已有网络栈时，先用 `./gradlew dependencyInsight --dependency okhttp` 和 `./gradlew dependencyInsight --dependency okio` 确认依赖解析结果，再跑断网、取消、连接重置、TLS 失败和 raw JSON 捕获回归。
+Retrofit 模块仍保持 `Retrofit 2.8.1` API 兼容，同时会以运行时依赖提供 `OkHttp 4.12.0` 和 `Okio 3.6.0` 安全基线，避免 Retrofit 2.8.1 的旧传递依赖落回 OkHttp 3.14.x / Okio 1.x。接入已有网络栈时，先用 `./gradlew dependencyInsight --dependency okhttp` 和 `./gradlew dependencyInsight --dependency okio` 确认依赖解析结果，再跑断网、取消、连接重置、TLS 失败和 raw JSON 捕获回归。
 
 Android release 额外要求：
 
@@ -136,8 +136,8 @@ data class User(
 )
 
 val json = """{"code":200,"data":[]}"""
-val gson = GsonSafeParser.create() // 创建带安全解析能力的 Gson 实例。
-val response = gson.fromJson(json, ApiResponse::class.java) // 使用安全 Gson 解析接口响应。
+val gson = GsonSafeParser.create()
+val response = gson.fromJson(json, ApiResponse::class.java)
 ```
 
 原生 Gson 遇到 `data` 期望对象却收到 `[]` 时会抛异常；GsonSafeParser 会兜底 `data` 字段，并继续解析外层 `code`。
@@ -173,8 +173,8 @@ val response = gson.fromJson(json, ApiResponse::class.java) // 使用安全 Gson
 Kotlin 便捷 API：
 
 ```kotlin
-val response = GsonSafeParser.fromJsonSafe<ApiResponse>(json) // 直接解析并返回业务对象。
-val result = GsonSafeParser.parseSafe<ApiResponse>(json) // 解析并同时返回事件列表。
+val response = GsonSafeParser.fromJsonSafe<ApiResponse>(json)
+val result = GsonSafeParser.parseSafe<ApiResponse>(json)
 
 println(result.value)
 println(result.events)
@@ -184,13 +184,17 @@ println(result.contractReport().summary.warningCount)
 println(result.contractReport().toStructuredRows().firstOrNull()?.stableKey)
 ```
 
+`fromJsonSafe<T>()` 直接返回业务对象，`parseSafe<T>()` 会同时返回解析事件，适合日志、监控和契约报告。
+
 如果你要高频重复解析同一套接口，先创建一次可复用 Parser 更合适：
 
 ```kotlin
-val parser = GsonSafeParser.parser(config) // 只创建一次安全 Parser，后续反复复用同一个 Gson。
+val parser = GsonSafeParser.parser(config)
 val value = parser.fromJsonSafe<ApiResponse>(json)
 val result = parser.parseSafe<ApiResponse>(json)
 ```
+
+`parser(config)` 只创建一次安全 Parser，后续会复用同一个 Gson，适合 Repository、数据源和批量解析场景。
 
 ## JSON 形态转换
 
@@ -240,7 +244,7 @@ data class StrictEnvelope(
 ```kotlin
 val retrofit = Retrofit.Builder()
     .baseUrl("https://example.com/")
-    .addConverterFactory(GsonSafeConverterFactory.create()) // 注册 GsonSafeParser 的响应转换器。
+    .addConverterFactory(GsonSafeConverterFactory.create())
     .build()
 ```
 
@@ -249,15 +253,17 @@ val retrofit = Retrofit.Builder()
 ```kotlin
 val config = SafeParserConfig.production(
     observerPolicy = SafeObserverPolicy(
-        onEvent = { event -> println(event) } // 接收并上报解析事件。
+        onEvent = { event -> println(event) }
     )
 )
 
 val retrofit = Retrofit.Builder()
     .baseUrl("https://example.com/")
-    .addConverterFactory(GsonSafeConverterFactory.create(config)) // 使用自定义配置注册转换器。
+    .addConverterFactory(GsonSafeConverterFactory.create(config))
     .build()
 ```
+
+`onEvent` 会接收统一解析事件，适合接入日志、监控或契约报告链路。
 
 如果项目里已经统一维护了 GsonBuilder，推荐使用 builder-first 入口：
 
@@ -273,17 +279,19 @@ val retrofit = Retrofit.Builder()
 如果项目里已经统一维护的是创建好的 Gson，同时还想保留 Retrofit 层的空响应、rawJson 和事件策略，可以使用：
 
 ```kotlin
-val config = SafeParserConfig.debug() // 既控制 Safe Gson，也控制 Retrofit 层的空响应和观测策略。
+val config = SafeParserConfig.debug()
 val gson = GsonBuilder()
     .serializeNulls()
-    .enableSafeParser(config) // 把同一份 SafeParserConfig 注册到 Gson。
+    .enableSafeParser(config)
     .create()
 
 val retrofit = Retrofit.Builder()
     .baseUrl("https://example.com/")
-    .addConverterFactory(GsonSafeConverterFactory.create(gson, config)) // 同时复用已有 Gson 和 Retrofit 层 SafeParserConfig。
+    .addConverterFactory(GsonSafeConverterFactory.create(gson, config))
     .build()
 ```
+
+这段写法同时复用已有 Gson，并让 Retrofit 层继续使用同一份空响应、raw JSON 和事件策略。
 
 这里容易误解，按当前情况选入口就行：
 
@@ -299,30 +307,32 @@ val retrofit = Retrofit.Builder()
 
 ## 常用配置
 
+下面代码块只展示可复制写法。每个配置项的含义和修改场景见后面的表格。
+
 ```kotlin
 val config = SafeParserConfig(
-    fallbackPolicy = FallbackPolicy.NullOnly, // 字段形状不一致时返回 null 或保留构造默认值。
-    emptyResponsePolicy = EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly, // Retrofit 空响应只为 Unit/Void 返回空值。
-    primitiveParsingPolicy = PrimitiveParsingPolicy.DelegateToGson, // 基础类型交回 Gson 原生 Adapter。
-    skippedPlatformTypePrefixes = setOf("android."), // 跳过 Android 平台类型，避免反射系统对象；不要把业务模型包名前缀放这里。
-    nullValuePolicy = NullValuePolicy.WriteExplicitNulls, // 显式 JSON null 只写入 nullable 字段。
-    requiredConstructorParameterPolicy = RequiredConstructorParameterPolicy.GsonCompatible, // Kotlin 非空必填构造参数缺失时保持 Gson 兼容。
-    mapItemKeyPolicy = MapItemKeyPolicy.Omit, // 默认不输出 Map item key；需要聚合时再显式改成 Hash。
-    captureRawJsonInCallbacks = false, // 线上默认不在事件中携带原始 JSON。
-    maxRawJsonCaptureBytes = 1024 * 1024, // 限制 raw JSON 最大捕获体积为 1 MiB。
-    onEvent = { event -> println(event) }, // 监听统一解析事件。
+    fallbackPolicy = FallbackPolicy.NullOnly,
+    emptyResponsePolicy = EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly,
+    primitiveParsingPolicy = PrimitiveParsingPolicy.DelegateToGson,
+    skippedPlatformTypePrefixes = setOf("android."),
+    nullValuePolicy = NullValuePolicy.WriteExplicitNulls,
+    requiredConstructorParameterPolicy = RequiredConstructorParameterPolicy.GsonCompatible,
+    mapItemKeyPolicy = MapItemKeyPolicy.Omit,
+    captureRawJsonInCallbacks = false,
+    maxRawJsonCaptureBytes = 1024 * 1024,
+    onEvent = { event -> println(event) },
     onTypeMismatch = { event ->
         println("${event.path}: ${event.actualToken} -> ${event.expectedType}")
-    } // 输出字段路径、实际 token 和期望类型。
+    }
 )
 ```
 
 预设配置：
 
 ```kotlin
-val production = SafeParserConfig.production() // 线上默认配置。
-val debug = SafeParserConfig.debug() // 联调配置，默认开启 raw JSON 捕获。
-val lowInterference = SafeParserConfig.lowInterference() // 低干预配置，行为更接近原生 Gson。
+val production = SafeParserConfig.production()
+val debug = SafeParserConfig.debug()
+val lowInterference = SafeParserConfig.lowInterference()
 ```
 
 | 预设 | 适合场景 | 主要行为 | 风险取舍 |
@@ -334,11 +344,11 @@ val lowInterference = SafeParserConfig.lowInterference() // 低干预配置，�
 ## 注解
 
 ```kotlin
-@SafeParseDelegateToGson // 让这个类型直接使用 Gson 原生 Adapter。
+@SafeParseDelegateToGson
 class StrictModel
 
 data class PageState(
-    @field:SafeParseSkip // 告诉 Safe Reflective 跳过这个字段。
+    @field:SafeParseSkip
     val runtimeCache: Any? = null
 )
 
@@ -361,10 +371,12 @@ data class FlexibleResponse(
 仓库内置 `demo-app`，用于真机验证库能力：
 
 ```bash
-./gradlew :demo-app:assembleDebug # 构建 debug 版本 Demo App。
-./gradlew :demo-app:installDebug # 把 debug Demo App 安装到已连接设备。
-adb shell am start -n io.github.logan.gsonsafeparser.demo/.MainActivity # 启动 Demo App 首页。
+./gradlew :demo-app:assembleDebug
+./gradlew :demo-app:installDebug
+adb shell am start -n io.github.logan.gsonsafeparser.demo/.MainActivity
 ```
+
+这 3 个命令分别用于构建 debug 版 Demo、安装到已连接设备、启动 Demo 首页。
 
 Demo App 支持内置用例和用户自定义 JSON。你可以把接口返回直接粘贴进去，对比 GsonSafeParser 和原生 Gson 的解析结果、事件流和接入建议。
 

@@ -94,13 +94,38 @@ class OpenSourcePublicationTest {
      */
     @Test
     fun `ci workflow includes dependency vulnerability scan gate`() {
+        val rootBuildFile = File("../build.gradle.kts").readText()
         val ciWorkflow = File("../.github/workflows/ci.yml").readText()
 
+        assertTrue(rootBuildFile.contains("tasks.register(\"writeOsvReleaseRuntimeLockfile\")"))
+        assertTrue(rootBuildFile.contains("releaseRuntimeClasspath"))
+        assertTrue(rootBuildFile.contains("buildDirectory.file(\"osv/release-runtime/gradle.lockfile\")"))
+        assertTrue(ciWorkflow.contains("Generate OSV release runtime lockfile"))
+        assertTrue(ciWorkflow.contains("./gradlew writeOsvReleaseRuntimeLockfile --warning-mode=fail"))
         assertTrue(ciWorkflow.contains("Run dependency vulnerability scan"))
         assertTrue(ciWorkflow.contains("google/osv-scanner-action@v2.3.8"))
         assertTrue(!ciWorkflow.contains("google/osv-scanner-action@v2\n"))
         assertTrue(ciWorkflow.contains("scan-args:"))
-        assertTrue(ciWorkflow.contains("--recursive"))
+        assertTrue(ciWorkflow.contains("scan"))
+        assertTrue(ciWorkflow.contains("source"))
+        assertTrue(ciWorkflow.contains("--lockfile"))
+        assertTrue(ciWorkflow.contains("build/osv/release-runtime/gradle.lockfile"))
+        assertFalse(ciWorkflow.contains("--recursive"))
+    }
+
+    /**
+     * 库模块 release 变体也要跑单测，避免只验证 debug 变体和 demo release。
+     */
+    @Test
+    fun `ci and release checklist run library release unit tests`() {
+        val ciWorkflow = File("../.github/workflows/ci.yml").readText()
+        val releaseChecklist = File("../docs/release-checklist.md").readText()
+        val englishReleaseChecklist = File("../docs/en/release-checklist.md").readText()
+
+        listOf(ciWorkflow, releaseChecklist, englishReleaseChecklist).forEach { content ->
+            assertTrue(content.contains(":gson-safe-parser-core:testReleaseUnitTest"))
+            assertTrue(content.contains(":gson-safe-parser-retrofit:testReleaseUnitTest"))
+        }
     }
 
     /**
@@ -210,6 +235,7 @@ class OpenSourcePublicationTest {
         assertTrue(rootBuildFile.contains("tasks.register(\"verifyMavenLocalPublicationArtifacts\")"))
         assertTrue(rootBuildFile.contains("ZipFile("))
         assertTrue(rootBuildFile.contains("DocumentBuilderFactory"))
+        assertTrue(rootBuildFile.contains("\"com.google.gson.Gson\""))
         assertTrue(ciWorkflow.contains("./gradlew verifyMavenLocalPublicationArtifacts --warning-mode=fail"))
         listOf(releaseChecklist, englishReleaseChecklist).forEach { content ->
             assertTrue(content.contains("verifyMavenLocalPublicationArtifacts"))
@@ -347,27 +373,35 @@ class OpenSourcePublicationTest {
     }
 
     /**
-     * Retrofit 兼容层可以继续保持 Retrofit 2.x API，但不能把已知高风险 OkHttp/Okio 基线传给消费者。
+     * Retrofit 兼容层可以继续保持 Retrofit 2.x API，但不能把网络栈基线扩成消费者编译期 API。
      */
     @Test
-    fun `retrofit and demo dependencies override legacy okhttp and okio baselines`() {
+    fun `retrofit and demo dependencies keep okhttp and okio as runtime safety baselines`() {
         val rootBuildFile = File("../build.gradle.kts").readText()
         val retrofitBuildFile = File("../gson-safe-parser-retrofit/build.gradle.kts").readText()
         val demoBuildFile = File("../demo-app/build.gradle.kts").readText()
         val dependencyFiles = retrofitBuildFile + "\n" + demoBuildFile
 
-        assertTrue(retrofitBuildFile.contains("api(\"com.squareup.okhttp3:okhttp:4.12.0\")"))
-        assertTrue(retrofitBuildFile.contains("api(\"com.squareup.okio:okio:3.6.0\")"))
+        assertTrue(retrofitBuildFile.contains("implementation(\"com.squareup.okhttp3:okhttp:4.12.0\")"))
+        assertTrue(retrofitBuildFile.contains("implementation(\"com.squareup.okio:okio:3.6.0\")"))
+        assertFalse(retrofitBuildFile.contains("api(\"com.squareup.okhttp3:okhttp"))
+        assertFalse(retrofitBuildFile.contains("api(\"com.squareup.okio:okio"))
         assertTrue(demoBuildFile.contains("implementation(\"com.squareup.okhttp3:okhttp:4.12.0\")"))
         assertTrue(demoBuildFile.contains("implementation(\"com.squareup.okio:okio:3.6.0\")"))
         assertTrue(!dependencyFiles.contains("okhttp:3.14.7"))
         assertTrue(!dependencyFiles.contains("okio:1.17.2"))
         assertTrue(rootBuildFile.contains("pomDependencyVersion(retrofitPom, \"okhttp\") == \"4.12.0\""))
         assertTrue(rootBuildFile.contains("pomDependencyVersion(retrofitPom, \"okio\") == \"3.6.0\""))
+        assertTrue(rootBuildFile.contains("pomDependencyScope(retrofitPom, \"okhttp\") == \"runtime\""))
+        assertTrue(rootBuildFile.contains("pomDependencyScope(retrofitPom, \"okio\") == \"runtime\""))
+        assertTrue(rootBuildFile.contains("moduleDependencyVersion(retrofitModule, \"runtimeElements\", \"okhttp\") == \"4.12.0\""))
+        assertTrue(rootBuildFile.contains("moduleDependencyVersion(retrofitModule, \"runtimeElements\", \"okio\") == \"3.6.0\""))
+        assertTrue(rootBuildFile.contains("moduleDependencyVersion(retrofitModule, \"apiElements\", \"okhttp\") == null"))
+        assertTrue(rootBuildFile.contains("moduleDependencyVersion(retrofitModule, \"apiElements\", \"okio\") == null"))
     }
 
     /**
-     * Retrofit 模块显式携带 OkHttp / Okio 安全基线，文档必须提前告知使用者网络栈解析变化。
+     * Retrofit 模块以 runtime scope 携带 OkHttp / Okio 安全基线，文档必须提前告知使用者网络栈解析变化。
      */
     @Test
     fun `retrofit dependency safety baseline is documented for consumers`() {
@@ -428,9 +462,13 @@ class OpenSourcePublicationTest {
         assertTrue(combinedRules.contains("-keep class kotlin.Metadata"))
         assertTrue(combinedRules.contains("-keepattributes Signature,InnerClasses,EnclosingMethod,RuntimeVisibleAnnotations,RuntimeVisibleParameterAnnotations,AnnotationDefault"))
         assertTrue(combinedRules.contains("-keepclassmembers class com.google.gson.GsonBuilder"))
+        assertTrue(combinedRules.contains("-keepclassmembers class com.google.gson.Gson {\n    java.util.List factories;"))
         assertTrue(combinedRules.contains("java.util.Map instanceCreators"))
-        assertTrue(combinedRules.contains("java.util.List factories"))
         assertTrue(combinedRules.contains("java.util.ArrayDeque reflectionFilters"))
+        assertTrue(combinedRules.contains("java.util.List hierarchyFactories"))
+        assertTrue(combinedRules.contains("com.google.gson.reflect.TypeToken exactType"))
+        assertTrue(combinedRules.contains("boolean matchRawType"))
+        assertTrue(combinedRules.contains("java.lang.Class hierarchyType"))
         assertTrue(combinedRules.contains("com.google.gson.ToNumberStrategy objectToNumberStrategy"))
         assertTrue(combinedRules.contains("boolean useJdkUnsafe"))
         assertTrue(combinedRules.contains("boolean complexMapKeySerialization"))

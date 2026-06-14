@@ -35,10 +35,10 @@ dependencies {
     api(project(":gson-safe-parser-core"))
     // 公开 API 返回 retrofit2.Converter.Factory，消费者编译期需要 Retrofit 本体类型。
     api("com.squareup.retrofit2:retrofit:2.8.1")
-    // Retrofit 2.8.1 的传递依赖仍会落到 OkHttp 3.14.x/Okio 1.x。这里显式给发布产物提供安全基线，
-    // 既保留 Retrofit 2.x 接口兼容，又避免消费者在未声明网络栈版本时拿到旧依赖。
-    api("com.squareup.okhttp3:okhttp:4.12.0")
-    api("com.squareup.okio:okio:3.6.0")
+    // Retrofit 2.8.1 的传递依赖仍会落到 OkHttp 3.14.x/Okio 1.x。这里给发布产物提供运行时安全基线，
+    // 但不把网络栈升级成 converter 模块的公开 API，降低已有统一网络栈项目的编译期摩擦。
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okio:okio:3.6.0")
     // converter-gson 只在模块内部实现里使用，不暴露给消费者编译期。
     implementation("com.squareup.retrofit2:converter-gson:2.8.1")
 

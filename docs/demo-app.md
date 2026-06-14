@@ -7,21 +7,25 @@
 ## 1. 构建和安装
 
 ```bash
-./gradlew :demo-app:assembleDebug # 构建 debug 版本 Demo App。
-./gradlew :demo-app:installDebug # 把 debug Demo App 安装到已连接设备。
-adb shell am start -n io.github.logan.gsonsafeparser.demo/.MainActivity # 启动 Demo App 首页。
+./gradlew :demo-app:assembleDebug
+./gradlew :demo-app:installDebug
+adb shell am start -n io.github.logan.gsonsafeparser.demo/.MainActivity
 ```
+
+这 3 个命令分别用于构建 debug 版 Demo、安装到已连接设备、启动 Demo 首页。
 
 如果想验证 Android 混淆配置示例，可以运行：
 
 ```bash
-./gradlew :demo-app:assembleRelease # 构建开启 R8 minify 的 release Demo App。
+./gradlew :demo-app:assembleRelease
 ```
+
+这个命令会构建开启 R8 minify 的 release Demo App。
 
 debug APK 路径：
 
 ```text
-demo-app/build/outputs/apk/debug/demo-app-debug.apk # debug APK 构建产物路径。
+demo-app/build/outputs/apk/debug/demo-app-debug.apk
 ```
 
 ## 2. 页面结构

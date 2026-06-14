@@ -20,6 +20,7 @@ import io.github.logan.gsonsafeparser.NullValuePolicy
 import io.github.logan.gsonsafeparser.RequiredConstructorParameterPolicy
 import io.github.logan.gsonsafeparser.ShapeCoercionAction
 import io.github.logan.gsonsafeparser.ShapeCoercionPolicy
+import io.github.logan.gsonsafeparser.SafeParseShapeCoercion
 import io.github.logan.gsonsafeparser.SafeParseSkip
 import io.github.logan.gsonsafeparser.SafeParserConfig
 import io.github.logan.gsonsafeparser.internal.GsonBuiltInTypes
@@ -171,6 +172,7 @@ internal object SafeReflectiveAdapterFactory {
                     runRecovering {
                         val value = ShapeCoercionReadContext.withPolicy(binding.shapeCoercionPolicy) {
                             if (
+                                !binding.adapterHandlesOwnShape &&
                                 valueToken == JsonToken.BEGIN_ARRAY &&
                                 binding.shapeCoercionPolicy.supportsObjectFromArray() &&
                                 TokenRules.isObjectLike(TypeToken.get(binding.fieldType).rawType)
@@ -338,6 +340,8 @@ internal object SafeReflectiveAdapterFactory {
                         val binding = FieldBinding(
                             field = field,
                             adapter = adapter,
+                            adapterHandlesOwnShape = adapter.handlesOwnInputShape() &&
+                                field.getAnnotation(SafeParseShapeCoercion::class.java) == null,
                             fieldType = fieldType,
                             primaryName = name,
                             serialized = serialized && index == 0,
@@ -729,6 +733,7 @@ internal object SafeReflectiveAdapterFactory {
     private data class FieldBinding(
         val field: Field,
         val adapter: TypeAdapter<Any?>,
+        val adapterHandlesOwnShape: Boolean,
         val fieldType: java.lang.reflect.Type,
         val primaryName: String,
         val serialized: Boolean,

@@ -312,21 +312,23 @@ private class GsonSafeRetrofitConverterFactory(
      */
     private fun ResponseBody.canCaptureRawJson(): Boolean {
         val length = contentLength()
+        val maxBytes = config.maxRawJsonCaptureBytes
+        if (maxBytes < 0) return false
         if (length >= 0) {
-            return length <= config.maxRawJsonCaptureBytes
+            if (length > maxBytes) return false
+            return isActualBodyWithinRawJsonCaptureLimit(maxBytes)
         }
-        return isUnknownLengthWithinRawJsonCaptureLimit()
+        return isActualBodyWithinRawJsonCaptureLimit(maxBytes)
     }
 
     /**
-     * 未知长度响应先用 peek 探测上限，不消费原始 body。
+     * 响应先用 peek 探测真实上限，不消费原始 body。
      *
-     * gzip 透明解压后的 OkHttp body 常见 `contentLength=-1`。这里最多探测 `max + 1` 字节：
+     * gzip 透明解压后的 OkHttp body 常见 `contentLength=-1`，自定义 body 也可能声明不可信长度。
+     * 这里最多探测 `max + 1` 字节：
      * 没到上限就安全读取完整 body，超过上限就保留原始 body 交回 Retrofit delegate。
      */
-    private fun ResponseBody.isUnknownLengthWithinRawJsonCaptureLimit(): Boolean {
-        val maxBytes = config.maxRawJsonCaptureBytes
-        if (maxBytes < 0) return false
+    private fun ResponseBody.isActualBodyWithinRawJsonCaptureLimit(maxBytes: Int): Boolean {
         return runRecovering {
             !source().peek().request(maxBytes.toLong() + 1L)
         }.getOrDefault(false)

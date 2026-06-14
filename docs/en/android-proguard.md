@@ -145,7 +145,7 @@ The current core and retrofit artifacts are Android AARs.
 
 Android AAR automatically merges the framework consumer ProGuard rules into the user's App, so users do not need to copy those framework rules by hand.
 
-The default `GsonSafeParser.create(config)` entry does not read `GsonBuilder` internals. The GsonBuilder rules below mainly protect `.enableSafeParser(config)`, `GsonSafeConverterFactory.create(builder, config)`, and external Builder configuration inheritance.
+The default `GsonSafeParser.create(config)` entry does not read `GsonBuilder` internals. The GsonBuilder rules below mainly protect `.enableSafeParser(config)`, `GsonSafeConverterFactory.create(builder, config)`, and external Builder configuration inheritance. The Gson rule only protects `diagnostics(gson, config)` when it checks whether an external Gson already registered Safe Adapters; it does not change parsing behavior.
 
 The following rules are already bundled in GsonSafeParser AARs.
 
@@ -154,6 +154,10 @@ Only compare or copy them manually when source-copy integration, custom publicat
 ```proguard
 -keep class kotlin.Metadata { *; } # Keeps Kotlin Metadata for data class defaults and reflection info.
 -keepattributes Signature,InnerClasses,EnclosingMethod,RuntimeVisibleAnnotations,RuntimeVisibleParameterAnnotations,AnnotationDefault # Keeps attributes required by Gson and Kotlin reflection.
+
+-keepclassmembers class com.google.gson.Gson { # Keeps the factories field read by external Gson registration diagnostics.
+    java.util.List factories;
+}
 
 -keepclassmembers class com.google.gson.GsonBuilder { # Keeps GsonBuilder internals read by SafeParser.
     java.util.Map instanceCreators;

@@ -10,6 +10,8 @@
 ./gradlew \
   :gson-safe-parser-core:testDebugUnitTest \
   :gson-safe-parser-retrofit:testDebugUnitTest \
+  :gson-safe-parser-core:testReleaseUnitTest \
+  :gson-safe-parser-retrofit:testReleaseUnitTest \
   :demo-app:testDebugUnitTest \
   :demo-app:testReleaseUnitTest \
   :gson-safe-parser-core:lintRelease \
@@ -22,21 +24,23 @@
   --warning-mode=fail
 ./gradlew verifyMavenLocalPublicationArtifacts --warning-mode=fail
 ./gradlew releaseToMavenCentral --dry-run --warning-mode=fail
-osv-scanner --recursive .
+./gradlew writeOsvReleaseRuntimeLockfile --warning-mode=fail
+osv-scanner scan source --lockfile build/osv/release-runtime/gradle.lockfile
 git diff --check
+git diff --cached --check
 ```
 
 检查结果：
 1. core、retrofit、demo debug 单测通过。
-2. demo release 单测通过。
+2. core、retrofit、demo release 单测通过。
 3. core、retrofit、demo release lint 通过，不能有低 API 调用、资源或 Manifest 错误。
 4. demo debug 和 release APK 都能构建，release 走 R8 minify。
 5. `publishToMavenLocal` 能生成 core 和 retrofit 的 AAR 发布产物。
 6. Dokka javadoc.jar 离线生成，不依赖外部 package-list。
 7. `verifyMavenLocalPublicationArtifacts` 能复用 CI 的 AAR、POM、sources、javadoc 和 demo release 混淆合并配置校验。
 8. `releaseToMavenCentral --dry-run` 能验证远程发布任务图、签名任务挂载和 `clean` 顺序。
-9. OSV 依赖漏洞扫描没有命中阻塞发布的漏洞；CI 使用 `google/osv-scanner-action@v2.3.8` 跑同等门禁。
-10. `git diff --check` 不能发现空白格式错误。
+9. OSV 依赖漏洞扫描使用 `writeOsvReleaseRuntimeLockfile` 生成的 release runtime 依赖输入，没有命中阻塞发布的漏洞；CI 使用 `google/osv-scanner-action@v2.3.8` 跑同等门禁。
+10. `git diff --check` 和 `git diff --cached --check` 都不能发现空白格式错误。
 11. 构建过程中不能出现 Gradle warning、Kotlin warning 或配置期 classpath 解析告警。
 
 ## 2. AAR 产物检查
@@ -48,7 +52,7 @@ git diff --check
 4. AAR 内包含 `classes.jar`、`proguard.txt`、`META-INF/LICENSE`、`META-INF/NOTICE`。
 5. `sources.jar` 和 `javadoc.jar` 存在，javadoc jar 内包含 Dokka `index.html`。
 6. retrofit POM 中 `gson-safe-parser-core` 依赖版本必须等于本次版本。
-7. retrofit POM 中 `okhttp 4.12.0` 和 `okio 3.6.0` 依赖版本必须保留，不能回退到 Retrofit 2.8.1 的旧传递依赖。
+7. retrofit POM 和 Gradle module metadata 中 `okhttp 4.12.0`、`okio 3.6.0` 依赖版本必须保留，scope / variant 必须是 runtime，不能回退到 Retrofit 2.8.1 的旧传递依赖，也不能暴露到 api variant。
 
 ## 3. 混淆与老项目接入检查
 
@@ -73,7 +77,7 @@ git diff --check
 10. `docs/release-notes-1.0.1.md` 和 `docs/en/release-notes-1.0.1.md` 继续保留历史稳定性修正、兼容边界和发布验证。
 11. `docs/release-notes-1.0.0.md` 和 `docs/en/release-notes-1.0.0.md` 继续保留首发能力、兼容边界和发布验证。
 12. `README.md`、`README_EN.md`、`docs/compatibility.md`、`docs/en/compatibility.md`、`docs/troubleshooting.md`、`docs/en/troubleshooting.md` 都明确说明网络或传输读流异常会交回 Retrofit / OkHttp，不能用 `emptyResponsePolicy` 隐藏。
-13. `README.md`、`README_EN.md`、`docs/compatibility.md` 和 `docs/en/compatibility.md` 都明确说明 Retrofit 网络栈安全基线、`OkHttp 4.12.0`、`Okio 3.6.0`、`dependencyInsight` 和依赖解析验证。
+13. `README.md`、`README_EN.md`、`docs/compatibility.md` 和 `docs/en/compatibility.md` 都明确说明 Retrofit 网络栈安全基线、runtime scope、`OkHttp 4.12.0`、`Okio 3.6.0`、`dependencyInsight` 和依赖解析验证。
 14. `CHANGELOG.md`、1.0.3 中英文发布说明和本清单都记录 OSV、Maven Central 响应脱敏、Demo 剪贴板脱敏、`maxRawJsonCaptureBytesTooLarge`、OkHttp / Okio 基线。
 
 ## 5. 远程发布前检查

@@ -17,7 +17,7 @@ The default policy remains `ShapeCoercionPolicy.Disabled`. Coercion runs only wh
 5. Adds `ShapeCoercion` events and reports `shapeCoercionAction`, field path, and discarded item count in contract reports and observer failure reports.
 6. Root objects, root collections, root object arrays, maps, string re-parsing, numbers, booleans, transport failures, and fatal failures are not coerced.
 7. Adds the CI OSV dependency vulnerability scan gate and pins the scanner action to a concrete valid version.
-8. Keeps the Retrofit module on the `Retrofit 2.8.1` API while publishing the `OkHttp 4.12.0` and `Okio 3.6.0` network-stack safety baseline.
+8. Keeps the Retrofit module on the `Retrofit 2.8.1` API while publishing the `OkHttp 4.12.0` and `Okio 3.6.0` network-stack safety baselines as runtime dependencies.
 9. Redacts Maven Central deployment failure responses before logging and redacts Demo clipboard reports before copying them.
 10. Adds the `maxRawJsonCaptureBytesTooLarge` diagnostic for unsafe raw JSON capture limits.
 11. Redacts event `reason` values before they enter `onEvent`, compatibility callbacks, or `parseSafe` snapshots, covering token, password, Authorization, Cookie, and similar sensitive fragments.
@@ -67,7 +67,7 @@ data class ApiResponse(
 2. Observation defaults are tightened for safety: Map item keys are omitted by default; integrations relying on the previous hash aggregation should explicitly configure `MapItemKeyPolicy.Hash`.
 3. Published artifacts remain Android AARs.
 4. The verified matrix remains `minSdk 23`, `compileSdk 36`, `JDK 17`, `Kotlin 2.0.21`, `kotlin-reflect 2.0.21`, and `Gson 2.13.2`.
-5. The Retrofit module is still verified with `Retrofit 2.8.1`, and it explicitly publishes `OkHttp 4.12.0` and `Okio 3.6.0` to prevent dependency resolution from falling back to Retrofit 2.8.1's old OkHttp / Okio transitive baseline.
+5. The Retrofit module is still verified with `Retrofit 2.8.1`, and it carries `OkHttp 4.12.0` and `Okio 3.6.0` as runtime dependencies to prevent dependency resolution from falling back to Retrofit 2.8.1's old OkHttp / Okio transitive baseline.
 6. Release builds with R8 / ProGuard still need business model field names, constructors, and Kotlin Metadata keep rules.
 7. If your app already owns OkHttp or Okio, run `./gradlew dependencyInsight --dependency okhttp` and `./gradlew dependencyInsight --dependency okio` before publishing, then verify offline, cancellation, connection reset, TLS failure, and raw JSON capture regressions.
 
@@ -88,7 +88,7 @@ Before publishing, this release should be checked with:
 11. demo debug and release APK builds.
 12. `publishToMavenLocal`.
 13. Maven local AAR, POM, sources, Dokka javadoc, and consumer ProGuard rule verification.
-14. retrofit POM dependency checks for `okhttp 4.12.0` and `okio 3.6.0`.
+14. retrofit POM dependency checks for `okhttp 4.12.0`, `okio 3.6.0`, and runtime scope.
 15. OSV dependency vulnerability scan.
 16. Maven Central deployment response redaction and Demo clipboard report redaction.
 17. SafeParser event reason redaction, Map item key omission by default, and the explicit Hash migration path.

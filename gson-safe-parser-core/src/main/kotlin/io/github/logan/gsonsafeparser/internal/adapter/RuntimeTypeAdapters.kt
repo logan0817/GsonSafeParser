@@ -59,6 +59,25 @@ private fun TypeAdapter<*>.isReflectiveAdapter(): Boolean {
 }
 
 /**
+ * 判断当前 adapter 是否应保留自己的输入形状规则。
+ *
+ * GsonBuilder.registerTypeAdapter / registerTypeHierarchyAdapter 和 @JsonAdapter 都代表调用方已经显式声明
+ * 了读取规则，SafeParser 不应在外层先做 token 形状过滤或 shape coercion。
+ */
+internal fun TypeAdapter<*>.handlesOwnInputShape(): Boolean {
+    val name = javaClass.name
+    return when {
+        this is ReflectiveRuntimeTypeAdapter -> false
+        name.startsWith("io.github.logan.gsonsafeparser.internal.") -> false
+        name.startsWith("com.google.gson.internal.bind.ReflectiveTypeAdapterFactory") -> false
+        name.startsWith("com.google.gson.internal.bind.CollectionTypeAdapterFactory") -> false
+        name.startsWith("com.google.gson.internal.bind.MapTypeAdapterFactory") -> false
+        name.startsWith("com.google.gson.internal.bind.ArrayTypeAdapter") -> false
+        else -> true
+    }
+}
+
+/**
  * 只有声明类型是 Class 或类型变量时才尝试替换为运行时类型。
  *
  * 已经是参数化类型时不替换，避免丢掉 `List<User>` 这类泛型信息。

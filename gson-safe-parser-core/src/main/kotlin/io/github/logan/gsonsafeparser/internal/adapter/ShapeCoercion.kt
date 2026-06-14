@@ -100,7 +100,7 @@ internal fun dispatchShapeCoercion(
     reason: String = "JSON shape coerced by explicit policy",
     path: String? = null
 ) {
-    val eventPath = path ?: reader.path
+    val eventPath = config.eventPath(path ?: reader.path)
     config.dispatchShapeCoercion(
         ShapeCoercionEvent(
             expectedType = type.type.toSafeTypeName(),

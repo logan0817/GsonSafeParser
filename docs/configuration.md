@@ -8,23 +8,27 @@ GsonSafeParser 的配置目标很直接：能安全兜底的字段由库处理�
 
 ## 1. 基础配置
 
+下面示例保留完整字段，便于复制。每个配置项的含义和修改时机见后面的表格。
+
 ```kotlin
-val config = SafeParserConfig( // 创建一份完整的安全解析配置。
-    fallbackPolicy = FallbackPolicy.NullOnly, // 字段形状不一致时默认只返回 null 或保留构造默认值。
-    emptyResponsePolicy = EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly, // Retrofit 空响应只为 Unit/Void 返回空值。
-    primitiveParsingPolicy = PrimitiveParsingPolicy.DelegateToGson, // 基础类型默认交回 Gson 原生 Adapter。
-    complexMapKeySerialization = false, // 默认不启用复杂 Map key 写出。
-    useJdkUnsafe = false, // SafeParser 自己默认不使用 Unsafe 绕过构造函数。
-    skippedPlatformTypePrefixes = setOf("android."), // 跳过 Android 平台类型，避免反射系统对象；不要把业务模型包名前缀放这里。
-    nullValuePolicy = NullValuePolicy.WriteExplicitNulls, // 显式 JSON null 只写入 nullable 字段。
-    requiredConstructorParameterPolicy = RequiredConstructorParameterPolicy.GsonCompatible, // Kotlin 非空必填构造参数缺失时保持 Gson 兼容。
-    mapItemKeyPolicy = MapItemKeyPolicy.Omit, // 默认不输出 Map item key；需要聚合时再显式改成 Hash。
-    captureRawJsonInCallbacks = false, // 默认不在回调里携带原始 JSON。
-    maxRawJsonCaptureBytes = 1024 * 1024 // 限制 raw JSON 最大捕获体积为 1 MiB。
-) // 结束安全解析配置。
+val config = SafeParserConfig(
+    fallbackPolicy = FallbackPolicy.NullOnly,
+    emptyResponsePolicy = EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly,
+    primitiveParsingPolicy = PrimitiveParsingPolicy.DelegateToGson,
+    complexMapKeySerialization = false,
+    useJdkUnsafe = false,
+    skippedPlatformTypePrefixes = setOf("android."),
+    nullValuePolicy = NullValuePolicy.WriteExplicitNulls,
+    requiredConstructorParameterPolicy = RequiredConstructorParameterPolicy.GsonCompatible,
+    mapItemKeyPolicy = MapItemKeyPolicy.Omit,
+    captureRawJsonInCallbacks = false,
+    maxRawJsonCaptureBytes = 1024 * 1024
+)
 ```
 
 默认配置偏向低干预：字段级问题优先局部兜底，不能确认安全的问题交回 Gson。
+
+默认情况下，SafeParser 自己默认不使用 Unsafe；只有在 `GsonCompatible + useJdkUnsafe = true` 时，才允许 SafeParser 自己走 Unsafe 构造路径。
 
 ### 常用配置
 
@@ -92,9 +96,9 @@ Unsafe 会绕过构造函数和 `init` 代码。
 ## 3. 预设配置
 
 ```kotlin
-val production = SafeParserConfig.production() // 创建线上默认配置。
-val debug = SafeParserConfig.debug() // 创建联调配置，默认开启 raw JSON 捕获。
-val lowInterference = SafeParserConfig.lowInterference() // 创建低误伤配置，行为更接近原生 Gson。
+val production = SafeParserConfig.production()
+val debug = SafeParserConfig.debug()
+val lowInterference = SafeParserConfig.lowInterference()
 ```
 
 预设说明：
@@ -107,25 +111,25 @@ val lowInterference = SafeParserConfig.lowInterference() // 创建低误伤配�
 
 ## 4. 分层策略
 
+分层策略把读取、写出和观测拆开，适合团队内部封装统一配置。
+
 ```kotlin
-val config = SafeParserConfig.fromPolicies( // 使用分层策略创建配置。
-    readPolicy = SafeReadPolicy( // 配置读取 JSON 时的策略。
-        fallbackPolicy = FallbackPolicy.NullOnly, // 字段形状不一致时只返回 null 或保留构造默认值。
-        primitiveParsingPolicy = PrimitiveParsingPolicy.DelegateToGson, // 基础类型交回 Gson 原生 Adapter。
-        useJdkUnsafe = false // SafeParser 自己不使用 Unsafe 绕过构造函数。
-    ), // 结束读取策略配置。
-    writePolicy = SafeWritePolicy( // 配置写出 JSON 时的策略。
-        complexMapKeySerialization = false // 默认不启用复杂 Map key 写出。
-    ), // 结束写出策略配置。
-    observerPolicy = SafeObserverPolicy( // 配置解析事件观察策略。
-        onEvent = { event -> // 接收统一解析事件。
-            println(event) // 输出事件，方便接日志或监控。
-        } // 结束事件回调。
-    ) // 结束观察策略配置。
-) // 结束分层配置创建。
+val config = SafeParserConfig.fromPolicies(
+    readPolicy = SafeReadPolicy(
+        fallbackPolicy = FallbackPolicy.NullOnly,
+        primitiveParsingPolicy = PrimitiveParsingPolicy.DelegateToGson,
+        useJdkUnsafe = false
+    ),
+    writePolicy = SafeWritePolicy(
+        complexMapKeySerialization = false
+    ),
+    observerPolicy = SafeObserverPolicy(
+        onEvent = { event -> println(event) }
+    )
+)
 ```
 
-分层策略适合团队内部封装统一配置，把读取、写出和观测职责拆开，避免一个构造方法里塞太多参数。
+这样可以避免一个构造方法里塞太多参数，也方便把读策略、写策略和观测策略分别交给不同模块维护。
 
 ## 5. JSON 形态转换
 
@@ -179,21 +183,23 @@ data class StrictEnvelope(
 
 ## 6. 事件观测
 
+下面示例展示统一事件和几个兼容回调的组合写法。每个回调的职责见代码块后的说明。
+
 ```kotlin
-val config = SafeParserConfig( // 创建带事件回调的安全解析配置。
-    onEvent = { event -> // 接收统一解析事件。
-        println(event) // 输出事件对象。
-    }, // 结束统一事件回调。
-    onTypeMismatch = { event -> // 接收字段类型错配事件。
-        println("${event.path}: ${event.actualToken} -> ${event.expectedType}") // 输出字段路径、实际 token 和期望类型。
-    }, // 结束类型错配回调。
-    onAdapterCreationFailure = { event -> // 接收 Safe Adapter 创建失败事件。
-        println("${event.typeName}: ${event.reason}") // 输出失败类型和失败原因。
-    }, // 结束 Adapter 创建失败回调。
-    onObserverFailure = { event -> // 接收业务回调自身抛异常的事件。
-        println("${event.callbackName}: ${event.reason}") // 输出失败回调名称和原因。
-    } // 结束观察者失败回调。
-) // 结束事件配置。
+val config = SafeParserConfig(
+    onEvent = { event ->
+        println(event)
+    },
+    onTypeMismatch = { event ->
+        println("${event.path}: ${event.actualToken} -> ${event.expectedType}")
+    },
+    onAdapterCreationFailure = { event ->
+        println("${event.typeName}: ${event.reason}")
+    },
+    onObserverFailure = { event ->
+        println("${event.callbackName}: ${event.reason}")
+    }
+)
 ```
 
 1. `onEvent` 是统一事件流，会收到类型错配、ShapeCoercion、Adapter 创建失败、空响应和 raw JSON 捕获跳过等事件。
@@ -212,17 +218,19 @@ val config = SafeParserConfig( // 创建带事件回调的安全解析配置。
 ## 7. 契约报告
 
 ```kotlin
-val result = GsonSafeParser.parseSafe<ApiResponse>("""{"code":200,"data":[]}""") // 解析一份 Object 字段形状不一致的 JSON。
-val report = result.contractReport() // 把解析事件转换成契约报告。
+val result = GsonSafeParser.parseSafe<ApiResponse>("""{"code":200,"data":[]}""")
+val report = result.contractReport()
 
-if (report.hasIssues) { // 判断本次解析是否发现契约问题。
-    println(report.toMarkdown()) // 输出 Markdown 格式报告。
-    println(report.toBackendMarkdown()) // 输出给后端修接口用的契约报告。
-    println(report.summary.warningCount) // 输出 warning 数，方便 CI 或日志平台判断。
-    println(report.toStructuredRows().firstOrNull()?.stableKey) // 输出稳定指纹，方便线上聚合同类问题。
-    println(report.toStructuredRows().firstOrNull()?.fields?.get("captureSkipReason")) // 输出 raw JSON 捕获跳过原因。
-} // 结束问题报告输出。
+if (report.hasIssues) {
+    println(report.toMarkdown())
+    println(report.toBackendMarkdown())
+    println(report.summary.warningCount)
+    println(report.toStructuredRows().firstOrNull()?.stableKey)
+    println(report.toStructuredRows().firstOrNull()?.fields?.get("captureSkipReason"))
+}
 ```
+
+这些输出分别用于人工查看、后端修复、CI 判断、线上聚合和 raw JSON 捕获诊断。
 
 契约报告只消费本次解析产生的事件，不重新解析 JSON，也不会修改解析结果。它适合接日志、CI 报表和接口问题复盘。
 
@@ -235,37 +243,39 @@ if (report.hasIssues) { // 判断本次解析是否发现契约问题。
 ## 8. 观察者失败报告
 
 ```kotlin
-val observerFailures = mutableListOf<ObserverFailureEvent>() // 创建列表收集观察者失败事件。
+val observerFailures = mutableListOf<ObserverFailureEvent>()
 
-val gson = GsonSafeParser.create( // 创建带观察者失败收集能力的 Gson。
-    SafeParserConfig( // 创建安全解析配置。
-        onObserverFailure = observerFailures::add // 将观察者失败事件加入列表。
-    ) // 结束安全解析配置。
-) // 结束 Gson 创建。
+val gson = GsonSafeParser.create(
+    SafeParserConfig(
+        onObserverFailure = observerFailures::add
+    )
+)
 
-println(observerFailures.observerFailureReport().toMarkdown()) // 输出脱敏后的观察者失败报告。
+println(observerFailures.observerFailureReport().toMarkdown())
 ```
+
+`observerFailureReport()` 会输出脱敏后的观察者失败报告，适合排查日志或埋点回调自身的问题。
 
 报告会脱敏整理失败回调名称、来源事件类型、字段路径和异常类型，不直接输出原始 JSON 或异常栈。`ShapeCoercion` 事件会复用错形分类并保留事件名、路径和字段信息，不会落到 Unknown。
 
 ## 9. 注解
 
 ```kotlin
-@SafeParseDelegateToGson // 让这个类型直接使用 Gson 原生 Adapter。
-class StrictModel // 定义一个需要严格按原生 Gson 解析的模型。
+@SafeParseDelegateToGson
+class StrictModel
 
-data class PageState( // 定义包含运行时状态的页面模型。
-    @field:SafeParseSkip // 告诉 Safe Reflective 跳过这个字段。
-    val runtimeCache: Any? = null // 保存运行时缓存，不从 JSON 中读取。
-) // 结束页面模型定义。
+data class PageState(
+    @field:SafeParseSkip
+    val runtimeCache: Any? = null
+)
 
-data class FlexibleResponse( // 定义允许局部形态转换的响应模型。
+data class FlexibleResponse(
     @field:SafeParseShapeCoercion(ShapeCoercionPolicy.ObjectFromFirstArrayItem)
-    val data: User? = null, // 只允许 data 从数组第 1 个对象恢复。
+    val data: User? = null,
 
     @field:SafeParseDisableShapeCoercion
-    val signedPayload: SignedPayload = SignedPayload() // 即使全局开启，也不转换强契约字段。
-) // 结束响应模型定义。
+    val signedPayload: SignedPayload = SignedPayload()
+)
 ```
 
 1. `@SafeParseDelegateToGson` 用于类，让该类型直接走 Gson 原生 Adapter。

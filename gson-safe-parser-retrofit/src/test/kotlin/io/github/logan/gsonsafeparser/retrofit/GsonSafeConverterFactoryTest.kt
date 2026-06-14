@@ -894,6 +894,36 @@ class GsonSafeConverterFactoryTest {
         assertEquals(RawJsonCaptureSkipReason.ContentLengthExceedsLimit, event.detail.skipReason)
     }
 
+    @Test
+    fun `retrofit raw json capture verifies actual body size even when content length is smaller`() {
+        val events = mutableListOf<SafeParserEvent>()
+        val factory = GsonSafeConverterFactory.create(
+            SafeParserConfig(
+                captureRawJsonInCallbacks = true,
+                maxRawJsonCaptureBytes = 4,
+                onEvent = events::add
+            )
+        )
+        val retrofit = Retrofit.Builder()
+            .baseUrl("https://example.com/")
+            .addConverterFactory(factory)
+            .build()
+        val converter = factory.responseBodyConverter(
+            MismatchApiResponse::class.java,
+            emptyArray(),
+            retrofit
+        )
+
+        val result = converter?.convert(lyingContentLengthBody("""{"data":[]}""", declaredLength = 1L))
+
+        assertEquals(MismatchApiResponse(), result)
+        val skipped = events.single { it is SafeParserEvent.RawJsonCaptureSkipped } as SafeParserEvent.RawJsonCaptureSkipped
+        assertEquals(1L, skipped.detail.contentLength)
+        assertEquals(RawJsonCaptureSkipReason.ContentLengthExceedsLimit, skipped.detail.skipReason)
+        val mismatch = events.single { it is SafeParserEvent.TypeMismatch } as SafeParserEvent.TypeMismatch
+        assertNull(mismatch.detail.rawJson)
+    }
+
     /**
      * 测试方法说明：验证“retrofit response captures raw json when length is unknown but body stays within limit”这个具体行为。
      * 阅读时可以按准备数据、执行解析、断言结果的顺序跟下来。
@@ -1343,6 +1373,17 @@ class GsonSafeConverterFactoryTest {
             override fun contentType(): MediaType? = jsonMediaType
 
             override fun source(): BufferedSource = Buffer().writeUtf8(json)
+        }
+    }
+
+    private fun lyingContentLengthBody(json: String, declaredLength: Long): ResponseBody {
+        val source = Buffer().writeUtf8(json)
+        return object : ResponseBody() {
+            override fun contentLength(): Long = declaredLength
+
+            override fun contentType(): MediaType? = jsonMediaType
+
+            override fun source(): BufferedSource = source
         }
     }
 

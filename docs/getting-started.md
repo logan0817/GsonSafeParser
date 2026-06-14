@@ -28,7 +28,7 @@
 最新版本：[![Maven Central: core](https://img.shields.io/maven-central/v/io.github.logan0817/gson-safe-parser-core?label=core)](https://central.sonatype.com/artifact/io.github.logan0817/gson-safe-parser-core)
 
 ```kotlin
-implementation("io.github.logan0817:gson-safe-parser-core:1.0.3") // 接入 GsonSafeParser 核心解析能力。
+implementation("io.github.logan0817:gson-safe-parser-core:1.0.3")
 ```
 
 如果项目使用 Retrofit，只需要：
@@ -36,7 +36,7 @@ implementation("io.github.logan0817:gson-safe-parser-core:1.0.3") // 接入 Gson
 最新版本：[![Maven Central: retrofit](https://img.shields.io/maven-central/v/io.github.logan0817/gson-safe-parser-retrofit?label=retrofit)](https://central.sonatype.com/artifact/io.github.logan0817/gson-safe-parser-retrofit)
 
 ```kotlin
-implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.3") // 接入 Retrofit Converter 扩展，并自动带上 core。
+implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.3")
 ```
 
 ## 2. 普通 Gson 接入
@@ -69,20 +69,24 @@ println(result.contractReport().toBackendMarkdown())
 ```
 
 ```kotlin
-val gson = GsonSafeParser.create() // 创建带安全解析能力的 Gson 实例。
-val response = gson.fromJson(json, ApiResponse::class.java) // 使用安全 Gson 解析业务响应。
+val gson = GsonSafeParser.create()
+val response = gson.fromJson(json, ApiResponse::class.java)
 ```
+
+`GsonSafeParser.create()` 会创建已经注册 Safe Adapter 的 Gson，适合没有自定义 `GsonBuilder` 的普通接入。
 
 默认入口不会读取 `GsonBuilder` 内部字段，适合没有自定义 GsonBuilder 的普通接入场景。
 
 如果你已经有自己的 `GsonBuilder`：
 
 ```kotlin
-val gson = GsonBuilder() // 创建自定义 GsonBuilder。
-    .serializeNulls() // 保留你原本需要的 Gson 序列化配置。
-    .enableSafeParser() // 在当前 Builder 上注册安全解析能力。
-    .create() // 生成最终 Gson 实例。
+val gson = GsonBuilder()
+    .serializeNulls()
+    .enableSafeParser()
+    .create()
 ```
+
+这段写法会保留你原本的 Gson 配置，并在同一个 Builder 上注册字段级安全解析能力。
 
 `enableSafeParser()` 会在当前 `GsonBuilder` 上注册安全解析能力，并尽量保留你已有的 Gson 配置。
 
@@ -93,8 +97,8 @@ builder-first 入口才会读取 `GsonBuilder` 内部字段，用来继承 `Inst
 ## 3. Kotlin 便捷 API
 
 ```kotlin
-val value = GsonSafeParser.fromJsonSafe<ApiResponse>(json) // 直接解析并返回业务对象。
-val result = GsonSafeParser.parseSafe<ApiResponse>(json) // 解析并返回业务对象、事件列表和报告入口。
+val value = GsonSafeParser.fromJsonSafe<ApiResponse>(json)
+val result = GsonSafeParser.parseSafe<ApiResponse>(json)
 ```
 
 `fromJsonSafe<T>()` 适合只关心解析结果的场景。`parseSafe<T>()` 会额外返回事件列表，适合日志、监控和接口契约复盘。
@@ -122,13 +126,15 @@ val result = GsonSafeParser.parseSafe<ApiResponse>(json) // 解析并返回业�
 直接调用 `gson.fromJson(...)` 时，最外层异常仍按 Gson 原生规则包装。这不是 SafeParser 漏处理，而是为了保留 Gson 原生入口语义。
 
 ```kotlin
-val result = GsonSafeParser.parseSafe<ApiResponse>("""{"code":200,"data":[]}""") // 解析一份 Object 字段形状不一致的 JSON。
+val result = GsonSafeParser.parseSafe<ApiResponse>("""{"code":200,"data":[]}""")
 
-println(result.value) // 打印兜底后的业务对象。
-println(result.events) // 打印解析过程中产生的事件。
-println(result.contractReport().toMarkdown()) // 打印 Markdown 格式契约报告。
-println(result.contractReport().toBackendMarkdown()) // 打印给后端修接口用的契约报告。
+println(result.value)
+println(result.events)
+println(result.contractReport().toMarkdown())
+println(result.contractReport().toBackendMarkdown())
 ```
+
+这几个输出分别对应兜底后的业务对象、解析事件、通用 Markdown 契约报告和后端修接口用的报告。
 
 ## 4. JSON 形态转换
 
@@ -165,19 +171,21 @@ data class ApiResponse(
 Kotlin reified API 只适合 Kotlin 调用；Java、反射 Type 或需要显式传类型的场景，使用 `Class` 或 `Type` 入口：
 
 ```java
-SafeParserConfig config = new SafeParserConfig(); // Java 调用需要显式传配置对象。
-ApiResponse value = GsonSafeParser.INSTANCE.fromJson(json, ApiResponse.class, config); // 使用 Java Class 解析。
+SafeParserConfig config = new SafeParserConfig();
+ApiResponse value = GsonSafeParser.INSTANCE.fromJson(json, ApiResponse.class, config);
 
-GsonSafeParser.Parser parser = GsonSafeParser.INSTANCE.parser(config); // 创建可复用 Parser。
-SafeParseResult<ApiResponse> result = parser.parseSafe(json, ApiResponse.class); // 非 reified 入口，返回对象和事件。
+GsonSafeParser.Parser parser = GsonSafeParser.INSTANCE.parser(config);
+SafeParseResult<ApiResponse> result = parser.parseSafe(json, ApiResponse.class);
 ```
 
 泛型类型用 Gson `TypeToken`：
 
 ```java
-Type listType = new TypeToken<List<ApiResponse>>() {}.getType(); // 保留泛型信息。
-SafeParseResult<List<ApiResponse>> result = parser.parseSafe(json, listType); // 非 reified 泛型解析。
+Type listType = new TypeToken<List<ApiResponse>>() {}.getType();
+SafeParseResult<List<ApiResponse>> result = parser.parseSafe(json, listType);
 ```
+
+Java 调用、反射 `Type` 和泛型解析都要显式传类型；Kotlin 的 reified 便捷入口只适合 Kotlin 调用。
 
 ## 6. 高频复用 Parser
 
@@ -186,24 +194,26 @@ SafeParseResult<List<ApiResponse>> result = parser.parseSafe(json, listType); //
 如果在 Repository、数据源或批量任务里反复解析同一套配置，推荐先创建一次 Parser。
 
 ```kotlin
-val config = SafeParserConfig.production() // 创建当前业务场景要复用的配置。
-val parser = GsonSafeParser.parser(config) // 创建可复用 Parser，内部只持有一个安全 Gson。
+val config = SafeParserConfig.production()
+val parser = GsonSafeParser.parser(config)
 
-val first = parser.fromJson(json, ApiResponse::class.java) // 第一次解析，复用 Parser 内部 Gson。
-val second = parser.fromJsonSafe<ApiResponse>(json) // Kotlin reified 写法，同样复用 Parser 内部 Gson。
-val result = parser.parseSafe<ApiResponse>(json) // 复用 Parser，并返回本次解析的事件快照和报告入口。
+val first = parser.fromJson(json, ApiResponse::class.java)
+val second = parser.fromJsonSafe<ApiResponse>(json)
+val result = parser.parseSafe<ApiResponse>(json)
 ```
 
 如果项目已经统一维护了 Gson，可以先在 Builder 上启用 SafeParser，再包装成 Parser：
 
 ```kotlin
-val gson = GsonBuilder() // 创建项目统一维护的 GsonBuilder。
-    .serializeNulls() // 保留项目已有 Gson 配置。
-    .enableSafeParser(config) // 注册 SafeParser 能力。
-    .create() // 创建共享 Gson。
+val gson = GsonBuilder()
+    .serializeNulls()
+    .enableSafeParser(config)
+    .create()
 
-val parser = GsonSafeParser.parserWithExternalGson(gson, config) // 包装已有 Gson，不重新创建、替换或补注册它。
+val parser = GsonSafeParser.parserWithExternalGson(gson, config)
 ```
+
+`parserWithExternalGson(gson, config)` 只包装已有 Gson，不会重新创建、替换或自动补注册它。
 
 Parser 和 Gson 都可以复用，也可以作为单例、DI 对象或 Repository 成员持有。
 
@@ -222,53 +232,55 @@ Parser 和 Gson 都可以复用，也可以作为单例、DI 对象或 Repositor
 ## 7. Retrofit 接入
 
 ```kotlin
-val retrofit = Retrofit.Builder() // 创建 Retrofit 构建器。
-    .baseUrl("https://example.com/") // 设置接口基础地址。
-    .addConverterFactory(GsonSafeConverterFactory.create()) // 注册 GsonSafeParser 响应转换器。
-    .build() // 构建 Retrofit 实例。
+val retrofit = Retrofit.Builder()
+    .baseUrl("https://example.com/")
+    .addConverterFactory(GsonSafeConverterFactory.create())
+    .build()
 ```
 
 自定义配置：
 
 ```kotlin
-val config = SafeParserConfig.production( // 创建线上推荐配置。
-    observerPolicy = SafeObserverPolicy( // 配置解析事件观察策略。
-        onEvent = { event -> // 接收统一解析事件。
-            println(event) // 输出事件，方便接日志或监控。
-        } // 结束事件回调。
-    ) // 结束观察策略。
-) // 结束配置创建。
+val config = SafeParserConfig.production(
+    observerPolicy = SafeObserverPolicy(
+        onEvent = { event -> println(event) }
+    )
+)
 
-val retrofit = Retrofit.Builder() // 创建 Retrofit 构建器。
-    .baseUrl("https://example.com/") // 设置接口基础地址。
-    .addConverterFactory(GsonSafeConverterFactory.create(config)) // 使用自定义配置注册转换器。
-    .build() // 构建 Retrofit 实例。
+val retrofit = Retrofit.Builder()
+    .baseUrl("https://example.com/")
+    .addConverterFactory(GsonSafeConverterFactory.create(config))
+    .build()
 ```
+
+`onEvent` 会接收统一解析事件，线上通常接日志、监控或契约报告链路。
 
 如果项目里已经统一维护了 GsonBuilder，推荐使用 builder-first 入口，让工厂在 `.create()` 前注册 Safe Adapter：
 
 ```kotlin
-val config = SafeParserConfig.debug() // 统一控制 Gson 和 Retrofit 层的 SafeParser 行为。
-val retrofit = Retrofit.Builder() // 创建 Retrofit 构建器。
-    .baseUrl("https://example.com/") // 设置接口基础地址。
-    .addConverterFactory(GsonSafeConverterFactory.create(GsonBuilder().serializeNulls(), config)) // 保留 Builder 配置并启用字段级 Safe Adapter。
-    .build() // 构建 Retrofit 实例。
+val config = SafeParserConfig.debug()
+val retrofit = Retrofit.Builder()
+    .baseUrl("https://example.com/")
+    .addConverterFactory(GsonSafeConverterFactory.create(GsonBuilder().serializeNulls(), config))
+    .build()
 ```
 
 如果项目里已经统一维护的是创建好的 Gson，同时又想保留 Retrofit 层的空响应、rawJson 和事件策略：
 
 ```kotlin
-val config = SafeParserConfig.debug() // 统一控制 Gson 和 Retrofit 层的 SafeParser 行为。
-val gson = GsonBuilder() // 创建项目里统一维护的 GsonBuilder。
-    .serializeNulls() // 保留调用方自己的 Gson 选项。
-    .enableSafeParser(config) // 把同一份 SafeParserConfig 注册到 Gson。
-    .create() // 生成最终 Gson。
+val config = SafeParserConfig.debug()
+val gson = GsonBuilder()
+    .serializeNulls()
+    .enableSafeParser(config)
+    .create()
 
-val retrofit = Retrofit.Builder() // 创建 Retrofit 构建器。
-    .baseUrl("https://example.com/") // 设置接口基础地址。
-    .addConverterFactory(GsonSafeConverterFactory.create(gson, config)) // 同时复用已有 Gson 和 Retrofit 层 SafeParserConfig。
-    .build() // 构建 Retrofit 实例。
+val retrofit = Retrofit.Builder()
+    .baseUrl("https://example.com/")
+    .addConverterFactory(GsonSafeConverterFactory.create(gson, config))
+    .build()
 ```
+
+这段写法同时复用已有 Gson，并保留 Retrofit 层的空响应、raw JSON 和事件策略。
 
 这里容易误解，按当前情况选入口就行：
 
@@ -281,16 +293,18 @@ val retrofit = Retrofit.Builder() // 创建 Retrofit 构建器。
 ## 8. CI 自检
 
 ```kotlin
-val diagnostics = GsonSafeParser.diagnostics(SafeParserConfig.production()) // 检查 GsonBuilder 兼容性和高风险配置。
-val externalGsonDiagnostics = GsonSafeParser.diagnostics(gson) // 检查外部 Gson 是否已经注册字段级 Safe Adapter。
-val integrationCheck = GsonSafeParser.integrationCheck(SafeParserConfig.production()) // 运行库内置接入自检。
+val diagnostics = GsonSafeParser.diagnostics(SafeParserConfig.production())
+val externalGsonDiagnostics = GsonSafeParser.diagnostics(gson)
+val integrationCheck = GsonSafeParser.integrationCheck(SafeParserConfig.production())
 
-integrationCheck.checks.forEach { item -> // 遍历每一条自检结果。
-    println("${item.severity}: ${item.name} - ${item.message}") // 打印级别、名称和说明。
-} // 结束自检结果遍历。
+integrationCheck.checks.forEach { item ->
+    println("${item.severity}: ${item.name} - ${item.message}")
+}
 
-check(integrationCheck.hasErrors.not()) // 如果存在阻断问题，让测试或 CI 失败。
+check(integrationCheck.hasErrors.not())
 ```
+
+`diagnostics()` 看环境和外部 Gson 注册状态；`integrationCheck()` 运行库内置探针；最后的 `check(...)` 用来把阻断问题变成测试或 CI 失败。
 
 `diagnostics()` 会检查当前 Gson 反射兼容性和配置风险，适合在强制覆盖 Gson 版本后先看 Safe Adapter 是否可用。结果会按字段拆分 `GsonBuilder` 内部兼容性，`critical` 字段失败会阻断 builder-first 安全注册，`optional` 字段失败只会降级相关配置继承。
 
@@ -301,20 +315,22 @@ check(integrationCheck.hasErrors.not()) // 如果存在阻断问题，让测试�
 如果要把老项目 release 混淆风险也放进 CI，可以额外传少量关键业务模型探针。探针失败会进入 `checks`，不会让自检调用直接抛出混淆异常：
 
 ```kotlin
-val modelProbe = GsonSafeModelProbe( // 选一个关键响应模型做 release 字段名探针。
-    name = "coreApiResponse", // 用接口名或模型名定位问题。
-    json = """{"code":200}""", // 最小业务 JSON。
-    type = ApiResponse::class.java, // 真实业务模型类型。
-    expectedFields = mapOf("code" to 200) // 用混淆前字段名和值做断言。
-) // 结束业务模型探针。
+val modelProbe = GsonSafeModelProbe(
+    name = "coreApiResponse",
+    json = """{"code":200}""",
+    type = ApiResponse::class.java,
+    expectedFields = mapOf("code" to 200)
+)
 
-val releaseCheck = GsonSafeParser.integrationCheck( // 运行库自检和业务模型探针。
-    config = SafeParserConfig.production(), // 使用线上配置。
-    modelProbes = listOf(modelProbe) // 只挑关键模型，不要求覆盖全项目 Bean。
-) // 结束 release 自检。
+val releaseCheck = GsonSafeParser.integrationCheck(
+    config = SafeParserConfig.production(),
+    modelProbes = listOf(modelProbe)
+)
 
-check(releaseCheck.hasErrors.not()) // 如果疑似模型字段被混淆，让 CI 失败并查看 checks。
+check(releaseCheck.hasErrors.not())
 ```
+
+`modelProbes` 只需要覆盖关键响应模型，用来在 release 混淆后检查字段名和构造路径是否还能满足业务 JSON。
 
 推荐分 4 层接入：
 

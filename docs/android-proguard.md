@@ -143,13 +143,17 @@ android.enableR8.fullMode=false # 可选兼容策略：降低老项目 release �
 
 当前 core 和 retrofit 都是 Android AAR。Android AAR 会自动把框架自身 consumer ProGuard 规则合并进用户 App，用户不需要手抄这部分。
 
-默认 `GsonSafeParser.create(config)` 不读取 `GsonBuilder` 内部字段；下面的 GsonBuilder 规则主要保护 `.enableSafeParser(config)`、`GsonSafeConverterFactory.create(builder, config)` 和外部 Builder 配置继承场景。
+默认 `GsonSafeParser.create(config)` 不读取 `GsonBuilder` 内部字段；下面的 GsonBuilder 规则主要保护 `.enableSafeParser(config)`、`GsonSafeConverterFactory.create(builder, config)` 和外部 Builder 配置继承场景。Gson 规则只保护 `diagnostics(gson, config)` 对外部 Gson 是否已经注册 Safe Adapter 的诊断能力，不改变解析行为。
 
 下面规则已经内置在 GsonSafeParser AAR 里。只有拷源码、自定义发布链路丢失 consumer rules，或需要排查合并结果时，才需要手动对照：
 
 ```proguard
 -keep class kotlin.Metadata { *; } # 保留 Kotlin Metadata，支持 data class 默认值和反射信息读取。
 -keepattributes Signature,InnerClasses,EnclosingMethod,RuntimeVisibleAnnotations,RuntimeVisibleParameterAnnotations,AnnotationDefault # 保留 Gson 和 Kotlin 反射需要的属性。
+
+-keepclassmembers class com.google.gson.Gson { # 保留外部 Gson 注册状态诊断读取的 factories 字段。
+    java.util.List factories;
+}
 
 -keepclassmembers class com.google.gson.GsonBuilder { # 保留 SafeParser 读取的 GsonBuilder 内部字段名。
     java.util.Map instanceCreators;

@@ -98,7 +98,7 @@ Use the badge version below. If you use plain Gson or manage Gson yourself, depe
 [![Maven Central: core](https://img.shields.io/maven-central/v/io.github.logan0817/gson-safe-parser-core?label=core)](https://central.sonatype.com/artifact/io.github.logan0817/gson-safe-parser-core)
 
 ```kotlin
-implementation("io.github.logan0817:gson-safe-parser-core:1.0.3") // Adds the core defensive parsing library.
+implementation("io.github.logan0817:gson-safe-parser-core:1.0.3")
 ```
 
 If you use Retrofit, depend on the retrofit module only; it already brings core transitively:
@@ -106,10 +106,10 @@ If you use Retrofit, depend on the retrofit module only; it already brings core 
 [![Maven Central: retrofit](https://img.shields.io/maven-central/v/io.github.logan0817/gson-safe-parser-retrofit?label=retrofit)](https://central.sonatype.com/artifact/io.github.logan0817/gson-safe-parser-retrofit)
 
 ```kotlin
-implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.3") // Adds the Retrofit converter integration and transitively includes core.
+implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.3")
 ```
 
-The Retrofit module keeps the `Retrofit 2.8.1` API baseline, and it also publishes `OkHttp 4.12.0` and `Okio 3.6.0` as the network-stack safety baseline. This prevents Retrofit 2.8.1's old transitive dependencies from resolving back to OkHttp 3.14.x / Okio 1.x. If your app already owns the network stack, run `./gradlew dependencyInsight --dependency okhttp` and `./gradlew dependencyInsight --dependency okio` to confirm the final dependency resolution, then verify offline, cancellation, connection reset, TLS failure, and raw JSON capture regressions.
+The Retrofit module keeps the `Retrofit 2.8.1` API baseline, and it also provides `OkHttp 4.12.0` and `Okio 3.6.0` as runtime network-stack safety baselines. This prevents Retrofit 2.8.1's old transitive dependencies from resolving back to OkHttp 3.14.x / Okio 1.x. If your app already owns the network stack, run `./gradlew dependencyInsight --dependency okhttp` and `./gradlew dependencyInsight --dependency okio` to confirm the final dependency resolution, then verify offline, cancellation, connection reset, TLS failure, and raw JSON capture regressions.
 
 Extra Android release requirements:
 
@@ -136,8 +136,8 @@ data class User(
 )
 
 val json = """{"code":200,"data":[]}"""
-val gson = GsonSafeParser.create() // Creates a Gson instance with safe parsing enabled.
-val response = gson.fromJson(json, ApiResponse::class.java) // Parses the API response through the safe Gson instance.
+val gson = GsonSafeParser.create()
+val response = gson.fromJson(json, ApiResponse::class.java)
 ```
 
 Native Gson throws when `data` expects an object but receives `[]`. GsonSafeParser falls back for the `data` field and continues parsing the outer `code`.
@@ -171,8 +171,8 @@ Direct `gson.fromJson(...)` calls keep Gson's native top-level exception wrappin
 Kotlin convenience APIs:
 
 ```kotlin
-val response = GsonSafeParser.fromJsonSafe<ApiResponse>(json) // Parses JSON and returns the target value directly.
-val result = GsonSafeParser.parseSafe<ApiResponse>(json) // Parses JSON and returns the value plus parse events.
+val response = GsonSafeParser.fromJsonSafe<ApiResponse>(json)
+val result = GsonSafeParser.parseSafe<ApiResponse>(json)
 
 println(result.value)
 println(result.events)
@@ -182,13 +182,17 @@ println(result.contractReport().summary.warningCount)
 println(result.contractReport().toStructuredRows().firstOrNull()?.stableKey)
 ```
 
+`fromJsonSafe<T>()` returns the parsed value directly, while `parseSafe<T>()` also returns parse events for logs, metrics, and contract reports.
+
 If you parse the same API shape repeatedly, create one reusable Parser first:
 
 ```kotlin
-val parser = GsonSafeParser.parser(config) // Creates one safe Parser and reuses the same Gson afterwards.
+val parser = GsonSafeParser.parser(config)
 val value = parser.fromJsonSafe<ApiResponse>(json)
 val result = parser.parseSafe<ApiResponse>(json)
 ```
+
+`parser(config)` creates one safe Parser and reuses the same Gson afterwards, which fits repositories, data sources, and batch parsing.
 
 ## JSON Shape Coercion
 
@@ -238,7 +242,7 @@ The boundary is intentionally narrow: root objects, root collections, root objec
 ```kotlin
 val retrofit = Retrofit.Builder()
     .baseUrl("https://example.com/")
-    .addConverterFactory(GsonSafeConverterFactory.create()) // Registers the GsonSafeParser response converter.
+    .addConverterFactory(GsonSafeConverterFactory.create())
     .build()
 ```
 
@@ -247,15 +251,17 @@ With custom empty response and observation policies:
 ```kotlin
 val config = SafeParserConfig.production(
     observerPolicy = SafeObserverPolicy(
-        onEvent = { event -> println(event) } // Receives and reports parse events.
+        onEvent = { event -> println(event) }
     )
 )
 
 val retrofit = Retrofit.Builder()
     .baseUrl("https://example.com/")
-    .addConverterFactory(GsonSafeConverterFactory.create(config)) // Registers the converter with custom config.
+    .addConverterFactory(GsonSafeConverterFactory.create(config))
     .build()
 ```
+
+`onEvent` receives the unified parse event stream and is the right place to connect logs, metrics, or contract reports.
 
 If your project already owns a shared GsonBuilder, prefer the builder-first entry:
 
@@ -271,17 +277,19 @@ val retrofit = Retrofit.Builder()
 If your project already owns a created shared Gson instance and still needs Retrofit-level empty response, raw JSON, and observer policies, use:
 
 ```kotlin
-val config = SafeParserConfig.debug() // Drives both the shared Safe Gson and the Retrofit-specific policies.
+val config = SafeParserConfig.debug()
 val gson = GsonBuilder()
     .serializeNulls()
-    .enableSafeParser(config) // Registers the same SafeParserConfig on Gson.
+    .enableSafeParser(config)
     .create()
 
 val retrofit = Retrofit.Builder()
     .baseUrl("https://example.com/")
-    .addConverterFactory(GsonSafeConverterFactory.create(gson, config)) // Reuses the caller Gson and keeps Retrofit policies from config.
+    .addConverterFactory(GsonSafeConverterFactory.create(gson, config))
     .build()
 ```
+
+This form reuses the existing Gson and keeps Retrofit-level empty response, raw JSON, and event policies from the same config.
 
 Choose the entry by what you currently have:
 
@@ -297,30 +305,32 @@ The default Retrofit `create(config)` entry also uses the lower-risk default pat
 
 ## Common Configuration
 
+The code below is copyable. The table after it explains what each option controls and when to change it.
+
 ```kotlin
 val config = SafeParserConfig(
-    fallbackPolicy = FallbackPolicy.NullOnly, // Returns null or keeps constructed defaults for mismatched fields.
-    emptyResponsePolicy = EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly, // Returns empty values only for Unit/Void Retrofit bodies.
-    primitiveParsingPolicy = PrimitiveParsingPolicy.DelegateToGson, // Delegates primitive values to native Gson adapters.
-    skippedPlatformTypePrefixes = setOf("android."), // Skips Android platform types to avoid reflecting system objects; do not add business model package prefixes here.
-    nullValuePolicy = NullValuePolicy.WriteExplicitNulls, // Writes explicit JSON null only to nullable fields.
-    requiredConstructorParameterPolicy = RequiredConstructorParameterPolicy.GsonCompatible, // Keeps Gson-compatible behavior for missing non-null Kotlin constructor parameters.
-    mapItemKeyPolicy = MapItemKeyPolicy.Omit, // Omits Map item keys by default; opt into Hash only when aggregation needs it.
-    captureRawJsonInCallbacks = false, // Avoids attaching raw JSON to events in production.
-    maxRawJsonCaptureBytes = 1024 * 1024, // Limits raw JSON capture to 1 MiB.
-    onEvent = { event -> println(event) }, // Observes all unified safe parser events.
+    fallbackPolicy = FallbackPolicy.NullOnly,
+    emptyResponsePolicy = EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly,
+    primitiveParsingPolicy = PrimitiveParsingPolicy.DelegateToGson,
+    skippedPlatformTypePrefixes = setOf("android."),
+    nullValuePolicy = NullValuePolicy.WriteExplicitNulls,
+    requiredConstructorParameterPolicy = RequiredConstructorParameterPolicy.GsonCompatible,
+    mapItemKeyPolicy = MapItemKeyPolicy.Omit,
+    captureRawJsonInCallbacks = false,
+    maxRawJsonCaptureBytes = 1024 * 1024,
+    onEvent = { event -> println(event) },
     onTypeMismatch = { event ->
         println("${event.path}: ${event.actualToken} -> ${event.expectedType}")
-    } // Prints path, actual token, and expected type.
+    }
 )
 ```
 
 Preset configs:
 
 ```kotlin
-val production = SafeParserConfig.production() // Production default config.
-val debug = SafeParserConfig.debug() // Debug config with raw JSON capture enabled.
-val lowInterference = SafeParserConfig.lowInterference() // Low-interference config closer to native Gson.
+val production = SafeParserConfig.production()
+val debug = SafeParserConfig.debug()
+val lowInterference = SafeParserConfig.lowInterference()
 ```
 
 | Preset | Best for | Main behavior | Trade-off |
@@ -332,11 +342,11 @@ val lowInterference = SafeParserConfig.lowInterference() // Low-interference con
 ## Annotations
 
 ```kotlin
-@SafeParseDelegateToGson // Makes this type use native Gson directly.
+@SafeParseDelegateToGson
 class StrictModel
 
 data class PageState(
-    @field:SafeParseSkip // Tells Safe Reflective parsing to skip this field.
+    @field:SafeParseSkip
     val runtimeCache: Any? = null
 )
 
@@ -359,10 +369,12 @@ data class FlexibleResponse(
 The repository includes `demo-app` for testing the library on a real Android device:
 
 ```bash
-./gradlew :demo-app:assembleDebug # Builds the debug Demo App.
-./gradlew :demo-app:installDebug # Installs the debug Demo App on a connected device.
-adb shell am start -n io.github.logan.gsonsafeparser.demo/.MainActivity # Starts the Demo App main screen.
+./gradlew :demo-app:assembleDebug
+./gradlew :demo-app:installDebug
+adb shell am start -n io.github.logan.gsonsafeparser.demo/.MainActivity
 ```
+
+These commands build the debug Demo, install it on a connected device, and open the Demo main screen.
 
 The Demo App supports built-in cases and custom JSON input. You can paste a real API response and compare GsonSafeParser with native Gson, including parsed output, event stream, and integration suggestions.
 

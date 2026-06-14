@@ -6,6 +6,7 @@ import com.google.gson.InstanceCreator
 import com.google.gson.JsonSyntaxException
 import com.google.gson.ReflectionAccessFilter
 import com.google.gson.ToNumberStrategy
+import com.google.gson.TypeAdapterFactory
 import com.google.gson.reflect.TypeToken
 import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonToken
@@ -618,7 +619,12 @@ fun GsonBuilder.enableSafeParser(
         disableJdkUnsafe()
     }
     return setObjectToNumberStrategy(objectToNumberStrategy)
-        .registerTypeAdapterFactory(SafeTypeAdapterFactory(safeConfig))
+        .registerTypeAdapterFactory(
+            SafeTypeAdapterFactory(
+                config = safeConfig,
+                nativeFactories = snapshot.factories + snapshot.hierarchyFactories
+            )
+        )
 }
 
 private fun GsonBuilder.registerSafeParserDirect(
@@ -691,6 +697,8 @@ private data class GsonBuilderCompatibilitySnapshot(
     val instanceCreators: Map<Type, InstanceCreator<*>>,
     val objectToNumberStrategy: ToNumberStrategy?,
     val reflectionFilters: List<ReflectionAccessFilter>,
+    val factories: List<TypeAdapterFactory>,
+    val hierarchyFactories: List<TypeAdapterFactory>,
     val complexMapKeySerialization: Boolean,
     val useJdkUnsafe: Boolean,
     val failures: List<GsonBuilderCompatibilityFailure>
@@ -812,6 +820,14 @@ private fun GsonBuilder.compatibilitySnapshot(): GsonBuilderCompatibilitySnapsho
         objectToNumberStrategy = field(GsonBuilderCompatibilityField.ObjectToNumberStrategy) as? ToNumberStrategy,
         reflectionFilters = (field(GsonBuilderCompatibilityField.ReflectionFilters) as? Collection<*>)
             ?.filterIsInstance<ReflectionAccessFilter>()
+            .orEmpty(),
+        factories = runRecovering { snapshotField("factories") as? Collection<*> }
+            .getOrNull()
+            ?.filterIsInstance<TypeAdapterFactory>()
+            .orEmpty(),
+        hierarchyFactories = runRecovering { snapshotField("hierarchyFactories") as? Collection<*> }
+            .getOrNull()
+            ?.filterIsInstance<TypeAdapterFactory>()
             .orEmpty(),
         complexMapKeySerialization = field(GsonBuilderCompatibilityField.ComplexMapKeySerialization) as? Boolean ?: false,
         useJdkUnsafe = field(GsonBuilderCompatibilityField.UseJdkUnsafe) as? Boolean ?: true,

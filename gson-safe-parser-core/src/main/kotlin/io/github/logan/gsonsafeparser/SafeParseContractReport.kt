@@ -1,6 +1,7 @@
 package io.github.logan.gsonsafeparser
 
 import com.google.gson.stream.JsonToken
+import java.security.MessageDigest
 
 /**
  * 解析契约报告。
@@ -315,11 +316,11 @@ data class SafeParseContractIssue(
     val stableKey: String
         get() = listOf(
             "category" to category.name,
-            "path" to path.orEmpty(),
+            "path" to path.stableReportPath(mapItemKey),
             "expectedType" to expectedType.orEmpty(),
             "actualToken" to actualToken.orEmpty(),
             "kind" to kind?.name.orEmpty(),
-            "mapItemKey" to mapItemKey.orEmpty(),
+            "mapItemKey" to mapItemKey.stableReportMapItemKey(),
             "typeName" to typeName.orEmpty(),
             "emptyResponsePolicy" to emptyResponsePolicy?.name.orEmpty(),
             "captureSkipReason" to captureSkipReason?.name.orEmpty(),
@@ -384,18 +385,22 @@ private fun SafeParserEvent.toContractIssueOrNull(): SafeParseContractIssue? {
  */
 private fun TypeMismatchEvent.toContractIssue(): SafeParseContractIssue {
     // location 是报告里展示的 JSON 路径；如果 reader 没给路径，就用根路径 `$` 兜底。
-    val location = path.takeIf { it.isNotBlank() } ?: "$"
+    val safeMapItemKey = mapItemKey.safeReportMapItemKey()
+    val location = (path.takeIf { it.isNotBlank() } ?: "$")
+        .redactMapItemKeyInPath(mapItemKey, safeMapItemKey)
+        .safeReportPath()
+    val safeReason = reason.safeReportReasonText()
     return SafeParseContractIssue(
         category = SafeParseContractIssueCategory.TypeMismatch,
         severity = SafeParseContractIssueSeverity.Warning,
-        message = "Type mismatch at $location: expected $expectedType, actual ${actualToken.name}; $reason",
+        message = "Type mismatch at $location: expected $expectedType, actual ${actualToken.name}; $safeReason",
         path = location,
         fieldName = fieldName,
         expectedType = expectedType,
         actualToken = actualToken.name,
         kind = kind,
-        mapItemKey = mapItemKey,
-        reason = reason,
+        mapItemKey = safeMapItemKey,
+        reason = safeReason,
         rawJsonTruncated = rawJsonTruncated
     )
 }
@@ -404,17 +409,18 @@ private fun TypeMismatchEvent.toContractIssue(): SafeParseContractIssue {
  * 把 shape coercion 事件转换成报告条目。
  */
 private fun ShapeCoercionEvent.toContractIssue(): SafeParseContractIssue {
-    val location = path.takeIf { it.isNotBlank() } ?: "$"
+    val location = (path.takeIf { it.isNotBlank() } ?: "$").safeReportPath()
+    val safeReason = reason.safeReportReasonText()
     return SafeParseContractIssue(
         category = SafeParseContractIssueCategory.TypeMismatch,
         severity = SafeParseContractIssueSeverity.Warning,
-        message = "ShapeCoercion at $location: action=${action.name}, expected $expectedType, actual ${actualToken.name}; $reason",
+        message = "ShapeCoercion at $location: action=${action.name}, expected $expectedType, actual ${actualToken.name}; $safeReason",
         path = location,
         fieldName = fieldName,
         expectedType = expectedType,
         actualToken = actualToken.name,
         kind = ParseExceptionKind.OBJECT,
-        reason = shapeCoercionReportReason(action, discardedItemCount, reason)
+        reason = shapeCoercionReportReason(action, discardedItemCount, safeReason)
     )
 }
 
@@ -601,6 +607,88 @@ private fun actualJsonShape(tokenName: String): String {
         else -> "JSON token $tokenName"
     }
 }
+
+private fun String?.safeReportMapItemKey(): String? {
+    val key = this ?: return null
+    if (key.isBlank()) return key
+    return if (key.isSensitiveMapItemKey()) key.sha256ReportKey() else key
+}
+
+private fun String?.stableReportMapItemKey(): String {
+    val key = this?.takeIf { it.isNotBlank() } ?: return ""
+    return if (key.startsWith(SHA256_PREFIX)) key else key.sha256ReportKey()
+}
+
+private fun String?.stableReportPath(mapItemKey: String?): String {
+    val path = this.orEmpty()
+    val key = mapItemKey?.takeIf { it.isNotBlank() }
+    val keyStablePath = if (key == null) {
+        path
+    } else {
+        path.replaceTrailingMapItemKey(key, key.stableReportMapItemKey())
+    }
+    return keyStablePath.safeReportPath()
+}
+
+private fun String.redactMapItemKeyInPath(originalKey: String?, safeKey: String?): String {
+    if (originalKey.isNullOrBlank() || safeKey.isNullOrBlank() || originalKey == safeKey) return this
+    return replaceTrailingMapItemKey(originalKey, safeKey)
+}
+
+private fun String.replaceTrailingMapItemKey(originalKey: String, replacementKey: String): String {
+    if (!endsWith(originalKey)) return this
+    return dropLast(originalKey.length) + replacementKey
+}
+
+private fun String.safeReportPath(): String {
+    return sensitiveMapItemKeyPatterns.fold(this) { sanitized, pattern ->
+        pattern.replace(sanitized) { match -> match.value.safeReportPathMatch() }
+    }
+}
+
+private fun String.safeReportPathMatch(): String {
+    val atIndex = indexOf('@')
+    val pathPrefixEnd = if (atIndex > 0) {
+        indexOf('.').takeIf { dotIndex -> dotIndex in 1 until atIndex }
+    } else {
+        null
+    }
+    if (pathPrefixEnd != null) {
+        val prefix = substring(0, pathPrefixEnd + 1)
+        val sensitivePart = substring(pathPrefixEnd + 1)
+        return prefix + sensitivePart.sha256ReportKey()
+    }
+    return sha256ReportKey()
+}
+
+private fun String.safeReportReasonText(): String {
+    return sensitiveReportReasonPatterns.fold(this) { sanitized, pattern ->
+        pattern.replace(sanitized) { match -> match.value.sha256ReportKey() }
+    }
+}
+
+private fun String.isSensitiveMapItemKey(): Boolean {
+    return sensitiveMapItemKeyPatterns.any { pattern -> pattern.containsMatchIn(this) }
+}
+
+private fun String.sha256ReportKey(): String {
+    val bytes = MessageDigest.getInstance("SHA-256").digest(toByteArray(Charsets.UTF_8))
+    return SHA256_PREFIX + bytes.joinToString(separator = "") { byte -> "%02x".format(byte) }
+}
+
+private const val SHA256_PREFIX = "sha256:"
+
+private val sensitiveMapItemKeyPatterns = listOf(
+    Regex("\\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}\\b", RegexOption.IGNORE_CASE),
+    Regex("(?i)\\b(?:token|password|passwd|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|session[_-]?id|sid)\\b"),
+    Regex("\\b\\+?\\d[\\d\\s().-]{7,}\\d\\b")
+)
+
+private val sensitiveReportReasonPatterns = listOf(
+    Regex("\\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}\\b", RegexOption.IGNORE_CASE),
+    Regex("(?i)\\b(?:token|password|passwd|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|session[_-]?id|sid)\\s*=\\s*[^\\s,;&}]+"),
+    Regex("\\b\\+?\\d[\\d\\s().-]{7,}\\d\\b")
+)
 
 private const val SHAPE_COERCION_ACTION_KEY = "shapeCoercionAction="
 private const val SHAPE_COERCION_DISCARDED_KEY = "discardedItemCount="
