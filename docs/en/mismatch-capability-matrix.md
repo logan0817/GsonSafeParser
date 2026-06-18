@@ -78,39 +78,39 @@ Overview:
 <!-- capability-id: integer-field-mismatch -->
 
 1. Backend returns: `{}`, `[]`, invalid string, out-of-range number, or fractional number for integer fields.
-2. Default handling: field values delegate to native Gson adapters, and read failures keep the field default; root primitive values follow native Gson behavior.
-3. Evidence: `TypeMismatch`, field name, path, range reason, or rounding reason.
-4. Boundary: safe primitive values are used only with `PrimitiveParsingPolicy.Safe`.
+2. Default handling: field and root values delegate to native Gson adapters; read failures are thrown as native Gson exceptions and do not emit SafeParser events.
+3. Explicit Safe handling: with `PrimitiveParsingPolicy.Safe`, field-level failures use safe primitive values or keep constructed defaults, and record `TypeMismatch`.
+4. Evidence: `TypeMismatch`, field name, path, range reason, or rounding reason; this evidence appears only with `PrimitiveParsingPolicy.Safe`.
 
 ### 2.6 `BigDecimal` / `BigInteger`
 <!-- capability-id: big-number-mismatch -->
 
 1. Backend returns: `{}`, `[]`, invalid string, or fractional number for `BigInteger`.
-2. Default handling: field values delegate to native Gson adapters, and read failures keep the field default; root numeric values follow native Gson behavior.
-3. Evidence: `TypeMismatch`, with a reason explaining why the value cannot be read as the target type.
-4. Boundary: safe numeric defaults are used only with `PrimitiveParsingPolicy.Safe`; valid large integers keep exact precision and are not truncated.
+2. Default handling: field and root values delegate to native Gson adapters; read failures are thrown as native Gson exceptions and do not emit SafeParser events.
+3. Explicit Safe handling: with `PrimitiveParsingPolicy.Safe`, field-level failures use safe numeric defaults or keep constructed defaults, and record `TypeMismatch`.
+4. Boundary: valid large integers keep exact precision and are not truncated; malformed or wrong-shape numeric fallback happens only with `PrimitiveParsingPolicy.Safe`.
 
 ### 2.7 `Boolean`
 <!-- capability-id: boolean-field-mismatch -->
 
 1. Backend returns: `{}`, `[]`, invalid string.
-2. Default handling: field values delegate to native Gson adapters, and read failures keep the field default; root boolean values follow native Gson behavior.
-3. Evidence: `TypeMismatch`, field path, and actual token.
-4. Boundary: safe boolean values are used only with `PrimitiveParsingPolicy.Safe`; normal `"true"` / `"false"` values keep Gson-compatible parsing.
+2. Default handling: field and root values delegate to native Gson adapters; read failures are thrown as native Gson exceptions and do not emit SafeParser events.
+3. Explicit Safe handling: with `PrimitiveParsingPolicy.Safe`, field-level failures use safe boolean values or keep constructed defaults, and record `TypeMismatch`.
+4. Boundary: normal `"true"` / `"false"` values keep Gson-compatible parsing.
 
 ### 2.8 `String`
 <!-- capability-id: string-field-mismatch -->
 
 1. Backend returns: `{}`, `[]`.
-2. Default handling: field values delegate to native Gson adapters, and read failures keep the field default; root string values follow native Gson behavior.
-3. Evidence: `TypeMismatch`, `expectedJsonShape=JSON string`.
+2. Default handling: field and root values delegate to native Gson adapters; read failures are thrown as native Gson exceptions and do not emit SafeParser events.
+3. Explicit Safe handling: with `PrimitiveParsingPolicy.Safe`, field-level failures keep constructed defaults or return safe values, and record `TypeMismatch`.
 4. Boundary: number-to-string conversion remains Gson compatible.
 
 ### 2.9 Kotlin data class defaults
 <!-- capability-id: kotlin-defaults -->
 
 1. Backend returns: missing field, field `null`, or unexpected field shape.
-2. Default handling: missing fields keep constructed defaults; explicit `null` is written only to nullable fields; field shape mismatches keep constructed defaults after read failures.
+2. Default handling: missing fields keep constructed defaults; explicit `null` is written only to nullable fields; recoverable object, collection, and Map field-shape mismatches keep constructed defaults when possible.
 3. Evidence: mismatch events and parsed value comparison can confirm this behavior.
 4. Boundary: A non-null constructor parameter without a default uses Gson-compatible handling by default; missing reference fields stay `null`, and primitives keep JVM defaults.
 5. Boundary: switch `requiredConstructorParameterPolicy` to `Strict` when missing fields, `null`, wrong shapes, or unknown enum values should be treated as API contract errors.
@@ -160,4 +160,4 @@ The report turns "Android parsing failed" into a contract issue: `$.data` expect
 1. JSON syntax errors are not field mismatches and are still thrown.
 2. Root-level parse failures cannot always be isolated to a field and still follow Gson boundaries.
 3. Business protocol errors, HTTP errors, signature failures, and semantic field errors are not judged by this library.
-4. Ordinary exceptions thrown by custom adapters become field-level events only when the read boundary can isolate them to the current field; unsafe-to-isolate failures such as `Error`, `ThreadDeath`, `LinkageError`, and `CancellationException` are still thrown.
+4. Caller-registered `TypeAdapter`, `TypeAdapterFactory`, `registerTypeHierarchyAdapter(...)`, and `@JsonAdapter` matches keep the native Gson path first. Exceptions thrown by those custom adapters are thrown outward instead of being disguised as field fallback. Unsafe-to-isolate failures such as `Error`, `ThreadDeath`, `LinkageError`, and `CancellationException` are also still thrown.

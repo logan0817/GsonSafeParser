@@ -4,7 +4,7 @@
 
 本文档面向第一次接入 GsonSafeParser 的开发者。
 
-你会看到 5 件事：怎么安装、普通 Gson 怎么接、Retrofit 怎么接、Kotlin API 怎么用、CI 怎么做接入自检。更细的兜底范围见 [错形能力矩阵（JSON 形状不一致）](mismatch-capability-matrix.md)。
+你会看到 5 件事：怎么安装、普通 Gson 怎么接、Retrofit 怎么接、Kotlin API 怎么用、CI 怎么做接入自检。API 入口怎么选见 [API 参考](api-reference.md)，更细的兜底范围见 [错形能力矩阵（JSON 形状不一致）](mismatch-capability-matrix.md)。
 
 ## 1. 使用安装
 
@@ -28,7 +28,7 @@
 最新版本：[![Maven Central: core](https://img.shields.io/maven-central/v/io.github.logan0817/gson-safe-parser-core?label=core)](https://central.sonatype.com/artifact/io.github.logan0817/gson-safe-parser-core)
 
 ```kotlin
-implementation("io.github.logan0817:gson-safe-parser-core:1.0.3")
+implementation("io.github.logan0817:gson-safe-parser-core:1.0.4")
 ```
 
 如果项目使用 Retrofit，只需要：
@@ -36,7 +36,7 @@ implementation("io.github.logan0817:gson-safe-parser-core:1.0.3")
 最新版本：[![Maven Central: retrofit](https://img.shields.io/maven-central/v/io.github.logan0817/gson-safe-parser-retrofit?label=retrofit)](https://central.sonatype.com/artifact/io.github.logan0817/gson-safe-parser-retrofit)
 
 ```kotlin
-implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.3")
+implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.4")
 ```
 
 ## 2. 普通 Gson 接入
@@ -121,7 +121,7 @@ val result = GsonSafeParser.parseSafe<ApiResponse>(json)
 | 根级解析失败 | 继续遵循 Gson 边界。 |
 | 不可安全隔离异常 | `Error`、`ThreadDeath`、`LinkageError`、`CancellationException` 继续外抛。 |
 
-字段级 Adapter 读取失败如果能被当前字段边界隔离，会产生事件并保留外层对象解析。
+SafeParser 内建 Adapter 读取到可隔离的字段错形时，会产生事件并保留外层对象解析。调用方通过 `registerTypeAdapter(...)`、`registerTypeAdapterFactory(...)`、`registerTypeHierarchyAdapter(...)` 或 `@JsonAdapter` 显式接管的类型，会优先走原生 Gson 链路；这些自定义 Adapter 自己抛出的异常会向外抛出，不会被伪装成字段兜底。
 
 直接调用 `gson.fromJson(...)` 时，最外层异常仍按 Gson 原生规则包装。这不是 SafeParser 漏处理，而是为了保留 Gson 原生入口语义。
 
@@ -225,7 +225,7 @@ Parser 和 Gson 都可以复用，也可以作为单例、DI 对象或 Repositor
 | --- | --- |
 | 外部 Gson 是否会自动补注册 Safe Adapter | 不会。需要在创建这份 Gson 前，对同一个 `GsonBuilder` 调用 `.enableSafeParser(config)`。 |
 | 怎么确认外部 Gson 是否安全 | 调用 `GsonSafeParser.diagnostics(gson)`，查看是否已经包含字段级 Safe Adapter。 |
-| `parserWithExternalGson(gson, config)` 的 config 管什么 | 主要控制 raw JSON 捕获、根基础类型兜底和 `parseSafe` 事件快照。 |
+| `parserWithExternalGson(gson, config)` 的 config 管什么 | 主要控制 raw JSON 捕获、显式 `PrimitiveParsingPolicy.Safe` 下的根基础类型兜底和 `parseSafe` 事件快照。 |
 | 字段级 Adapter 的事件回调归属 | 归创建 Gson 时传给 `.enableSafeParser(...)` 的配置。 |
 | 回调在哪个线程执行 | 在实际解析调用线程同步触发；多线程并发时，调用方要保证日志缓冲、指标容器或外部集合线程安全。 |
 

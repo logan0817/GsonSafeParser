@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 安全问题
+    url: https://github.com/logan0817/GsonSafeParser/security/advisories/new
+    about: 请不要公开提交安全漏洞或敏感数据，请通过 GitHub Security Advisory 报告。
+  - name: Security issue
+    url: https://github.com/logan0817/GsonSafeParser/security/advisories/new
+    about: Do not open public issues for vulnerabilities or sensitive payloads. Please use GitHub Security Advisory.

@@ -2,7 +2,7 @@
 
 [English](en/release-checklist.md)
 
-发布 `1.0.3` 前按这份清单核对，目标是确认 Android AAR、consumer ProGuard、release 混淆自检、文档版本号和 Maven 本地产物都稳定。
+发布 `1.0.4` 前按这份清单核对，目标是确认 Android AAR、consumer ProGuard、release 混淆自检、文档版本号和 Maven 本地产物都稳定。
 
 ## 1. 发布前验证命令
 
@@ -46,7 +46,7 @@ git diff --cached --check
 ## 2. AAR 产物检查
 
 本地 Maven 产物由 `verifyMavenLocalPublicationArtifacts` 统一校验，必须满足：
-1. `gson-safe-parser-core-1.0.3.aar` 和 `gson-safe-parser-retrofit-1.0.3.aar` 存在。
+1. `gson-safe-parser-core-1.0.4.aar` 和 `gson-safe-parser-retrofit-1.0.4.aar` 存在。
 2. 主产物不能退回普通 `.jar`。
 3. POM 使用 `<packaging>aar</packaging>`。
 4. AAR 内包含 `classes.jar`、`proguard.txt`、`META-INF/LICENSE`、`META-INF/NOTICE`。
@@ -65,20 +65,21 @@ git diff --cached --check
 ## 4. 文档与版本检查
 
 发布前必须确认：
-1. 根 `build.gradle.kts` 版本是 `1.0.3`。
-2. demo `versionName` 是 `1.0.3`，`versionCode` 已递增。
-3. `README.md`、`README_EN.md`、`docs/getting-started.md`、`docs/en/getting-started.md` 同时包含 core 和 retrofit 的 `1.0.3` 坐标。
+1. 根 `build.gradle.kts` 版本是 `1.0.4`。
+2. demo `versionName` 是 `1.0.4`，`versionCode` 已递增。
+3. `README.md`、`README_EN.md`、`docs/getting-started.md`、`docs/en/getting-started.md` 同时包含 core 和 retrofit 的 `1.0.4` 坐标。
 4. 中文文档和英文文档入口互相可跳转。
-5. README 文档表能找到快速开始、兼容性说明、配置说明、错形能力矩阵（JSON 形状不一致）、Android 混淆、Demo App、排障指南、发布清单、1.0.3 发布说明、1.0.2 历史发布说明、1.0.1 历史发布说明和 1.0.0 历史发布说明。
+5. README 文档表能找到快速开始、兼容性说明、配置说明、错形能力矩阵（JSON 形状不一致）、Android 混淆、Demo App、排障指南、发布清单、1.0.4 发布说明、1.0.3 历史发布说明、1.0.2 历史发布说明、1.0.1 历史发布说明和 1.0.0 历史发布说明。
 6. `docs/compatibility.md` 和 `docs/en/compatibility.md` 明确列出 `minSdk 23`、`compileSdk 36`、`JDK 17`、`Kotlin 2.0.21`、`kotlin-reflect 2.0.21`、`Gson 2.13.2`、`Retrofit 2.8.1` 和 R8 / ProGuard 边界。
-7. `CHANGELOG.md` 存在，并以 `1.0.3` 作为当前发布版本、`1.0.0` 作为首个公开兼容基线。
-8. `docs/release-notes-1.0.3.md` 和 `docs/en/release-notes-1.0.3.md` 明确列出 JSON 形态转换、事件报告、边界规则和发布验证。
-9. `docs/release-notes-1.0.2.md` 和 `docs/en/release-notes-1.0.2.md` 继续保留传输异常边界修正、兼容边界和发布验证。
-10. `docs/release-notes-1.0.1.md` 和 `docs/en/release-notes-1.0.1.md` 继续保留历史稳定性修正、兼容边界和发布验证。
-11. `docs/release-notes-1.0.0.md` 和 `docs/en/release-notes-1.0.0.md` 继续保留首发能力、兼容边界和发布验证。
-12. `README.md`、`README_EN.md`、`docs/compatibility.md`、`docs/en/compatibility.md`、`docs/troubleshooting.md`、`docs/en/troubleshooting.md` 都明确说明网络或传输读流异常会交回 Retrofit / OkHttp，不能用 `emptyResponsePolicy` 隐藏。
-13. `README.md`、`README_EN.md`、`docs/compatibility.md` 和 `docs/en/compatibility.md` 都明确说明 Retrofit 网络栈安全基线、runtime scope、`OkHttp 4.12.0`、`Okio 3.6.0`、`dependencyInsight` 和依赖解析验证。
-14. `CHANGELOG.md`、1.0.3 中英文发布说明和本清单都记录 OSV、Maven Central 响应脱敏、Demo 剪贴板脱敏、`maxRawJsonCaptureBytesTooLarge`、OkHttp / Okio 基线。
+7. `CHANGELOG.md` 存在，并以 `1.0.4` 作为当前发布版本、`1.0.0` 作为首个公开兼容基线。
+8. `docs/release-notes-1.0.4.md` 和 `docs/en/release-notes-1.0.4.md` 明确列出自定义 Adapter 外抛边界、原生 Gson 顺序、默认基础类型策略、开源发布文件和发布验证。
+9. `docs/release-notes-1.0.3.md` 和 `docs/en/release-notes-1.0.3.md` 继续保留 JSON 形态转换、事件报告、边界规则和发布验证。
+10. `docs/release-notes-1.0.2.md` 和 `docs/en/release-notes-1.0.2.md` 继续保留传输异常边界修正、兼容边界和发布验证。
+11. `docs/release-notes-1.0.1.md` 和 `docs/en/release-notes-1.0.1.md` 继续保留历史稳定性修正、兼容边界和发布验证。
+12. `docs/release-notes-1.0.0.md` 和 `docs/en/release-notes-1.0.0.md` 继续保留首发能力、兼容边界和发布验证。
+13. `README.md`、`README_EN.md`、`docs/compatibility.md`、`docs/en/compatibility.md`、`docs/troubleshooting.md`、`docs/en/troubleshooting.md` 都明确说明网络或传输读流异常会交回 Retrofit / OkHttp，不能用 `emptyResponsePolicy` 隐藏。
+14. `README.md`、`README_EN.md`、`docs/compatibility.md` 和 `docs/en/compatibility.md` 都明确说明 Retrofit 网络栈安全基线、runtime scope、`OkHttp 4.12.0`、`Okio 3.6.0`、`dependencyInsight` 和依赖解析验证。
+15. `CHANGELOG.md`、1.0.4 中英文发布说明和本清单都记录自定义 Adapter 外抛边界、原生 Gson 顺序、默认基础类型策略和开源发布文件整理。
 
 ## 5. 远程发布前检查
 

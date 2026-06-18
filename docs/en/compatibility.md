@@ -17,7 +17,7 @@ Start with the short version:
 | Area | Verified version | Boundary type | Legacy risk | Recommendation |
 | --- | --- | --- | --- | --- |
 | Artifact | Android AAR | Hard boundary | Plain JVM projects cannot consume it as a normal JVM jar. | Use it directly in Android projects; a JVM artifact would need separate publishing. |
-| Library | `1.0.3` | Current stable release | `1.0.0` is the first public compatibility baseline; internal pre-1.0 iterations are not covered by the public compatibility promise. | Use `1.0.3` for new integration. |
+| Library | `1.0.4` | Current stable release | `1.0.0` is the first public compatibility baseline; internal pre-1.0 iterations are not covered by the public compatibility promise. | Use `1.0.4` for new integration. |
 | Android `minSdk` | `minSdk 23` | Hard boundary | Apps below 23 may fail AAR merge or runtime validation. | Keep the app at `minSdk 23` or higher. |
 | Android `compileSdk` | `compileSdk 36` | Build boundary | Lower `compileSdk` values may hit AAR metadata, Lint, or toolchain differences. | Prefer `compileSdk 36`; run full validation if lower. |
 | JDK | `JDK 17` | Hard boundary | JDK 8 / 11 build chains are risky for Java 17 artifacts. | Use JDK 17 or later. |

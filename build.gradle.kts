@@ -21,7 +21,7 @@ plugins {
 subprojects {
     group = "io.github.logan0817"
     // 开源发布版本，README 和发布产物保持一致。
-    version = "1.0.3"
+    version = "1.0.4"
 
     plugins.withId("com.android.library") {
         val licenseResourcesDir = layout.buildDirectory.dir("generated/licenseResources/main")

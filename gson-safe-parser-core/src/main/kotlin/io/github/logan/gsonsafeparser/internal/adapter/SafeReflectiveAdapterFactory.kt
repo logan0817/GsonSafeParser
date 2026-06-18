@@ -25,6 +25,7 @@ import io.github.logan.gsonsafeparser.SafeParseSkip
 import io.github.logan.gsonsafeparser.SafeParserConfig
 import io.github.logan.gsonsafeparser.internal.GsonBuiltInTypes
 import io.github.logan.gsonsafeparser.internal.TokenRules
+import io.github.logan.gsonsafeparser.internal.asCallerAdapterReadException
 import io.github.logan.gsonsafeparser.internal.runRecovering
 import io.github.logan.gsonsafeparser.internal.objectcreation.SafeObjectConstructor
 import java.lang.reflect.Field
@@ -110,6 +111,7 @@ internal object SafeReflectiveAdapterFactory {
              */
             override fun read(reader: JsonReader): T? {
                 val token = reader.peek()
+                val objectPathBeforeRead = reader.path
                 if (token == JsonToken.NULL) {
                     reader.nextNull()
                     return null
@@ -202,6 +204,12 @@ internal object SafeReflectiveAdapterFactory {
                         }
                     }
                         .onFailure {
+                            if (binding.adapterHandlesOwnShape) {
+                                if (objectPathBeforeRead == "$") {
+                                    throw it
+                                }
+                                throw it.asCallerAdapterReadException()
+                            }
                             reader.skipUnreadValueIfPossible(pathBeforeRead)
                             notify(
                                 config = config,
@@ -340,8 +348,8 @@ internal object SafeReflectiveAdapterFactory {
                         val binding = FieldBinding(
                             field = field,
                             adapter = adapter,
-                            adapterHandlesOwnShape = adapter.handlesOwnInputShape() &&
-                                field.getAnnotation(SafeParseShapeCoercion::class.java) == null,
+                            adapterHandlesOwnShape = adapter.handlesOwnInputShape() ||
+                                TypeToken.get(fieldType).rawType.delegatesPrimitiveInputShape(config),
                             fieldType = fieldType,
                             primaryName = name,
                             serialized = serialized && index == 0,

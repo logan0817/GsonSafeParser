@@ -280,7 +280,7 @@ data class FlexibleResponse(
 
 1. `@SafeParseDelegateToGson` is used on classes and makes that type use the native Gson Adapter directly.
 2. `@SafeParseSkip` is used on fields and makes Safe Reflective skip that field. It is suitable for caches, runtime state, and platform objects.
-3. `@SafeParseShapeCoercion` is used on fields and allows that field to apply the configured object-array coercion policy.
+3. `@SafeParseShapeCoercion` is used on fields and allows that field to apply the configured object-array coercion policy; if the field type is handled by a caller custom adapter, the native Gson adapter still wins.
 4. `@SafeParseDisableShapeCoercion` is used on fields and keeps that field on the original fallback behavior even when the global coercion policy is enabled.
 
 ## 10. Default Handling Summary
@@ -307,6 +307,7 @@ Remember these defaults:
 | Root object mismatch | Usually returns `null`; unrecoverable Gson exceptions are still thrown. |
 | Missing non-null Kotlin constructor parameters | Keeps Gson-compatible behavior by default; reference fields stay `null`, and primitives keep JVM defaults. |
 | Primitive shape mismatch | Delegates to native Gson adapters by default; `PrimitiveParsingPolicy.Safe` enables safe primitive values. |
+| Caller custom adapter match | Keeps the native Gson adapter first; exceptions thrown by custom adapters are thrown outward, not disguised as field fallback, and field-level shape coercion does not override it. |
 | Object-array shape coercion | Disabled by default; enabled only through `withShapeCoercionPolicy(...)` or field annotations. |
 | Empty Retrofit body | `Unit` returns `Unit`; `Void` and normal models return `null`. |
 | Unsafe-to-isolate problems | JSON syntax errors, root failures, `Error`, `ThreadDeath`, `LinkageError`, and `CancellationException` are still thrown. |

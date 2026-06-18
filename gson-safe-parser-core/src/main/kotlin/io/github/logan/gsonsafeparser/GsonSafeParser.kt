@@ -71,10 +71,10 @@ object GsonSafeParser {
      * 这个入口不会重新创建、替换或补注册传入的 Gson。字段级 Safe Adapter 仍由这份 Gson 自己决定；
      * 如果需要字段级安全解析，调用方应在创建 Gson 前对同一个 GsonBuilder 调用 `enableSafeParser(config)`。
      * 字段级 Safe Adapter 事件会进入创建这份 Gson 时传给 `enableSafeParser(...)` 的配置回调；
-     * 这里传入的 config 主要控制 rawJson 捕获、根基础类型兜底和 `parseSafe` 事件快照。
+     * 这里传入的 config 主要控制 rawJson 捕获、显式 Safe 基础类型策略下的根基础类型兜底和 `parseSafe` 事件快照。
      *
      * @param gson 调用方持有的 Gson 实例。
-     * @param config 包装层 SafeParser 配置，用来控制 rawJson 捕获、根基础类型兜底和 `parseSafe` 事件快照。
+     * @param config 包装层 SafeParser 配置，用来控制 rawJson 捕获、显式 Safe 基础类型策略下的根基础类型兜底和 `parseSafe` 事件快照。
      * @return 包装后的可复用 Parser。它不会替换或重新创建传入的 Gson。
      */
     fun parserWithExternalGson(
@@ -622,7 +622,7 @@ fun GsonBuilder.enableSafeParser(
         .registerTypeAdapterFactory(
             SafeTypeAdapterFactory(
                 config = safeConfig,
-                nativeFactories = snapshot.factories + snapshot.hierarchyFactories
+                nativeFactories = snapshot.factories.asReversed() + snapshot.hierarchyFactories.asReversed()
             )
         )
 }

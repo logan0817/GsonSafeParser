@@ -384,10 +384,10 @@ class GsonSafeConverterFactoryTest {
     }
 
     /**
-     * 测试方法说明：验证 Retrofit 里的业务 Adapter IOException 不会因为文案像网络错误就被整次外抛。
+     * 测试方法说明：验证 Retrofit 里的业务 Adapter IOException 仍按调用方自定义 Adapter 语义外抛。
      */
     @Test
-    fun `retrofit business adapter io wording remains field recoverable`() {
+    fun `retrofit business adapter io wording is rethrown without event`() {
         val events = mutableListOf<SafeParserEvent>()
         val factory = GsonSafeConverterFactory.create(SafeParserConfig(onEvent = events::add))
         val retrofit = Retrofit.Builder()
@@ -400,13 +400,13 @@ class GsonSafeConverterFactoryTest {
             retrofit
         )
 
-        val result = converter?.convert(
-            jsonResponseBody("""{"data":"bad","next":"remote"}""")
-        )
+        assertThrows(IOException::class.java) {
+            converter?.convert(
+                jsonResponseBody("""{"data":"bad","next":"remote"}""")
+            )
+        }
 
-        assertEquals(AdapterIOExceptionApiResponse(next = "remote"), result)
-        val event = events.single() as SafeParserEvent.TypeMismatch
-        assertEquals("$.data", event.detail.path)
+        assertTrue(events.isEmpty())
     }
 
     /**

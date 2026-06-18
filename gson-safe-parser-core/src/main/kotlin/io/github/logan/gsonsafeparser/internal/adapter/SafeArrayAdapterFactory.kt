@@ -13,6 +13,7 @@ import io.github.logan.gsonsafeparser.SafeParserConfig
 import io.github.logan.gsonsafeparser.ShapeCoercionAction
 import io.github.logan.gsonsafeparser.internal.FallbackValues
 import io.github.logan.gsonsafeparser.internal.TokenRules
+import io.github.logan.gsonsafeparser.internal.asCallerAdapterReadException
 import io.github.logan.gsonsafeparser.internal.runRecovering
 import io.github.logan.gsonsafeparser.internal.throwIfFatal
 import java.io.IOException
@@ -41,6 +42,8 @@ internal object SafeArrayAdapterFactory {
         val componentTypeToken = TypeToken.get(componentType)
         val componentRawType = componentTypeToken.rawType
         val componentAdapter = gson.getAdapter(componentTypeToken) as TypeAdapter<Any?>
+        val componentHandlesOwnShape = componentAdapter.handlesOwnInputShape() ||
+            componentRawType.delegatesPrimitiveInputShape(config)
         val componentAcceptsObject = TokenRules.accepts(componentType, componentRawType, JsonToken.BEGIN_OBJECT)
 
         return object : TypeAdapter<T>() {
@@ -74,15 +77,23 @@ internal object SafeArrayAdapterFactory {
                     delegate.read(reader)
                 } catch (error: IllegalStateException) {
                     error.throwIfFatal()
+                    if (componentHandlesOwnShape) throw error.asCallerAdapterReadException()
                     recover(reader, type, rawType, error, token, pathBeforeRead)
                 } catch (error: NumberFormatException) {
                     error.throwIfFatal()
+                    if (componentHandlesOwnShape) throw error.asCallerAdapterReadException()
                     recover(reader, type, rawType, error, token, pathBeforeRead)
                 } catch (error: JsonParseException) {
                     error.throwIfFatal()
+                    if (componentHandlesOwnShape) throw error.asCallerAdapterReadException()
+                    recover(reader, type, rawType, error, token, pathBeforeRead)
+                } catch (error: RuntimeException) {
+                    error.throwIfFatal()
+                    if (componentHandlesOwnShape) throw error.asCallerAdapterReadException()
                     recover(reader, type, rawType, error, token, pathBeforeRead)
                 } catch (error: IOException) {
                     error.throwIfFatal()
+                    if (componentHandlesOwnShape) throw error.asCallerAdapterReadException()
                     throw JsonIOException(error)
                 }
             }
@@ -118,6 +129,9 @@ internal object SafeArrayAdapterFactory {
                 val pathBeforeRead = reader.path
                 val value = runRecovering { componentAdapter.read(reader) }
                     .getOrElse { error ->
+                        if (componentHandlesOwnShape) {
+                            throw error.asCallerAdapterReadException()
+                        }
                         reader.skipUnreadValueIfPossible(pathBeforeRead)
                         dispatchShapeCoercion(
                             config = config,

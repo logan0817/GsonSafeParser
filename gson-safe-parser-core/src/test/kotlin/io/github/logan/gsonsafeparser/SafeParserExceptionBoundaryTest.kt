@@ -66,6 +66,13 @@ class SafeParserExceptionBoundaryTest {
     @JsonAdapter(CancellationMapKeyAdapter::class)
     data class CancellationMapKey(val text: String = "local")
 
+    data class IllegalStateMapKeyContainer(
+        val values: Map<IllegalStateMapKey, String> = emptyMap()
+    )
+
+    @JsonAdapter(IllegalStateMapKeyAdapter::class)
+    data class IllegalStateMapKey(val text: String = "local")
+
     data class InvocationFatalFieldContainer(
         val value: InvocationFatalValue = InvocationFatalValue()
     )
@@ -107,9 +114,9 @@ class SafeParserExceptionBoundaryTest {
         val next: String = "local"
     )
 
-    data class ShapeObjectStreamResetFieldContainer(
+    data class ShapeNestedStreamResetFieldContainer(
         @field:SafeParseShapeCoercion(ShapeCoercionPolicy.ObjectFromFirstArrayItem)
-        val value: ObjectStreamResetValue = ObjectStreamResetValue("default"),
+        val value: NestedStreamResetValue = NestedStreamResetValue(),
         val next: String = "local"
     )
 
@@ -128,8 +135,7 @@ class SafeParserExceptionBoundaryTest {
     @JsonAdapter(StreamResetValueAdapter::class)
     data class StreamResetValue(val text: String = "local")
 
-    @JsonAdapter(ObjectStreamResetValueAdapter::class)
-    data class ObjectStreamResetValue(val text: String = "local")
+    data class NestedStreamResetValue(val child: StreamResetValue = StreamResetValue("default"))
 
     class StreamResetException : IOException("stream was reset: CANCEL")
 
@@ -139,6 +145,78 @@ class SafeParserExceptionBoundaryTest {
 
     @JsonAdapter(IllegalStateValueAdapter::class)
     data class IllegalStateValue(val text: String = "local")
+
+    data class IllegalArgumentArrayContainer(
+        val values: Array<IllegalArgumentArrayValue> = emptyArray()
+    )
+
+    @JsonAdapter(IllegalArgumentArrayValueAdapter::class)
+    data class IllegalArgumentArrayValue(val text: String = "local")
+
+    data class PlainObjectContainer(
+        val value: PlainObjectValue = PlainObjectValue(),
+        val next: String = "local"
+    )
+
+    data class PlainObjectValue(val text: String = "local")
+
+    data class NestedFieldAdapterParent(
+        val child: NestedFieldAdapterChild = NestedFieldAdapterChild(),
+        val next: String = "local"
+    )
+
+    data class NestedFieldAdapterListContainer(
+        val values: List<NestedFieldAdapterChild> = emptyList()
+    )
+
+    data class NestedFieldAdapterMapContainer(
+        val values: Map<String, NestedFieldAdapterChild> = emptyMap()
+    )
+
+    data class NestedFieldAdapterArrayContainer(
+        val values: Array<NestedFieldAdapterChild> = emptyArray()
+    )
+
+    data class DirectListFieldAdapterParent(
+        val child: DirectListFieldAdapterChild = DirectListFieldAdapterChild(),
+        val next: String = "local"
+    )
+
+    data class DirectMapFieldAdapterParent(
+        val child: DirectMapFieldAdapterChild = DirectMapFieldAdapterChild(),
+        val next: String = "local"
+    )
+
+    data class DirectArrayFieldAdapterParent(
+        val child: DirectArrayFieldAdapterChild = DirectArrayFieldAdapterChild(),
+        val next: String = "local"
+    )
+
+    data class DirectListFieldAdapterChild(
+        @JsonAdapter(ThrowingListFieldAdapter::class)
+        val values: List<NestedThrowingValue> = emptyList(),
+        val sibling: String = "local"
+    )
+
+    data class DirectMapFieldAdapterChild(
+        @JsonAdapter(ThrowingMapFieldAdapter::class)
+        val values: Map<String, NestedThrowingValue> = emptyMap(),
+        val sibling: String = "local"
+    )
+
+    data class DirectArrayFieldAdapterChild(
+        @JsonAdapter(ThrowingArrayFieldAdapter::class)
+        val values: Array<NestedThrowingValue> = emptyArray(),
+        val sibling: String = "local"
+    )
+
+    data class NestedFieldAdapterChild(
+        @JsonAdapter(NestedThrowingValueAdapter::class)
+        val value: NestedThrowingValue = NestedThrowingValue("local"),
+        val sibling: String = "local"
+    )
+
+    data class NestedThrowingValue(val text: String = "local")
 
     data class ScalarAdapterListContainer(
         val values: List<ScalarAdapterValue> = emptyList()
@@ -206,6 +284,20 @@ class SafeParserExceptionBoundaryTest {
         }
     }
 
+    class IllegalStateMapKeyAdapter : TypeAdapter<IllegalStateMapKey>() {
+        override fun write(out: JsonWriter, value: IllegalStateMapKey?) {
+            out.value(value?.text)
+        }
+
+        override fun read(reader: JsonReader): IllegalStateMapKey {
+            val text = reader.nextString()
+            if (text == "bad") {
+                throw IllegalStateException("map key adapter failure")
+            }
+            return IllegalStateMapKey(text)
+        }
+    }
+
     class InvocationFatalValueAdapter : TypeAdapter<InvocationFatalValue>() {
         override fun write(out: JsonWriter, value: InvocationFatalValue?) {
             out.value(value?.text)
@@ -256,26 +348,6 @@ class SafeParserExceptionBoundaryTest {
         }
     }
 
-    class ObjectStreamResetValueAdapter : TypeAdapter<ObjectStreamResetValue>() {
-        override fun write(out: JsonWriter, value: ObjectStreamResetValue?) {
-            out.beginObject()
-            out.name("text")
-            out.value(value?.text)
-            out.endObject()
-        }
-
-        @SuppressLint("CheckResult")
-        override fun read(reader: JsonReader): ObjectStreamResetValue {
-            reader.beginObject()
-            while (reader.hasNext()) {
-                reader.nextName()
-                reader.skipValue()
-            }
-            reader.endObject()
-            throw TransportIoContext.mark(StreamResetException())
-        }
-    }
-
     class IllegalStateValueAdapter : TypeAdapter<IllegalStateValue>() {
         override fun write(out: JsonWriter, value: IllegalStateValue?) {
             out.value(value?.text)
@@ -290,6 +362,17 @@ class SafeParserExceptionBoundaryTest {
         }
     }
 
+    class IllegalArgumentArrayValueAdapter : TypeAdapter<IllegalArgumentArrayValue>() {
+        override fun write(out: JsonWriter, value: IllegalArgumentArrayValue?) {
+            out.value(value?.text)
+        }
+
+        override fun read(reader: JsonReader): IllegalArgumentArrayValue {
+            reader.nextString()
+            throw IllegalArgumentException("array item adapter failure")
+        }
+    }
+
     class ScalarAdapterValueAdapter : TypeAdapter<ScalarAdapterValue>() {
         override fun write(out: JsonWriter, value: ScalarAdapterValue?) {
             out.value(value?.text)
@@ -297,6 +380,55 @@ class SafeParserExceptionBoundaryTest {
 
         override fun read(reader: JsonReader): ScalarAdapterValue {
             return ScalarAdapterValue(reader.nextString())
+        }
+    }
+
+    class NestedThrowingValueAdapter : TypeAdapter<NestedThrowingValue>() {
+        override fun write(out: JsonWriter, value: NestedThrowingValue?) {
+            out.value(value?.text)
+        }
+
+        override fun read(reader: JsonReader): NestedThrowingValue {
+            throw JsonParseException("nested field adapter failed")
+        }
+    }
+
+    class ThrowingListFieldAdapter : TypeAdapter<List<NestedThrowingValue>>() {
+        override fun write(out: JsonWriter, value: List<NestedThrowingValue>?) {
+            out.beginArray()
+            value.orEmpty().forEach { out.value(it.text) }
+            out.endArray()
+        }
+
+        override fun read(reader: JsonReader): List<NestedThrowingValue> {
+            throw JsonParseException("list field adapter failed")
+        }
+    }
+
+    class ThrowingMapFieldAdapter : TypeAdapter<Map<String, NestedThrowingValue>>() {
+        override fun write(out: JsonWriter, value: Map<String, NestedThrowingValue>?) {
+            out.beginObject()
+            value.orEmpty().forEach { (key, item) ->
+                out.name(key)
+                out.value(item.text)
+            }
+            out.endObject()
+        }
+
+        override fun read(reader: JsonReader): Map<String, NestedThrowingValue> {
+            throw JsonParseException("map field adapter failed")
+        }
+    }
+
+    class ThrowingArrayFieldAdapter : TypeAdapter<Array<NestedThrowingValue>>() {
+        override fun write(out: JsonWriter, value: Array<NestedThrowingValue>?) {
+            out.beginArray()
+            value.orEmpty().forEach { out.value(it.text) }
+            out.endArray()
+        }
+
+        override fun read(reader: JsonReader): Array<NestedThrowingValue> {
+            throw JsonParseException("array field adapter failed")
         }
     }
 
@@ -399,90 +531,273 @@ class SafeParserExceptionBoundaryTest {
     }
 
     /**
-     * IOException from a field adapter is recoverable at field scope and must not block following fields.
+     * IOException from a caller-owned field adapter follows native Gson semantics instead of becoming a fallback value.
      */
     @Test
-    fun `field adapter io exception preserves default value and continues object parsing`() {
+    fun `field adapter io exception is rethrown without mismatch event`() {
         val events = mutableListOf<TypeMismatchEvent>()
         val gson = GsonSafeParser.create(SafeParserConfig(onTypeMismatch = events::add))
 
-        val result = gson.fromJson(
-            """{"value":"bad","next":"remote"}""",
-            IOExceptionFieldContainer::class.java
-        )
+        assertThrows(JsonSyntaxException::class.java) {
+            gson.fromJson(
+                """{"value":"bad","next":"remote"}""",
+                IOExceptionFieldContainer::class.java
+            )
+        }
 
-        assertEquals(IOExceptionFieldContainer(next = "remote"), result)
-        assertEquals("value", events.single().fieldName)
+        assertTrue(events.isEmpty())
     }
 
     /**
-     * A custom business adapter may use network-like wording in a local IOException.
+     * A custom business adapter may use network-like wording in a local IOException; it still follows Gson semantics.
      */
     @Test
-    fun `field adapter io exception with connection reset wording remains recoverable`() {
+    fun `field adapter io exception with connection reset wording is rethrown without mismatch event`() {
         val events = mutableListOf<TypeMismatchEvent>()
         val gson = GsonSafeParser.create(SafeParserConfig(onTypeMismatch = events::add))
 
-        val result = gson.fromJson(
-            """{"value":"bad","next":"remote"}""",
-            ConnectionResetMessageFieldContainer::class.java
-        )
+        assertThrows(JsonSyntaxException::class.java) {
+            gson.fromJson(
+                """{"value":"bad","next":"remote"}""",
+                ConnectionResetMessageFieldContainer::class.java
+            )
+        }
 
-        assertEquals(ConnectionResetMessageFieldContainer(next = "remote"), result)
-        assertEquals("value", events.single().fieldName)
+        assertTrue(events.isEmpty())
     }
 
     /**
-     * IOException from one list item is isolated so following items remain readable.
+     * IOException from a caller-owned list item adapter follows native Gson semantics.
      */
     @Test
-    fun `list item io exception skips only the failed item`() {
+    fun `list item io exception is rethrown without mismatch event`() {
         val events = mutableListOf<TypeMismatchEvent>()
         val gson = GsonSafeParser.create(SafeParserConfig(onTypeMismatch = events::add))
 
-        val result = gson.fromJson(
-            """{"values":["ok","bad","later"]}""",
-            IOExceptionListContainer::class.java
-        )
+        assertThrows(JsonParseException::class.java) {
+            gson.fromJson(
+                """{"values":["ok","bad","later"]}""",
+                IOExceptionListContainer::class.java
+            )
+        }
 
-        assertEquals(listOf(IOExceptionValue("ok"), IOExceptionValue("later")), result.values)
-        assertEquals(ParseExceptionKind.LIST_ITEM, events.single().kind)
+        assertTrue(events.isEmpty())
     }
 
     /**
-     * IOException from one map value is isolated so following entries remain readable.
+     * IOException from a caller-owned map value adapter follows native Gson semantics.
      */
     @Test
-    fun `map value io exception skips only the failed entry`() {
+    fun `map value io exception is rethrown without mismatch event`() {
         val events = mutableListOf<TypeMismatchEvent>()
         val gson = GsonSafeParser.create(SafeParserConfig(onTypeMismatch = events::add))
 
-        val result = gson.fromJson(
-            """{"values":{"ok":"ok","bad":"bad","later":"later"}}""",
-            IOExceptionMapContainer::class.java
-        )
+        assertThrows(JsonParseException::class.java) {
+            gson.fromJson(
+                """{"values":{"ok":"ok","bad":"bad","later":"later"}}""",
+                IOExceptionMapContainer::class.java
+            )
+        }
 
-        assertEquals(IOExceptionValue("ok"), result.values["ok"])
-        assertEquals(IOExceptionValue("later"), result.values["later"])
-        assertFalse(result.values.containsKey("bad"))
-        assertEquals(ParseExceptionKind.MAP_ITEM, events.single().kind)
+        assertTrue(events.isEmpty())
     }
 
     /**
-     * A business adapter may use an exception class named StreamResetException; class name alone is not transport proof.
+     * A caller-owned map key adapter in object form follows native Gson semantics.
      */
     @Test
-    fun `business adapter stream reset simple name remains recoverable`() {
+    fun `map object key json adapter failure is rethrown without mismatch event`() {
         val events = mutableListOf<TypeMismatchEvent>()
         val gson = GsonSafeParser.create(SafeParserConfig(onTypeMismatch = events::add))
 
-        val result = gson.fromJson(
-            """{"value":"remote","next":"remote"}""",
-            StreamResetFieldContainer::class.java
-        )
+        assertThrows(JsonParseException::class.java) {
+            gson.fromJson(
+                """{"values":{"bad":"value"}}""",
+                IllegalStateMapKeyContainer::class.java
+            )
+        }
 
-        assertEquals(StreamResetFieldContainer(next = "remote"), result)
-        assertEquals("value", events.single().fieldName)
+        assertTrue(events.isEmpty())
+    }
+
+    /**
+     * A caller-owned map key adapter in array-entry form must not be downgraded to one skipped entry.
+     */
+    @Test
+    fun `map array entry key json adapter failure is rethrown without mismatch event`() {
+        val events = mutableListOf<TypeMismatchEvent>()
+        val gson = GsonSafeParser.create(SafeParserConfig(onTypeMismatch = events::add))
+
+        assertThrows(JsonParseException::class.java) {
+            gson.fromJson(
+                """{"values":[["bad","value"]]}""",
+                IllegalStateMapKeyContainer::class.java
+            )
+        }
+
+        assertTrue(events.isEmpty())
+    }
+
+    /**
+     * A caller-owned field adapter inside a nested object must escape through the parent reflective adapter.
+     */
+    @Test
+    fun `nested field adapter failure in child object is rethrown without mismatch event`() {
+        val events = mutableListOf<TypeMismatchEvent>()
+        val gson = GsonSafeParser.create(SafeParserConfig(onTypeMismatch = events::add))
+
+        assertThrows(JsonParseException::class.java) {
+            gson.fromJson(
+                """{"child":{"value":"bad","next":"remote"},"next":"remote"}""",
+                NestedFieldAdapterParent::class.java
+            )
+        }
+
+        assertTrue(events.isEmpty())
+    }
+
+    /**
+     * A caller-owned field adapter inside a list item must not be downgraded to one skipped item.
+     */
+    @Test
+    fun `nested field adapter failure in list item is rethrown without mismatch event`() {
+        val events = mutableListOf<TypeMismatchEvent>()
+        val gson = GsonSafeParser.create(SafeParserConfig(onTypeMismatch = events::add))
+
+        assertThrows(JsonParseException::class.java) {
+            gson.fromJson(
+                """{"values":[{"value":"bad","next":"remote"}]}""",
+                NestedFieldAdapterListContainer::class.java
+            )
+        }
+
+        assertTrue(events.isEmpty())
+    }
+
+    /**
+     * A caller-owned field adapter inside a map value must not be downgraded to one skipped entry.
+     */
+    @Test
+    fun `nested field adapter failure in map value is rethrown without mismatch event`() {
+        val events = mutableListOf<TypeMismatchEvent>()
+        val gson = GsonSafeParser.create(SafeParserConfig(onTypeMismatch = events::add))
+
+        assertThrows(JsonParseException::class.java) {
+            gson.fromJson(
+                """{"values":{"bad":{"value":"bad","next":"remote"}}}""",
+                NestedFieldAdapterMapContainer::class.java
+            )
+        }
+
+        assertTrue(events.isEmpty())
+    }
+
+    /**
+     * A caller-owned field adapter inside an array item must not be downgraded to an array fallback.
+     */
+    @Test
+    fun `nested field adapter failure in array item is rethrown without mismatch event`() {
+        val events = mutableListOf<TypeMismatchEvent>()
+        val gson = GsonSafeParser.create(SafeParserConfig(onTypeMismatch = events::add))
+
+        assertThrows(JsonParseException::class.java) {
+            gson.fromJson(
+                """{"values":[{"value":"bad","next":"remote"}]}""",
+                NestedFieldAdapterArrayContainer::class.java
+            )
+        }
+
+        assertTrue(events.isEmpty())
+    }
+
+    /**
+     * A caller-owned array item adapter may throw ordinary RuntimeException; it must not become field fallback.
+     */
+    @Test
+    fun `array item ordinary runtime exception is rethrown without mismatch event`() {
+        val events = mutableListOf<TypeMismatchEvent>()
+        val gson = GsonSafeParser.create(SafeParserConfig(onTypeMismatch = events::add))
+
+        assertThrows(JsonParseException::class.java) {
+            gson.fromJson(
+                """{"values":["bad"]}""",
+                IllegalArgumentArrayContainer::class.java
+            )
+        }
+
+        assertTrue(events.isEmpty())
+    }
+
+    /**
+     * A caller-owned adapter directly attached to a list field must escape through nested parent adapters.
+     */
+    @Test
+    fun `direct list field adapter failure in nested object is rethrown without mismatch event`() {
+        val events = mutableListOf<TypeMismatchEvent>()
+        val gson = GsonSafeParser.create(SafeParserConfig(onTypeMismatch = events::add))
+
+        assertThrows(JsonParseException::class.java) {
+            gson.fromJson(
+                """{"child":{"values":[{"text":"bad"}],"sibling":"remote"},"next":"remote"}""",
+                DirectListFieldAdapterParent::class.java
+            )
+        }
+
+        assertTrue(events.isEmpty())
+    }
+
+    /**
+     * A caller-owned adapter directly attached to a map field must not be downgraded to one bad child field.
+     */
+    @Test
+    fun `direct map field adapter failure in nested object is rethrown without mismatch event`() {
+        val events = mutableListOf<TypeMismatchEvent>()
+        val gson = GsonSafeParser.create(SafeParserConfig(onTypeMismatch = events::add))
+
+        assertThrows(JsonParseException::class.java) {
+            gson.fromJson(
+                """{"child":{"values":{"bad":{"text":"bad"}},"sibling":"remote"},"next":"remote"}""",
+                DirectMapFieldAdapterParent::class.java
+            )
+        }
+
+        assertTrue(events.isEmpty())
+    }
+
+    /**
+     * A caller-owned adapter directly attached to an array field must not be downgraded to array fallback.
+     */
+    @Test
+    fun `direct array field adapter failure in nested object is rethrown without mismatch event`() {
+        val events = mutableListOf<TypeMismatchEvent>()
+        val gson = GsonSafeParser.create(SafeParserConfig(onTypeMismatch = events::add))
+
+        assertThrows(JsonParseException::class.java) {
+            gson.fromJson(
+                """{"child":{"values":[{"text":"bad"}],"sibling":"remote"},"next":"remote"}""",
+                DirectArrayFieldAdapterParent::class.java
+            )
+        }
+
+        assertTrue(events.isEmpty())
+    }
+
+    /**
+     * A business adapter may use an exception class named StreamResetException; adapter failures still follow Gson semantics.
+     */
+    @Test
+    fun `business adapter stream reset simple name is rethrown without mismatch event`() {
+        val events = mutableListOf<TypeMismatchEvent>()
+        val gson = GsonSafeParser.create(SafeParserConfig(onTypeMismatch = events::add))
+
+        assertThrows(JsonSyntaxException::class.java) {
+            gson.fromJson(
+                """{"value":"remote","next":"remote"}""",
+                StreamResetFieldContainer::class.java
+            )
+        }
+
+        assertTrue(events.isEmpty())
     }
 
     /**
@@ -671,17 +986,18 @@ class SafeParserExceptionBoundaryTest {
     }
 
     /**
-     * Ordinary runtime failures remain recoverable when they are safely scoped to one field.
+     * Ordinary runtime failures from caller-owned adapters follow native Gson semantics.
      */
     @Test
-    fun `field adapter ordinary runtime exception preserves default value`() {
+    fun `field adapter ordinary runtime exception is rethrown without mismatch event`() {
         val events = mutableListOf<TypeMismatchEvent>()
         val gson = GsonSafeParser.create(SafeParserConfig(onTypeMismatch = events::add))
 
-        val result = gson.fromJson("""{"value":"bad"}""", IllegalStateFieldContainer::class.java)
+        assertThrows(JsonSyntaxException::class.java) {
+            gson.fromJson("""{"value":"bad"}""", IllegalStateFieldContainer::class.java)
+        }
 
-        assertEquals(IllegalStateFieldContainer(), result)
-        assertEquals("business value failure", events.single().reason)
+        assertTrue(events.isEmpty())
     }
 
     /**
@@ -719,7 +1035,12 @@ class SafeParserExceptionBoundaryTest {
     @Test
     fun `list number format exception skips only invalid number item`() {
         val events = mutableListOf<TypeMismatchEvent>()
-        val gson = GsonSafeParser.create(SafeParserConfig(onTypeMismatch = events::add))
+        val gson = GsonSafeParser.create(
+            SafeParserConfig(
+                primitiveParsingPolicy = PrimitiveParsingPolicy.Safe,
+                onTypeMismatch = events::add
+            )
+        )
 
         val result = gson.fromJson("""{"values":["bad",1,2]}""", IntListContainer::class.java)
 
@@ -733,7 +1054,12 @@ class SafeParserExceptionBoundaryTest {
     @Test
     fun `map number format exception skips only invalid number value`() {
         val events = mutableListOf<TypeMismatchEvent>()
-        val gson = GsonSafeParser.create(SafeParserConfig(onTypeMismatch = events::add))
+        val gson = GsonSafeParser.create(
+            SafeParserConfig(
+                primitiveParsingPolicy = PrimitiveParsingPolicy.Safe,
+                onTypeMismatch = events::add
+            )
+        )
 
         val result = gson.fromJson("""{"values":{"bad":"bad","ok":1}}""", IntMapContainer::class.java)
 
@@ -840,8 +1166,8 @@ class SafeParserExceptionBoundaryTest {
     @Test
     fun `parse safe observer cancellation is rethrown`() {
         assertThrows(CancellationException::class.java) {
-            GsonSafeParser.parseSafe<IllegalStateFieldContainer>(
-                json = """{"value":"bad"}""",
+            GsonSafeParser.parseSafe<PlainObjectContainer>(
+                json = """{"value":[],"next":"remote"}""",
                 config = SafeParserConfig(
                     onEvent = {
                         throw CancellationException("event bridge cancelled")
@@ -928,10 +1254,10 @@ class SafeParserExceptionBoundaryTest {
 
         TransportIoContext.withTransportIoMarkers {
             assertThrows(IOException::class.java) {
-                GsonSafeParser.fromJson<ShapeObjectStreamResetFieldContainer>(
+                GsonSafeParser.fromJson<ShapeNestedStreamResetFieldContainer>(
                     gson = gson,
-                    json = """{"value":[{"text":"remote"}],"next":"remote"}""",
-                    type = ShapeObjectStreamResetFieldContainer::class.java,
+                    json = """{"value":[{"child":"remote"}],"next":"remote"}""",
+                    type = ShapeNestedStreamResetFieldContainer::class.java,
                     config = config
                 )
             }

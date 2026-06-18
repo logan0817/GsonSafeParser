@@ -154,6 +154,7 @@ class SafeParserCallbackSemanticsTest {
             type = PrimitiveResponse::class.java,
             config = SafeParserConfig(
                 captureRawJsonInCallbacks = true,
+                primitiveParsingPolicy = PrimitiveParsingPolicy.Safe,
                 onTypeMismatch = events::add
             )
         )
@@ -177,6 +178,7 @@ class SafeParserCallbackSemanticsTest {
             config = SafeParserConfig(
                 captureRawJsonInCallbacks = true,
                 maxRawJsonCaptureBytes = 10,
+                primitiveParsingPolicy = PrimitiveParsingPolicy.Safe,
                 onTypeMismatch = events::add
             )
         )
@@ -199,6 +201,7 @@ class SafeParserCallbackSemanticsTest {
             config = SafeParserConfig(
                 captureRawJsonInCallbacks = true,
                 maxRawJsonCaptureBytes = rawJson.indexOf("中") + 2,
+                primitiveParsingPolicy = PrimitiveParsingPolicy.Safe,
                 onTypeMismatch = events::add
             )
         )

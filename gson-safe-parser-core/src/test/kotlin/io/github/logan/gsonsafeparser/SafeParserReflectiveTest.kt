@@ -60,7 +60,7 @@ class SafeParserReflectiveTest {
         val value: FieldValue = FieldValue(1)
     )
 
-    /** 测试模型：字段 Adapter 读取失败时，当前字段保留默认值，后续字段继续解析。 */
+    /** 测试模型：字段 Adapter 读取失败时遵循 Gson 原生语义，不进入字段兜底。 */
     data class ThrowingFieldAdapterResponse(
         @JsonAdapter(ThrowingValueAdapter::class)
         val value: ThrowingValue = ThrowingValue("local"),
@@ -176,7 +176,7 @@ class SafeParserReflectiveTest {
         }
     }
 
-    /** 故意读取失败的字段 Adapter，用来测试局部失败恢复。 */
+    /** 故意读取失败的字段 Adapter，用来测试调用方自定义 Adapter 的原生失败边界。 */
     class ThrowingValueAdapter : TypeAdapter<ThrowingValue>() {
         /** 写出 text，写路径不失败。 */
         override fun write(out: JsonWriter, value: ThrowingValue?) {
@@ -341,7 +341,9 @@ class SafeParserReflectiveTest {
      */
     @Test
     fun `field json deserializer keeps safe parsing for sibling fields`() {
-        val gson = GsonSafeParser.create()
+        val gson = GsonSafeParser.create(
+            SafeParserConfig(primitiveParsingPolicy = PrimitiveParsingPolicy.Safe)
+        )
 
         val result = gson.fromJson("""{"value":"remote","count":{}}""", FieldDeserializerResponse::class.java)
 
@@ -454,24 +456,20 @@ class SafeParserReflectiveTest {
     }
 
     /**
-     * 测试方法说明：验证“field adapter failure skips unread value and continues reading next field”这个具体行为。
-     * 阅读时可以按准备数据、执行解析、断言结果的顺序跟下来。
+     * 测试方法说明：验证字段 Adapter 抛错时保留 Gson 原生失败语义，不被字段级兜底吞掉。
      */
     @Test
-    fun `field adapter failure skips unread value and continues reading next field`() {
+    fun `field adapter failure is rethrown without mismatch event`() {
         // events 用来收集回调事件，后面的断言会检查事件是否按预期产生。
         val events = mutableListOf<TypeMismatchEvent>()
         // gson 是本用例使用的解析器，默认情况下已经注册 Safe Adapter。
         val gson = GsonSafeParser.create(SafeParserConfig(onTypeMismatch = events::add))
 
-        // result 是本次解析或转换得到的实际结果，后面的断言都围绕它展开。
-        val result = gson.fromJson("""{"value":{},"next":"remote"}""", ThrowingFieldAdapterResponse::class.java)
+        assertThrows(JsonParseException::class.java) {
+            gson.fromJson("""{"value":{},"next":"remote"}""", ThrowingFieldAdapterResponse::class.java)
+        }
 
-        assertEquals(ThrowingValue("local"), result.value)
-        assertEquals("remote", result.next)
-        assertEquals("value", events.single().fieldName)
-        assertEquals("$.value", events.single().path)
-        assertEquals(JsonToken.BEGIN_OBJECT, events.single().actualToken)
+        assertTrue(events.isEmpty())
     }
 
     /**
@@ -555,7 +553,12 @@ class SafeParserReflectiveTest {
         // events 用来收集回调事件，后面的断言会检查事件是否按预期产生。
         val events = mutableListOf<TypeMismatchEvent>()
         // gson 是本用例使用的解析器，默认情况下已经注册 Safe Adapter。
-        val gson = GsonSafeParser.create(SafeParserConfig(onTypeMismatch = events::add))
+        val gson = GsonSafeParser.create(
+            SafeParserConfig(
+                primitiveParsingPolicy = PrimitiveParsingPolicy.Safe,
+                onTypeMismatch = events::add
+            )
+        )
 
         val result = gson.fromJson("""{"box":{"data":"abc"}}""", GenericNumberResponse::class.java)
 

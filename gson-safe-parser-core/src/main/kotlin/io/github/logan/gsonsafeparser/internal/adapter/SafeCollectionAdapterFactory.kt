@@ -13,6 +13,7 @@ import io.github.logan.gsonsafeparser.ParseExceptionKind
 import io.github.logan.gsonsafeparser.SafeParserConfig
 import io.github.logan.gsonsafeparser.ShapeCoercionAction
 import io.github.logan.gsonsafeparser.internal.TokenRules
+import io.github.logan.gsonsafeparser.internal.asCallerAdapterReadException
 import io.github.logan.gsonsafeparser.internal.objectcreation.SafeObjectConstructor
 import io.github.logan.gsonsafeparser.internal.runRecovering
 import java.lang.reflect.Type
@@ -45,7 +46,9 @@ internal object SafeCollectionAdapterFactory {
         val elementAdapter = gson.getAdapter(elementTypeToken) as TypeAdapter<Any?>
         val elementRawType = elementTypeToken.rawType
         val elementHandlesOwnShape =
-            elementRawType.getAnnotation(JsonAdapter::class.java) != null || elementAdapter.handlesOwnInputShape()
+            elementRawType.getAnnotation(JsonAdapter::class.java) != null ||
+                elementRawType.delegatesPrimitiveInputShape(config) ||
+                elementAdapter.handlesOwnInputShape()
         val elementAcceptsObject = TokenRules.accepts(elementType, elementRawType, JsonToken.BEGIN_OBJECT)
         val rawType = type.rawType
 
@@ -92,6 +95,7 @@ internal object SafeCollectionAdapterFactory {
                         token = token,
                         type = type,
                         elementAdapter = elementAdapter,
+                        elementHandlesOwnShape = elementHandlesOwnShape,
                         rawType = rawType
                     )
                 }
@@ -124,6 +128,9 @@ internal object SafeCollectionAdapterFactory {
                     runRecovering { elementAdapter.read(reader) }
                         .onSuccess { values += it }
                         .onFailure {
+                            if (elementHandlesOwnShape) {
+                                throw it.asCallerAdapterReadException()
+                            }
                             // delegate 半路失败时先尽量把 reader 推过当前 item，再发事件，避免后续 item 被错位读取。
                             reader.skipUnreadValueIfPossible(pathBeforeRead)
                             notify(
@@ -154,11 +161,15 @@ internal object SafeCollectionAdapterFactory {
                 token: JsonToken,
                 type: TypeToken<T>,
                 elementAdapter: TypeAdapter<Any?>,
+                elementHandlesOwnShape: Boolean,
                 rawType: Class<*>
             ): T {
                 val pathBeforeRead = reader.path
                 val value = runRecovering { elementAdapter.read(reader) }
                     .getOrElse { error ->
+                        if (elementHandlesOwnShape) {
+                            throw error.asCallerAdapterReadException()
+                        }
                         reader.skipUnreadValueIfPossible(pathBeforeRead)
                         dispatchShapeCoercion(
                             config = config,

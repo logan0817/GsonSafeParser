@@ -23,6 +23,7 @@ The default policy remains `ShapeCoercionPolicy.Disabled`. Coercion runs only wh
 11. Redacts event `reason` values before they enter `onEvent`, compatibility callbacks, or `parseSafe` snapshots, covering token, password, Authorization, Cookie, and similar sensitive fragments.
 12. Tightens the default `mapItemKeyPolicy` from `Hash` to `Omit`; integrations that still need stable hash aggregation should explicitly configure `MapItemKeyPolicy.Hash`, and avoid bare hashes for low-entropy sensitive keys.
 13. Adds the `rawJsonCaptureEnabled` diagnostic warning whenever raw JSON capture is enabled, so it stays limited to local debugging or controlled diagnostics.
+14. Caller-registered `TypeAdapter`, `TypeAdapterFactory`, `registerTypeHierarchyAdapter(...)`, and `@JsonAdapter` matches keep the native Gson path first; exceptions thrown by custom adapters are thrown outward instead of being disguised as field fallback.
 
 ## Usage
 
@@ -81,17 +82,18 @@ Before publishing, this release should be checked with:
 4. root objects, root collections, root object arrays, maps, primitive types, and string re-parsing remaining uncoerced.
 5. `ShapeCoercion` events, contract reports, and observer failure reports.
 6. `ThreadDeath`, `LinkageError`, `CancellationException`, and real transport I/O not being swallowed.
-7. Retrofit builder-first entry using field-level Safe Adapters, while the plain-Gson entry does not secretly register field-level coercion.
-8. core, retrofit, and demo debug unit tests.
-9. demo release unit tests.
-10. core, retrofit, and demo release lint.
-11. demo debug and release APK builds.
-12. `publishToMavenLocal`.
-13. Maven local AAR, POM, sources, Dokka javadoc, and consumer ProGuard rule verification.
-14. retrofit POM dependency checks for `okhttp 4.12.0`, `okio 3.6.0`, and runtime scope.
-15. OSV dependency vulnerability scan.
-16. Maven Central deployment response redaction and Demo clipboard report redaction.
-17. SafeParser event reason redaction, Map item key omission by default, and the explicit Hash migration path.
-18. `maxRawJsonCaptureBytesTooLarge` and `rawJsonCaptureEnabled` diagnostics.
-19. `releaseToMavenCentral --dry-run`.
-20. `git diff --check`.
+7. caller custom adapter matches, thrown failures, and unmatched-factory safe fallback paths.
+8. Retrofit builder-first entry using field-level Safe Adapters, while the plain-Gson entry does not secretly register field-level coercion.
+9. core, retrofit, and demo debug unit tests.
+10. demo release unit tests.
+11. core, retrofit, and demo release lint.
+12. demo debug and release APK builds.
+13. `publishToMavenLocal`.
+14. Maven local AAR, POM, sources, Dokka javadoc, and consumer ProGuard rule verification.
+15. retrofit POM dependency checks for `okhttp 4.12.0`, `okio 3.6.0`, and runtime scope.
+16. OSV dependency vulnerability scan.
+17. Maven Central deployment response redaction and Demo clipboard report redaction.
+18. SafeParser event reason redaction, Map item key omission by default, and the explicit Hash migration path.
+19. `maxRawJsonCaptureBytesTooLarge` and `rawJsonCaptureEnabled` diagnostics.
+20. `releaseToMavenCentral --dry-run`.
+21. `git diff --check`.

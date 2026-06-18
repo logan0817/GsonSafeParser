@@ -280,7 +280,7 @@ data class FlexibleResponse(
 
 1. `@SafeParseDelegateToGson` 用于类，让该类型直接走 Gson 原生 Adapter。
 2. `@SafeParseSkip` 用于字段，让 Safe Reflective 跳过该字段，适合缓存、运行时状态和平台对象。
-3. `@SafeParseShapeCoercion` 用于字段，让该字段按指定策略做对象和数组形态转换。
+3. `@SafeParseShapeCoercion` 用于字段，让该字段按指定策略做对象和数组形态转换；如果字段类型已由调用方自定义 Adapter 接管，仍优先保留 Gson 原生 Adapter。
 4. `@SafeParseDisableShapeCoercion` 用于字段，让该字段忽略全局形态转换配置，保持原兜底行为。
 
 ## 10. 默认处理摘要
@@ -306,6 +306,7 @@ data class FlexibleResponse(
 | 对象、集合、Map 字段整体形状不一致 | 兜底当前字段，外层对象继续解析；`NullOnly` 下优先返回 `null` 或保留构造默认值。 |
 | Kotlin 非空必填构造参数缺失 | 默认保持 Gson 兼容；引用字段为 `null`，primitive 保持 JVM 默认值。 |
 | 基础类型形状不一致 | 默认交回 Gson 原生 Adapter；只有 `PrimitiveParsingPolicy.Safe` 才使用安全基础值。 |
+| 调用方自定义 Adapter 命中 | 优先保留原生 Gson Adapter；自定义 Adapter 自己抛出的异常外抛，不伪装成字段兜底，也不会被字段级形态转换覆盖。 |
 | 对象和数组形态转换 | 默认关闭；只有调用 `withShapeCoercionPolicy(...)` 或字段注解才会启用。 |
 | Retrofit 空 body | `Unit` 返回 `Unit`，`Void` 和普通业务模型返回 `null`。 |
 | 不可安全隔离问题 | JSON 语法错误、根级失败、`Error`、`ThreadDeath`、`LinkageError`、`CancellationException` 继续外抛。 |

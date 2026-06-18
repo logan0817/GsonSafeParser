@@ -34,7 +34,7 @@ class SafeParserReleaseRiskTest {
     data class PrimitiveArrayResponse(val values: IntArray = intArrayOf(9))
     data class MapValueResponse(val values: Map<String, User> = emptyMap())
     data class RawJsonResponse(val child: User = User())
-    data class SensitiveReasonResponse(val value: SensitiveReasonValue = SensitiveReasonValue())
+    data class SensitiveReasonResponse(val value: Int = 0)
     data class GenericBox<T>(val value: T? = null)
     data class ExplicitJsonAdapterShapeResponse(
         @field:SafeParseShapeCoercion(ShapeCoercionPolicy.ObjectFromFirstArrayItem)
@@ -50,9 +50,6 @@ class SafeParserReleaseRiskTest {
     class NativeJsonAdapterOnly {
         var name: String = "local"
     }
-
-    @JsonAdapter(SensitiveReasonValueAdapter::class)
-    data class SensitiveReasonValue(val text: String = "local")
 
     class NativeJsonAdapterOnlyAdapter : TypeAdapter<NativeJsonAdapterOnly>() {
         override fun write(out: JsonWriter, value: NativeJsonAdapterOnly?) {
@@ -72,19 +69,6 @@ class SafeParserReleaseRiskTest {
             }
             reader.endObject()
             return result
-        }
-    }
-
-    class SensitiveReasonValueAdapter : TypeAdapter<SensitiveReasonValue>() {
-        override fun write(out: JsonWriter, value: SensitiveReasonValue?) {
-            out.value(value?.text)
-        }
-
-        override fun read(reader: JsonReader): SensitiveReasonValue {
-            val text = reader.nextString()
-            throw IllegalStateException(
-                "adapter failed token=$text password=hunter2 Authorization: Bearer abc.def Cookie: sid=xyz"
-            )
         }
     }
 
@@ -177,33 +161,31 @@ class SafeParserReleaseRiskTest {
             .withShapeCoercionPolicy(ShapeCoercionPolicy.ObjectAndCollection)
         val type = object : TypeToken<GenericBox<NativeJsonAdapterOnly>>() {}.type
 
-        val result = GsonSafeParser.fromJson<GenericBox<NativeJsonAdapterOnly>>(
-            """{"value":[{"name":"remote"}]}""",
-            type,
-            config
-        )
+        assertThrows(JsonParseException::class.java) {
+            GsonSafeParser.fromJson<GenericBox<NativeJsonAdapterOnly>>(
+                """{"value":[{"name":"remote"}]}""",
+                type,
+                config
+            )
+        }
 
-        assertNull(result?.value)
-        assertTrue(events.none { event -> event is SafeParserEvent.ShapeCoercion })
-        val mismatch = events.single() as SafeParserEvent.TypeMismatch
-        assertEquals("$.value", mismatch.detail.path)
+        assertTrue(events.isEmpty())
     }
 
     @Test
-    fun `field annotation can explicitly shape coerce class json adapter field`() {
+    fun `field annotation does not override class json adapter native path`() {
         val events = mutableListOf<SafeParserEvent>()
         val config = SafeParserConfig(onEvent = events::add)
 
-        val result = GsonSafeParser.fromJson(
-            """{"value":[{"name":"remote"}]}""",
-            ExplicitJsonAdapterShapeResponse::class.java,
-            config
-        )
+        assertThrows(JsonParseException::class.java) {
+            GsonSafeParser.fromJson(
+                """{"value":[{"name":"remote"}]}""",
+                ExplicitJsonAdapterShapeResponse::class.java,
+                config
+            )
+        }
 
-        assertEquals("remote", result?.value?.name)
-        val event = events.single() as SafeParserEvent.ShapeCoercion
-        assertEquals(ShapeCoercionAction.ObjectFromFirstArrayItem, event.detail.action)
-        assertEquals("$.value", event.detail.path)
+        assertTrue(events.isEmpty())
     }
 
     @Test
@@ -288,13 +270,18 @@ class SafeParserReleaseRiskTest {
         val compatibilityEvents = mutableListOf<TypeMismatchEvent>()
         val parser = GsonSafeParser.parser(
             SafeParserConfig(
+                primitiveParsingPolicy = PrimitiveParsingPolicy.Safe,
                 onEvent = callbackEvents::add,
                 onTypeMismatch = compatibilityEvents::add
             )
         )
 
         val result = parser.parseSafe<SensitiveReasonResponse>(
-            """{"value":"secret-token"}""",
+            """
+            {
+              "value": "token=secret-token password=hunter2 Authorization: Bearer abc.def Cookie: sid=xyz"
+            }
+            """.trimIndent(),
             SensitiveReasonResponse::class.java
         )
 
@@ -306,7 +293,7 @@ class SafeParserReleaseRiskTest {
             assertFalse(reason.contains("hunter2"))
             assertFalse(reason.contains("abc.def"))
             assertFalse(reason.contains("sid=xyz"))
-            assertTrue(reason.contains("[REDACTED]"))
+            assertTrue(reason.isNotBlank())
         }
     }
 

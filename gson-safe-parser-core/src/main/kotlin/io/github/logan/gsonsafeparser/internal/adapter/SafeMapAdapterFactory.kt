@@ -17,6 +17,7 @@ import io.github.logan.gsonsafeparser.ParseExceptionKind
 import io.github.logan.gsonsafeparser.SafeParserConfig
 import io.github.logan.gsonsafeparser.ShapeCoercionAction
 import io.github.logan.gsonsafeparser.internal.TokenRules
+import io.github.logan.gsonsafeparser.internal.asCallerAdapterReadException
 import io.github.logan.gsonsafeparser.internal.objectcreation.SafeObjectConstructor
 import io.github.logan.gsonsafeparser.internal.runRecovering
 import java.lang.reflect.Type
@@ -42,12 +43,18 @@ internal object SafeMapAdapterFactory {
         // keyValueTypes.first 是 key 类型，second 是 value 类型。后面读写都依赖这两个类型。
         val keyValueTypes = mapKeyValueTypes(type.type)
         val keyTypeToken = TypeToken.get(keyValueTypes.first)
+        val keyRawType = keyTypeToken.rawType
         val valueTypeToken = TypeToken.get(keyValueTypes.second)
         val keyAdapter = keyAdapter(gson, keyValueTypes.first) as TypeAdapter<Any?>
+        val keyHandlesOwnShape =
+            keyRawType.getAnnotation(JsonAdapter::class.java) != null ||
+                keyAdapter.handlesOwnInputShape()
         val valueAdapter = gson.getAdapter(valueTypeToken) as TypeAdapter<Any?>
         val valueRawType = valueTypeToken.rawType
         val valueHandlesOwnShape =
-            valueRawType.getAnnotation(JsonAdapter::class.java) != null || valueAdapter.handlesOwnInputShape()
+            valueRawType.getAnnotation(JsonAdapter::class.java) != null ||
+                valueRawType.delegatesPrimitiveInputShape(config) ||
+                valueAdapter.handlesOwnInputShape()
         val rawType = type.rawType
         val complexMapKeySerialization = config.complexMapKeySerialization
 
@@ -125,7 +132,7 @@ internal object SafeMapAdapterFactory {
                     reader.beginObject()
                     while (reader.hasNext()) {
                         val keyName = reader.nextName()
-                        val key = parseKey(keyName, keyValueTypes.first, keyAdapter)
+                        val key = parseKey(keyName, keyValueTypes.first, keyAdapter, keyHandlesOwnShape)
                         if (key is ParsedMapKey.Failure) {
                             // key 解析失败时跳过整个 entry，不能把错误的字符串 key 塞进强类型 Map。
                             notify(
@@ -177,6 +184,9 @@ internal object SafeMapAdapterFactory {
                             }
                         }
                             .onFailure {
+                                if (valueHandlesOwnShape) {
+                                    throw it.asCallerAdapterReadException()
+                                }
                                 // valueAdapter 可能已经消费了一半对象，先把 reader 修正到当前 entry 后面。
                                 reader.skipUnreadValueIfPossible(pathBeforeRead)
                                 notify(
@@ -214,10 +224,34 @@ internal object SafeMapAdapterFactory {
                         // pathBeforeRead 记录读取 value 之前的位置，失败时用它恢复 reader。
                         var pathBeforeRead = reader.path
                         var failureToken = reader.peekSafe()
+                        val keyResult = runRecovering { keyAdapter.read(reader) }
+                        if (keyResult.isFailure) {
+                            val error = keyResult.exceptionOrNull()
+                                ?: IllegalStateException("Map entry key parsing failed")
+                            if (keyHandlesOwnShape) {
+                                throw error.asCallerAdapterReadException()
+                            }
+                            reader.skipUnreadValueIfPossible(pathBeforeRead)
+                            notify(
+                                config = config,
+                                type = keyTypeToken,
+                                reader = reader,
+                                token = failureToken,
+                                reason = error.message ?: error.javaClass.name,
+                                kind = ParseExceptionKind.MAP_ITEM,
+                                mapItemKey = null,
+                                path = pathBeforeRead
+                            )
+                            while (runRecovering { reader.hasNext() }.getOrDefault(false)) {
+                                reader.skipValue()
+                            }
+                            reader.endArray()
+                            continue
+                        }
+                        key = keyResult.getOrThrow()
+                        pathBeforeRead = reader.path
+                        failureToken = reader.peekSafe()
                         runRecovering {
-                            key = keyAdapter.read(reader)
-                            pathBeforeRead = reader.path
-                            failureToken = reader.peek()
                             if (failureToken == JsonToken.END_ARRAY || failureToken == JsonToken.END_DOCUMENT) {
                                 notify(
                                     config = config,
@@ -261,6 +295,9 @@ internal object SafeMapAdapterFactory {
                                 }
                             }
                         }.onFailure {
+                            if (valueHandlesOwnShape) {
+                                throw it.asCallerAdapterReadException()
+                            }
                             reader.skipUnreadValueIfPossible(pathBeforeRead)
                             notify(
                                 config = config,
@@ -314,7 +351,12 @@ internal object SafeMapAdapterFactory {
      * @param keyAdapter key 对应的 Gson Adapter。
      * @return 解析成功时返回 key 值，失败时返回失败原因。
      */
-    private fun parseKey(key: String, keyType: Type, keyAdapter: TypeAdapter<Any?>): ParsedMapKey {
+    private fun parseKey(
+        key: String,
+        keyType: Type,
+        keyAdapter: TypeAdapter<Any?>,
+        keyHandlesOwnShape: Boolean
+    ): ParsedMapKey {
         if (keyType == String::class.java) return ParsedMapKey.Success(key)
         // 对象形式的 Map key 来自 JSON name，用 JsonPrimitive 交给 keyAdapter，避免手写 JSON 字符串转义出错。
         return runRecovering {
@@ -324,6 +366,9 @@ internal object SafeMapAdapterFactory {
                 }
             )
         }.getOrElse {
+            if (keyHandlesOwnShape) {
+                throw it.asCallerAdapterReadException()
+            }
             ParsedMapKey.Failure(it.message ?: it.javaClass.name)
         }
     }

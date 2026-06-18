@@ -54,7 +54,7 @@ class SafeParserJvmCiDocumentationTest {
             { assertTrue(content.contains("错形能力矩阵")) },
             { assertTrue(content.contains("后端修复建议")) },
             { assertTrue(content.contains("observerFailureReport()")) },
-            { assertTrue(content.contains("字段级 Adapter 读取失败")) },
+            { assertTrue(content.contains("SafeParser 内建 Adapter 读取到可隔离的字段错形")) },
             { assertTrue(content.contains("根级解析失败")) },
             { assertTrue(content.contains("Java 调用")) },
             { assertTrue(content.contains("非 reified")) }
@@ -82,8 +82,10 @@ class SafeParserJvmCiDocumentationTest {
         val englishTroubleshootingFile = projectRoot().resolve("docs/en/troubleshooting.md")
         val releaseChecklistFile = projectRoot().resolve("docs/release-checklist.md")
         val englishReleaseChecklistFile = projectRoot().resolve("docs/en/release-checklist.md")
-        val releaseNotesFile = projectRoot().resolve("docs/release-notes-1.0.3.md")
-        val englishReleaseNotesFile = projectRoot().resolve("docs/en/release-notes-1.0.3.md")
+        val releaseNotesFile = projectRoot().resolve("docs/release-notes-1.0.4.md")
+        val englishReleaseNotesFile = projectRoot().resolve("docs/en/release-notes-1.0.4.md")
+        val shapeReleaseNotesFile = projectRoot().resolve("docs/release-notes-1.0.3.md")
+        val englishShapeReleaseNotesFile = projectRoot().resolve("docs/en/release-notes-1.0.3.md")
         val transportReleaseNotesFile = projectRoot().resolve("docs/release-notes-1.0.2.md")
         val englishTransportReleaseNotesFile = projectRoot().resolve("docs/en/release-notes-1.0.2.md")
         val previousReleaseNotesFile = projectRoot().resolve("docs/release-notes-1.0.1.md")
@@ -93,6 +95,8 @@ class SafeParserJvmCiDocumentationTest {
         val compatibilityFile = projectRoot().resolve("docs/compatibility.md")
         val englishCompatibilityFile = projectRoot().resolve("docs/en/compatibility.md")
         val changelogFile = projectRoot().resolve("CHANGELOG.md")
+        val examplesFile = projectRoot().resolve("examples/README.md")
+        val englishExamplesFile = projectRoot().resolve("examples/README_EN.md")
         assertAll(
             { assertTrue(readmeFile.exists(), "README.md should exist") },
             { assertTrue(readmeEnFile.exists(), "README_EN.md should exist") },
@@ -109,8 +113,10 @@ class SafeParserJvmCiDocumentationTest {
             { assertTrue(englishTroubleshootingFile.exists(), "docs/en/troubleshooting.md should exist") },
             { assertTrue(releaseChecklistFile.exists(), "docs/release-checklist.md should exist") },
             { assertTrue(englishReleaseChecklistFile.exists(), "docs/en/release-checklist.md should exist") },
-            { assertTrue(releaseNotesFile.exists(), "docs/release-notes-1.0.3.md should exist") },
-            { assertTrue(englishReleaseNotesFile.exists(), "docs/en/release-notes-1.0.3.md should exist") },
+            { assertTrue(releaseNotesFile.exists(), "docs/release-notes-1.0.4.md should exist") },
+            { assertTrue(englishReleaseNotesFile.exists(), "docs/en/release-notes-1.0.4.md should exist") },
+            { assertTrue(shapeReleaseNotesFile.exists(), "docs/release-notes-1.0.3.md should exist") },
+            { assertTrue(englishShapeReleaseNotesFile.exists(), "docs/en/release-notes-1.0.3.md should exist") },
             { assertTrue(transportReleaseNotesFile.exists(), "docs/release-notes-1.0.2.md should exist") },
             { assertTrue(englishTransportReleaseNotesFile.exists(), "docs/en/release-notes-1.0.2.md should exist") },
             { assertTrue(previousReleaseNotesFile.exists(), "docs/release-notes-1.0.1.md should exist") },
@@ -119,7 +125,9 @@ class SafeParserJvmCiDocumentationTest {
             { assertTrue(englishHistoricalReleaseNotesFile.exists(), "docs/en/release-notes-1.0.0.md should exist") },
             { assertTrue(compatibilityFile.exists(), "docs/compatibility.md should exist") },
             { assertTrue(englishCompatibilityFile.exists(), "docs/en/compatibility.md should exist") },
-            { assertTrue(changelogFile.exists(), "CHANGELOG.md should exist") }
+            { assertTrue(changelogFile.exists(), "CHANGELOG.md should exist") },
+            { assertTrue(examplesFile.exists(), "examples/README.md should exist") },
+            { assertTrue(englishExamplesFile.exists(), "examples/README_EN.md should exist") }
         )
 
         val readmeContent = readmeFile.readText()
@@ -139,6 +147,8 @@ class SafeParserJvmCiDocumentationTest {
         val englishReleaseChecklistContent = englishReleaseChecklistFile.readText()
         val releaseNotesContent = releaseNotesFile.readText()
         val englishReleaseNotesContent = englishReleaseNotesFile.readText()
+        val shapeReleaseNotesContent = shapeReleaseNotesFile.readText()
+        val englishShapeReleaseNotesContent = englishShapeReleaseNotesFile.readText()
         val transportReleaseNotesContent = transportReleaseNotesFile.readText()
         val englishTransportReleaseNotesContent = englishTransportReleaseNotesFile.readText()
         val previousReleaseNotesContent = previousReleaseNotesFile.readText()
@@ -148,7 +158,9 @@ class SafeParserJvmCiDocumentationTest {
         val compatibilityContent = compatibilityFile.readText()
         val englishCompatibilityContent = englishCompatibilityFile.readText()
         val changelogContent = changelogFile.readText()
-        val demoProguardContent = projectRoot().resolve("demo-app/proguard-rules.pro").readText()
+        val examplesContent = examplesFile.readText()
+        val englishExamplesContent = englishExamplesFile.readText()
+        val demoProguardContent = projectRoot().resolve("demo-app/proguard-rules.pro").readNormalizedText()
         val currentMarkdownDocs = currentMarkdownDocFiles().joinToString("\n") { it.readText() }
         val publicBehaviorDocs = listOf(
             readmeContent,
@@ -162,14 +174,16 @@ class SafeParserJvmCiDocumentationTest {
             { assertTrue(readmeEnContent.contains("[中文](README.md)")) },
             { assertTrue(readmeContent.contains("JDK 17")) },
             { assertTrue(readmeEnContent.contains("JDK 17")) },
-            { assertTrue(readmeContent.contains("gson-safe-parser-retrofit:1.0.3")) },
-            { assertTrue(readmeEnContent.contains("gson-safe-parser-retrofit:1.0.3")) },
+            { assertTrue(readmeContent.contains("gson-safe-parser-retrofit:1.0.4")) },
+            { assertTrue(readmeEnContent.contains("gson-safe-parser-retrofit:1.0.4")) },
             { assertTrue(readmeContent.contains("docs/android-proguard.md")) },
             { assertTrue(readmeEnContent.contains("docs/en/android-proguard.md")) },
             { assertTrue(readmeEnContent.contains("docs/en/getting-started.md")) },
             { assertTrue(readmeEnContent.contains("docs/en/configuration.md")) },
             { assertTrue(readmeContent.contains("docs/mismatch-capability-matrix.md")) },
             { assertTrue(readmeEnContent.contains("docs/en/mismatch-capability-matrix.md")) },
+            { assertTrue(readmeContent.contains("docs/release-notes-1.0.4.md")) },
+            { assertTrue(readmeEnContent.contains("docs/en/release-notes-1.0.4.md")) },
             { assertTrue(readmeContent.contains("docs/release-notes-1.0.3.md")) },
             { assertTrue(readmeEnContent.contains("docs/en/release-notes-1.0.3.md")) },
             { assertTrue(readmeContent.contains("docs/release-notes-1.0.2.md")) },
@@ -190,6 +204,12 @@ class SafeParserJvmCiDocumentationTest {
             { assertTrue(readmeEnContent.contains("docs/en/release-checklist.md")) },
             { assertTrue(readmeContent.contains("docs/compatibility.md")) },
             { assertTrue(readmeEnContent.contains("docs/en/compatibility.md")) },
+            { assertTrue(readmeContent.contains("examples/README.md")) },
+            { assertTrue(readmeEnContent.contains("examples/README_EN.md")) },
+            { assertTrue(examplesContent.contains("[English](README_EN.md)")) },
+            { assertTrue(englishExamplesContent.contains("[中文](README.md)")) },
+            { assertTrue(englishExamplesContent.contains("Retrofit Minimal Example")) },
+            { assertTrue(englishExamplesContent.contains("../docs/en/api-reference.md")) },
             { assertTrue(readmeContent.contains("GsonSafeConverterFactory.create(gson, config)")) },
             { assertTrue(readmeEnContent.contains("GsonSafeConverterFactory.create(gson, config)")) },
             { assertTrue(readmeContent.contains("Retrofit 网络或传输读流失败")) },
@@ -233,10 +253,10 @@ class SafeParserJvmCiDocumentationTest {
             { assertTrue(readmeEnContent.contains("Root object mismatch")) },
             { assertTrue(readmeContent.contains("字段有构造默认值时，会优先保留默认值")) },
             { assertTrue(readmeEnContent.contains("fields with constructed defaults keep those defaults")) },
-            { assertTrue(readmeContent.contains("字段级 Adapter 读取失败")) },
-            { assertTrue(readmeEnContent.contains("field-level adapter read failures")) },
-            { assertTrue(!readmeContent.contains("自定义 TypeAdapter 主动抛出")) },
-            { assertTrue(!readmeEnContent.contains("custom TypeAdapters are unrecoverable")) },
+            { assertTrue(readmeContent.contains("自定义 Adapter 自己抛出的异常会向外抛出")) },
+            { assertTrue(readmeEnContent.contains("exceptions thrown by those custom adapters are thrown outward")) },
+            { assertTrue(gettingStartedContent.contains("registerTypeAdapterFactory(...)")) },
+            { assertTrue(englishGettingStartedContent.contains("registerTypeAdapterFactory(...)")) },
             { assertTrue(gettingStartedContent.contains("GsonSafeConverterFactory.create(gson, config)")) },
             { assertTrue(englishGettingStartedContent.contains("GsonSafeConverterFactory.create(gson, config)")) },
             { assertTrue(gettingStartedContent.contains("GsonSafeParser.parserWithExternalGson(gson, config)")) },
@@ -386,48 +406,58 @@ class SafeParserJvmCiDocumentationTest {
             { assertTrue(demoAppContent.contains("./gradlew :demo-app:assembleRelease")) },
             { assertTrue(englishDemoAppContent.contains("./gradlew :demo-app:assembleRelease")) },
             { assertTrue(releaseChecklistContent.contains("# 发布清单")) },
-            { assertTrue(releaseChecklistContent.contains("1.0.3")) },
+            { assertTrue(releaseChecklistContent.contains("1.0.4")) },
             { assertTrue(releaseChecklistContent.contains("publishToMavenLocal")) },
             { assertTrue(releaseChecklistContent.contains("Dokka javadoc.jar 离线生成")) },
             { assertTrue(releaseChecklistContent.contains("--warning-mode=fail")) },
             { assertTrue(releaseChecklistContent.contains("releaseToMavenCentral --dry-run")) },
             { assertTrue(releaseChecklistContent.contains(":demo-app:assembleDebug")) },
-            { assertTrue(releaseChecklistContent.contains("gson-safe-parser-core-1.0.3.aar")) },
+            { assertTrue(releaseChecklistContent.contains("gson-safe-parser-core-1.0.4.aar")) },
+            { assertTrue(releaseChecklistContent.contains("docs/release-notes-1.0.4.md")) },
             { assertTrue(releaseChecklistContent.contains("docs/release-notes-1.0.3.md")) },
             { assertTrue(releaseChecklistContent.contains("docs/release-notes-1.0.2.md")) },
             { assertTrue(releaseChecklistContent.contains("docs/release-notes-1.0.1.md")) },
             { assertTrue(releaseChecklistContent.contains("docs/release-notes-1.0.0.md")) },
             { assertTrue(releaseChecklistContent.contains("releaseToMavenCentral")) },
             { assertTrue(englishReleaseChecklistContent.contains("# Release Checklist")) },
-            { assertTrue(englishReleaseChecklistContent.contains("1.0.3")) },
+            { assertTrue(englishReleaseChecklistContent.contains("1.0.4")) },
             { assertTrue(englishReleaseChecklistContent.contains("Dokka javadoc.jar is generated offline")) },
             { assertTrue(englishReleaseChecklistContent.contains("--warning-mode=fail")) },
             { assertTrue(englishReleaseChecklistContent.contains("releaseToMavenCentral --dry-run")) },
             { assertTrue(englishReleaseChecklistContent.contains(":demo-app:assembleDebug")) },
-            { assertTrue(englishReleaseChecklistContent.contains("gson-safe-parser-core-1.0.3.aar")) },
+            { assertTrue(englishReleaseChecklistContent.contains("gson-safe-parser-core-1.0.4.aar")) },
+            { assertTrue(englishReleaseChecklistContent.contains("docs/en/release-notes-1.0.4.md")) },
             { assertTrue(englishReleaseChecklistContent.contains("docs/en/release-notes-1.0.3.md")) },
             { assertTrue(englishReleaseChecklistContent.contains("docs/en/release-notes-1.0.2.md")) },
             { assertTrue(englishReleaseChecklistContent.contains("docs/en/release-notes-1.0.1.md")) },
             { assertTrue(englishReleaseChecklistContent.contains("docs/en/release-notes-1.0.0.md")) },
             { assertTrue(englishReleaseChecklistContent.contains("releaseToMavenCentral")) },
-            { assertTrue(releaseNotesContent.contains("# 1.0.3 发布说明")) },
-            { assertTrue(releaseNotesContent.contains("JSON 形态转换")) },
-            { assertTrue(releaseNotesContent.contains("ShapeCoercionPolicy.Disabled")) },
-            { assertTrue(releaseNotesContent.contains("ShapeCoercionPolicy.ObjectAndCollection")) },
-            { assertTrue(releaseNotesContent.contains("@SafeParseShapeCoercion")) },
-            { assertTrue(releaseNotesContent.contains("@SafeParseDisableShapeCoercion")) },
-            { assertTrue(releaseNotesContent.contains("ShapeCoercion")) },
-            { assertTrue(releaseNotesContent.contains("shapeCoercionAction")) },
+            { assertTrue(releaseNotesContent.contains("# 1.0.4 发布说明")) },
+            { assertTrue(releaseNotesContent.contains("自定义 Adapter 边界")) },
+            { assertTrue(releaseNotesContent.contains("PrimitiveParsingPolicy.Safe")) },
+            { assertTrue(releaseNotesContent.contains("原生 Gson")) },
             { assertTrue(releaseNotesContent.contains("发布验证")) },
-            { assertTrue(englishReleaseNotesContent.contains("# 1.0.3 Release Notes")) },
-            { assertTrue(englishReleaseNotesContent.contains("JSON shape coercion")) },
-            { assertTrue(englishReleaseNotesContent.contains("ShapeCoercionPolicy.Disabled")) },
-            { assertTrue(englishReleaseNotesContent.contains("ShapeCoercionPolicy.ObjectAndCollection")) },
-            { assertTrue(englishReleaseNotesContent.contains("@SafeParseShapeCoercion")) },
-            { assertTrue(englishReleaseNotesContent.contains("@SafeParseDisableShapeCoercion")) },
-            { assertTrue(englishReleaseNotesContent.contains("ShapeCoercion")) },
-            { assertTrue(englishReleaseNotesContent.contains("shapeCoercionAction")) },
+            { assertTrue(englishReleaseNotesContent.contains("# 1.0.4 Release Notes")) },
+            { assertTrue(englishReleaseNotesContent.contains("custom-adapter boundary")) },
+            { assertTrue(englishReleaseNotesContent.contains("PrimitiveParsingPolicy.Safe")) },
+            { assertTrue(englishReleaseNotesContent.contains("native Gson")) },
             { assertTrue(englishReleaseNotesContent.contains("Release Verification")) },
+            { assertTrue(shapeReleaseNotesContent.contains("# 1.0.3 发布说明")) },
+            { assertTrue(shapeReleaseNotesContent.contains("JSON 形态转换")) },
+            { assertTrue(shapeReleaseNotesContent.contains("ShapeCoercionPolicy.Disabled")) },
+            { assertTrue(shapeReleaseNotesContent.contains("ShapeCoercionPolicy.ObjectAndCollection")) },
+            { assertTrue(shapeReleaseNotesContent.contains("@SafeParseShapeCoercion")) },
+            { assertTrue(shapeReleaseNotesContent.contains("@SafeParseDisableShapeCoercion")) },
+            { assertTrue(shapeReleaseNotesContent.contains("ShapeCoercion")) },
+            { assertTrue(shapeReleaseNotesContent.contains("shapeCoercionAction")) },
+            { assertTrue(englishShapeReleaseNotesContent.contains("# 1.0.3 Release Notes")) },
+            { assertTrue(englishShapeReleaseNotesContent.contains("JSON shape coercion")) },
+            { assertTrue(englishShapeReleaseNotesContent.contains("ShapeCoercionPolicy.Disabled")) },
+            { assertTrue(englishShapeReleaseNotesContent.contains("ShapeCoercionPolicy.ObjectAndCollection")) },
+            { assertTrue(englishShapeReleaseNotesContent.contains("@SafeParseShapeCoercion")) },
+            { assertTrue(englishShapeReleaseNotesContent.contains("@SafeParseDisableShapeCoercion")) },
+            { assertTrue(englishShapeReleaseNotesContent.contains("ShapeCoercion")) },
+            { assertTrue(englishShapeReleaseNotesContent.contains("shapeCoercionAction")) },
             { assertTrue(transportReleaseNotesContent.contains("# 1.0.2 发布说明")) },
             { assertTrue(transportReleaseNotesContent.contains("传输异常边界修正")) },
             { assertTrue(transportReleaseNotesContent.contains("InterruptedIOException")) },
@@ -461,10 +491,12 @@ class SafeParserJvmCiDocumentationTest {
             { assertTrue(englishCompatibilityContent.contains("R8 / ProGuard")) },
             { assertTrue(englishCompatibilityContent.contains("forced downgrade")) },
             { assertTrue(changelogContent.contains("# Changelog")) },
+            { assertTrue(changelogContent.contains("## 1.0.4")) },
             { assertTrue(changelogContent.contains("## 1.0.3")) },
             { assertTrue(changelogContent.contains("## 1.0.2")) },
             { assertTrue(changelogContent.contains("## 1.0.1")) },
             { assertTrue(changelogContent.contains("## 1.0.0")) },
+            { assertTrue(changelogContent.contains("docs/release-notes-1.0.4.md")) },
             { assertTrue(changelogContent.contains("docs/release-notes-1.0.3.md")) },
             { assertTrue(changelogContent.contains("docs/release-notes-1.0.2.md")) },
             { assertTrue(changelogContent.contains("docs/release-notes-1.0.1.md")) },
@@ -510,7 +542,7 @@ class SafeParserJvmCiDocumentationTest {
         )
 
         assertAll(
-            { assertEquals("1.0.3", version) },
+            { assertEquals("1.0.4", version) },
             { assertTrue(demoBuildContent.contains("versionName = \"$version\"")) },
             {
                 publicDocs.forEach { content ->
@@ -541,4 +573,10 @@ class SafeParserJvmCiDocumentationTest {
         }
         return listOf(root.resolve("README.md"), root.resolve("README_EN.md")) + docs
     }
+}
+
+private fun Path.readNormalizedText(): String = readText().normalizeLineEndings()
+
+private fun String.normalizeLineEndings(): String {
+    return replace("\r\n", "\n").replace('\r', '\n')
 }

@@ -250,7 +250,9 @@ class SafeParserBehaviorTest {
     @Test
     fun `empty numeric string uses SafeParser zero strategy`() {
         // gson 是本用例使用的解析器，默认情况下已经注册 Safe Adapter。
-        val gson = GsonSafeParser.create()
+        val gson = GsonSafeParser.create(
+            SafeParserConfig(primitiveParsingPolicy = PrimitiveParsingPolicy.Safe)
+        )
         // result 是本次解析或转换得到的实际结果，后面的断言都围绕它展开。
         val result = gson.fromJson(
             """{"intValue":"","decimal":""}""",
@@ -431,6 +433,26 @@ class SafeParserBehaviorTest {
         assertEquals("values", event.fieldName)
         assertEquals("$.values[0][1]", event.path)
         assertEquals("Map entry value is missing", event.reason)
+        assertNull(event.mapItemKey)
+    }
+
+    /**
+     * 测试方法说明：验证数组 entry 形式的 Map key 解析失败时只跳过当前 entry，不能被 value 的原生委托边界误判成外抛。
+     */
+    @Test
+    fun `map array entry with invalid key skips entry even when value delegates own shape`() {
+        val events = mutableListOf<TypeMismatchEvent>()
+        val gson = GsonSafeParser.create(SafeParserConfig(onTypeMismatch = events::add))
+
+        val result = gson.fromJson(
+            """{"values":[["bad","bad-key"],[2,"two"]]}""",
+            IntKeyMap::class.java
+        )
+
+        assertEquals(mapOf(2 to "two"), result.values)
+        val event = events.single()
+        assertEquals(ParseExceptionKind.MAP_ITEM, event.kind)
+        assertEquals("$.values[0][0]", event.path)
         assertNull(event.mapItemKey)
     }
 

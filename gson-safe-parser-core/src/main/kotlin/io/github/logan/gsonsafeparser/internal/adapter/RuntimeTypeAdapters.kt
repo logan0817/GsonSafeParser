@@ -4,6 +4,9 @@ import com.google.gson.Gson
 import com.google.gson.TypeAdapter
 import com.google.gson.reflect.TypeToken
 import com.google.gson.stream.JsonWriter
+import io.github.logan.gsonsafeparser.PrimitiveParsingPolicy
+import io.github.logan.gsonsafeparser.SafeParserConfig
+import io.github.logan.gsonsafeparser.internal.TokenRules
 import java.lang.reflect.Type
 import java.lang.reflect.TypeVariable
 
@@ -69,12 +72,25 @@ internal fun TypeAdapter<*>.handlesOwnInputShape(): Boolean {
     return when {
         this is ReflectiveRuntimeTypeAdapter -> false
         name.startsWith("io.github.logan.gsonsafeparser.internal.") -> false
+        name.startsWith("com.google.gson.Gson\$") -> false
+        name.startsWith("com.google.gson.internal.bind.TreeTypeAdapter") -> true
+        gsonBuiltInAnonymousAdapterName.matches(name) -> false
+        name.startsWith("com.google.gson.internal.bind.TypeAdapters\$EnumTypeAdapter") -> false
+        name.startsWith("com.google.gson.internal.bind.EnumTypeAdapter") -> false
+        name.startsWith("com.google.gson.internal.bind.NumberTypeAdapter") -> false
         name.startsWith("com.google.gson.internal.bind.ReflectiveTypeAdapterFactory") -> false
         name.startsWith("com.google.gson.internal.bind.CollectionTypeAdapterFactory") -> false
         name.startsWith("com.google.gson.internal.bind.MapTypeAdapterFactory") -> false
         name.startsWith("com.google.gson.internal.bind.ArrayTypeAdapter") -> false
         else -> true
     }
+}
+
+private val gsonBuiltInAnonymousAdapterName = Regex("""com\.google\.gson\.internal\.bind\.TypeAdapters\$\d+""")
+
+internal fun Class<*>.delegatesPrimitiveInputShape(config: SafeParserConfig): Boolean {
+    return config.primitiveParsingPolicy == PrimitiveParsingPolicy.DelegateToGson &&
+        (TokenRules.isString(this) || TokenRules.isBoolean(this) || TokenRules.isNumber(this))
 }
 
 /**

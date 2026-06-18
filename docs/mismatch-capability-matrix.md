@@ -78,39 +78,39 @@
 <!-- capability-id: integer-field-mismatch -->
 
 1. 后端实际返回：`{}`、`[]`、非法字符串、越界数值、小数给整数。
-2. 默认处理：字段级交回 Gson 原生 Adapter，读取失败时保留字段默认值；根级基础类型按 Gson 原生行为处理。
-3. 观测证据：`TypeMismatch`，字段名、path、原因包含范围或取整失败。
-4. 边界：只有配置为 `PrimitiveParsingPolicy.Safe` 时才使用安全基础值。
+2. 默认处理：字段级和根级都交回 Gson 原生 Adapter；读取失败会按 Gson 原生异常外抛，不产生 SafeParser 事件。
+3. 显式 Safe 处理：配置 `PrimitiveParsingPolicy.Safe` 后，字段级失败才使用安全基础值或保留构造默认值，并记录 `TypeMismatch`。
+4. 观测证据：`TypeMismatch`，字段名、path、原因包含范围或取整失败；这些证据只在 `PrimitiveParsingPolicy.Safe` 下出现。
 
 ### 2.6 `BigDecimal` / `BigInteger`
 <!-- capability-id: big-number-mismatch -->
 
 1. 后端实际返回：`{}`、`[]`、非法字符串、小数给 `BigInteger`。
-2. 默认处理：字段级交回 Gson 原生 Adapter，读取失败时保留字段默认值；根级数值按 Gson 原生行为处理。
-3. 观测证据：`TypeMismatch`，原因说明数值无法按目标类型读取。
-4. 边界：只有配置为 `PrimitiveParsingPolicy.Safe` 时才使用安全数值默认值；精度合法的大整数会保留，不强行截断。
+2. 默认处理：字段级和根级都交回 Gson 原生 Adapter；读取失败会按 Gson 原生异常外抛，不产生 SafeParser 事件。
+3. 显式 Safe 处理：配置 `PrimitiveParsingPolicy.Safe` 后，字段级失败才使用安全数值默认值或保留构造默认值，并记录 `TypeMismatch`。
+4. 边界：精度合法的大整数会保留，不强行截断；错形或非法数值兜底只在 `PrimitiveParsingPolicy.Safe` 下发生。
 
 ### 2.7 `Boolean`
 <!-- capability-id: boolean-field-mismatch -->
 
 1. 后端实际返回：`{}`、`[]`、非法字符串。
-2. 默认处理：字段级交回 Gson 原生 Adapter，读取失败时保留字段默认值；根级布尔值按 Gson 原生行为处理。
-3. 观测证据：`TypeMismatch`，字段 path 和实际 token。
-4. 边界：只有配置为 `PrimitiveParsingPolicy.Safe` 时才使用安全布尔值；普通 `"true"` / `"false"` 仍按 Gson 兼容方式读取。
+2. 默认处理：字段级和根级都交回 Gson 原生 Adapter；读取失败会按 Gson 原生异常外抛，不产生 SafeParser 事件。
+3. 显式 Safe 处理：配置 `PrimitiveParsingPolicy.Safe` 后，字段级失败才使用安全布尔值或保留构造默认值，并记录 `TypeMismatch`。
+4. 边界：普通 `"true"` / `"false"` 仍按 Gson 兼容方式读取。
 
 ### 2.8 `String`
 <!-- capability-id: string-field-mismatch -->
 
 1. 后端实际返回：`{}`、`[]`。
-2. 默认处理：字段级交回 Gson 原生 Adapter，读取失败时保留字段默认值；根级字符串按 Gson 原生行为处理。
-3. 观测证据：`TypeMismatch`，`expectedJsonShape=JSON string`。
+2. 默认处理：字段级和根级都交回 Gson 原生 Adapter；读取失败会按 Gson 原生异常外抛，不产生 SafeParser 事件。
+3. 显式 Safe 处理：配置 `PrimitiveParsingPolicy.Safe` 后，字段级失败才保留构造默认值或返回安全值，并记录 `TypeMismatch`。
 4. 边界：数字转字符串仍保持 Gson 兼容行为。
 
 ### 2.9 Kotlin data class 默认值
 <!-- capability-id: kotlin-defaults -->
 
 1. 后端实际返回：缺字段、字段为 `null`、字段形状不一致。
-2. 默认处理：缺字段保留构造默认值；显式 `null` 只写入 nullable 字段；字段形状不一致读取失败时保留构造默认值。
+2. 默认处理：缺字段保留构造默认值；显式 `null` 只写入 nullable 字段；对象、集合、Map 等可恢复字段形状不一致时保留构造默认值。
 3. 观测证据：可通过类型错配事件和最终 value 对照确认。
 4. 边界：非空构造参数如果没有默认值，默认按 Gson 兼容处理；缺失引用字段保持 `null`，primitive 保持 JVM 默认值。
 5. 边界：如果你要把缺字段、`null`、形状不一致或未知枚举值作为接口契约错误处理，把 `requiredConstructorParameterPolicy` 改成 `Strict`。
@@ -160,4 +160,4 @@ println(result.contractReport().toBackendMarkdown())
 1. JSON 语法错误不是字段级 JSON 形状不一致，会继续抛出。
 2. 根级解析失败不能总是隔离到字段，会继续遵循 Gson 边界。
 3. 业务协议错误、HTTP 错误码、签名失败、字段语义错误不由本库判断。
-4. 自定义 Adapter 主动抛出的普通异常只有能被字段级读取边界隔离时才会变成当前字段事件；`Error`、`ThreadDeath`、`LinkageError`、`CancellationException` 这类不可安全隔离问题会继续外抛。
+4. 调用方显式注册的 `TypeAdapter`、`TypeAdapterFactory`、`registerTypeHierarchyAdapter(...)` 或 `@JsonAdapter` 命中时，优先保留原生 Gson 链路；这些自定义 Adapter 自己抛出的异常会继续外抛，不会被伪装成字段兜底。`Error`、`ThreadDeath`、`LinkageError`、`CancellationException` 这类不可安全隔离问题也会继续外抛。

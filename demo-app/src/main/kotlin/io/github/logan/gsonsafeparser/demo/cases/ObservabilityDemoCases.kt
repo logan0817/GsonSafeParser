@@ -78,8 +78,8 @@ import java.util.concurrent.ConcurrentMap
 internal fun rawJsonTruncationCase(): DemoCase = DemoCase(
     title = "rawJson 截断标记",
     category = "可观测性",
-    entryPoint = "SafeParserConfig(captureRawJsonInCallbacks = true, maxRawJsonCaptureBytes = 10)",
-    description = "联调时原始 JSON 可能很大，超过上限后事件里要带截断后的内容和“原始 JSON 已截断”标记。",
+    entryPoint = "SafeParserConfig(captureRawJsonInCallbacks = true, maxRawJsonCaptureBytes = 10, primitiveParsingPolicy = PrimitiveParsingPolicy.Safe)",
+    description = "显式开启 Safe 基础类型策略和 rawJson 捕获后，超过上限的事件要带截断内容和“原始 JSON 已截断”标记。",
     defaultJson = """{"count":[],"extra":"large"}""",
     expected = "类型错配事件里的原始 JSON 只保留前 10 个字符，并标记已经截断。"
 ) { json ->
@@ -90,6 +90,7 @@ internal fun rawJsonTruncationCase(): DemoCase = DemoCase(
         config = SafeParserConfig(
             captureRawJsonInCallbacks = true,
             maxRawJsonCaptureBytes = 10,
+            primitiveParsingPolicy = PrimitiveParsingPolicy.Safe,
             onEvent = events::add
         )
     )

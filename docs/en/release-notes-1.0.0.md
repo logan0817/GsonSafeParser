@@ -8,7 +8,7 @@ The positioning is strict: GsonSafeParser is an extension layer for Gson, not a 
 
 ## Initial Capabilities
 
-1. Field-level safe parsing: objects, collections, maps, primitives, Kotlin data class defaults, and `org.json` types handle recoverable mismatches according to config.
+1. Field-level safe parsing: objects, collections, maps, Kotlin data class defaults, and `org.json` types handle recoverable mismatches according to config; primitive values use safe primitive defaults only when `PrimitiveParsingPolicy.Safe` is explicitly enabled.
 2. Gson fallback boundaries: Safe Adapter creation failures, missing GsonBuilder compatibility snapshots, uncertain types, and unrecoverable failures fall back to Gson or keep throwing.
 3. Kotlin APIs: `fromJsonSafe<T>()`, `parseSafe<T>()`, event snapshots, and reusable Parser.
 4. Retrofit integration: `GsonSafeConverterFactory` supports empty-body policies, bounded raw JSON capture, and oversized-body skip events.

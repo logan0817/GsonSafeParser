@@ -2,6 +2,11 @@
 
 [中文](README.md)
 
+[![Maven Central: core](https://img.shields.io/maven-central/v/io.github.logan0817/gson-safe-parser-core?label=core)](https://central.sonatype.com/artifact/io.github.logan0817/gson-safe-parser-core)
+[![Maven Central: retrofit](https://img.shields.io/maven-central/v/io.github.logan0817/gson-safe-parser-retrofit?label=retrofit)](https://central.sonatype.com/artifact/io.github.logan0817/gson-safe-parser-retrofit)
+[![CI](https://github.com/logan0817/GsonSafeParser/actions/workflows/ci.yml/badge.svg)](https://github.com/logan0817/GsonSafeParser/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
 GsonSafeParser is a Kotlin-first Gson extension for Android projects. It is published as Android AARs.
 
 It solves one common problem: when one backend field returns an unexpected JSON shape, native Gson may fail the whole bean.
@@ -12,9 +17,61 @@ It does not silently swallow bad payloads. The library records the field path, e
 
 Use that evidence to report contract issues and observe backend payload drift in production.
 
+## 30-Second Setup
+
+If you only want to verify field-level fallback, add the core dependency first:
+
+```kotlin
+implementation("io.github.logan0817:gson-safe-parser-core:1.0.4")
+```
+
+Then create Gson in business code:
+
+```kotlin
+val gson = GsonSafeParser.create()
+val response = gson.fromJson(json, ApiResponse::class.java)
+```
+
+If you also need fallback events:
+
+```kotlin
+import io.github.logan.gsonsafeparser.GsonSafeParser
+import io.github.logan.gsonsafeparser.contractReport
+import io.github.logan.gsonsafeparser.parseSafe
+
+val result = GsonSafeParser.parseSafe<ApiResponse>(json)
+println(result.value)
+println(result.contractReport().toBackendMarkdown())
+```
+
+For Retrofit:
+
+```kotlin
+implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.4")
+```
+
+```kotlin
+val retrofit = Retrofit.Builder()
+    .baseUrl("https://example.com/")
+    .addConverterFactory(GsonSafeConverterFactory.create())
+    .build()
+```
+
+Recommended first read: 1. [Getting Started](docs/en/getting-started.md) 2. [API Reference](docs/en/api-reference.md) 3. [Mismatch Capability Matrix](docs/en/mismatch-capability-matrix.md) 4. [Android ProGuard](docs/en/android-proguard.md).
+
+## Is This For You?
+
+| Your Scenario | Fit | Recommended Entry |
+| --- | --- | --- |
+| Android Gson parsing fails because one field has the wrong JSON shape | Yes | `GsonSafeParser.create()` or `GsonBuilder.enableSafeParser()` |
+| Retrofit responses sometimes contain field shape mismatches or empty bodies | Yes | `GsonSafeConverterFactory.create()` |
+| You want to keep existing Gson config and only add field-level safe parsing | Yes | Call `.enableSafeParser(config)` on the same `GsonBuilder` |
+| Pure JVM project without Android AAR consumption | Not yet | Current artifacts are Android AARs |
+| You want JSON syntax errors, offline failures, or cancellations to become defaults | No | Those cases stay with Gson, Retrofit, or OkHttp |
+
 ## Features
 
-1. Field-level fallback: when an object, collection, map, or primitive field receives a mismatched JSON type, only the current field is handled defensively.
+1. Field-level fallback: object, collection, and map mismatches are isolated to the current field; primitive fields delegate to Gson by default and use safe primitive defaults only when `PrimitiveParsingPolicy.Safe` is enabled.
 2. Native Gson adapter fallback by default: if a Safe Adapter cannot be created or a type cannot be handled confidently, SafeParser does not rewrite that type's read behavior.
 3. Kotlin friendly: supports Kotlin data class defaults, reified APIs, `parseSafe<T>()`, and `fromJsonSafe<T>()`.
 4. Retrofit integration: provides `GsonSafeConverterFactory` with empty response policies and raw JSON capture limits.
@@ -61,7 +118,7 @@ See [Configuration](docs/en/configuration.md) for the full config reference.
 | --- | --- | --- |
 | Object field mismatch | `[]`, `""`, `1` | Returns `null` or keeps the constructed field default by default, while the outer object keeps parsing. |
 | Root object mismatch | `[]`, `""`, `1` | Usually returns `null`; unrecoverable Gson exceptions are still thrown. |
-| `String` field | `[]`, `{}` | Keeps the constructed field default when field reading fails; root values delegate to the native Gson adapter. |
+| Primitive / `String` field | `{}`, `[]` | Delegates to the native Gson adapter by default; read failures are thrown as native Gson exceptions and do not emit SafeParser events. |
 
 `FallbackPolicy` (default: `FallbackPolicy.NullOnly`):
 
@@ -76,7 +133,7 @@ Note: fields with constructed defaults keep those defaults. Root values or field
 
 | Target type | Unexpected JSON | `PrimitiveParsingPolicy.DelegateToGson` (default) | `PrimitiveParsingPolicy.Safe` |
 | --- | --- | --- | --- |
-| Int / Long / Boolean | `{}`, `[]`, `""` | Delegates to the native Gson adapter. | Uses safe primitive defaults. |
+| Int / Long / Boolean / String | `{}`, `[]`, invalid strings | Delegates to the native Gson adapter and throws on failure. | Uses safe primitive defaults or keeps constructed defaults, and records events. |
 
 `EmptyResponsePolicy` (default: `EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly`):
 
@@ -98,7 +155,7 @@ Use the badge version below. If you use plain Gson or manage Gson yourself, depe
 [![Maven Central: core](https://img.shields.io/maven-central/v/io.github.logan0817/gson-safe-parser-core?label=core)](https://central.sonatype.com/artifact/io.github.logan0817/gson-safe-parser-core)
 
 ```kotlin
-implementation("io.github.logan0817:gson-safe-parser-core:1.0.3")
+implementation("io.github.logan0817:gson-safe-parser-core:1.0.4")
 ```
 
 If you use Retrofit, depend on the retrofit module only; it already brings core transitively:
@@ -106,7 +163,7 @@ If you use Retrofit, depend on the retrofit module only; it already brings core 
 [![Maven Central: retrofit](https://img.shields.io/maven-central/v/io.github.logan0817/gson-safe-parser-retrofit?label=retrofit)](https://central.sonatype.com/artifact/io.github.logan0817/gson-safe-parser-retrofit)
 
 ```kotlin
-implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.3")
+implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.4")
 ```
 
 The Retrofit module keeps the `Retrofit 2.8.1` API baseline, and it also provides `OkHttp 4.12.0` and `Okio 3.6.0` as runtime network-stack safety baselines. This prevents Retrofit 2.8.1's old transitive dependencies from resolving back to OkHttp 3.14.x / Okio 1.x. If your app already owns the network stack, run `./gradlew dependencyInsight --dependency okhttp` and `./gradlew dependencyInsight --dependency okio` to confirm the final dependency resolution, then verify offline, cancellation, connection reset, TLS failure, and raw JSON capture regressions.
@@ -152,7 +209,7 @@ Fallback boundary:
 | Retrofit network or transport read failure | Returns to Retrofit / OkHttp error handling, is not recorded as a field mismatch or empty response, and must not be hidden with `emptyResponsePolicy`. |
 | Unsafe-to-isolate failure | `Error`, `ThreadDeath`, `LinkageError`, and `CancellationException` are still thrown. |
 
-field-level adapter read failures emit events and keep the outer object parsing when the current field boundary can isolate them.
+SafeParser built-in adapters emit events and keep the outer object parsing when a field-level mismatch can be isolated. Types explicitly handled by `registerTypeAdapter(...)`, `registerTypeAdapterFactory(...)`, `registerTypeHierarchyAdapter(...)`, or `@JsonAdapter` keep the native Gson path first; exceptions thrown by those custom adapters are thrown outward instead of being disguised as field fallback.
 
 Entry choice:
 
@@ -196,7 +253,7 @@ val result = parser.parseSafe<ApiResponse>(json)
 
 ## JSON Shape Coercion
 
-By default, GsonSafeParser does not convert objects and arrays into each other. JSON shape coercion stays in the `ShapeCoercionPolicy.Disabled` state by default, so 1.0.3 keeps the same default parsing behavior as previous releases.
+By default, GsonSafeParser does not convert objects and arrays into each other. JSON shape coercion stays in the `ShapeCoercionPolicy.Disabled` state by default, so 1.0.4 keeps the same default parsing behavior as previous releases.
 
 Use this feature only when a backend field is unstable and the business accepts an explicit recovery rule:
 
@@ -380,22 +437,27 @@ The Demo App supports built-in cases and custom JSON input. You can paste a real
 
 ## Documentation
 
-Suggested reading order: start with [Getting Started](docs/en/getting-started.md), then read [Compatibility](docs/en/compatibility.md), [Configuration](docs/en/configuration.md), and the [Mismatch Capability Matrix](docs/en/mismatch-capability-matrix.md).
+Read by scenario instead of reading every page from top to bottom.
 
-If you integrate into Android release builds, read [Android ProGuard](docs/en/android-proguard.md) next.
+| Scenario | Start Here | Then Read |
+| --- | --- | --- |
+| First adoption | [Getting Started](docs/en/getting-started.md) | [API Reference](docs/en/api-reference.md) |
+| Understand fallback scope | [Mismatch Capability Matrix](docs/en/mismatch-capability-matrix.md) | [Configuration](docs/en/configuration.md) |
+| Android release rollout | [Android ProGuard](docs/en/android-proguard.md) | [Compatibility](docs/en/compatibility.md) |
+| Retrofit integration | Retrofit section in [Getting Started](docs/en/getting-started.md) | [Troubleshooting](docs/en/troubleshooting.md) |
+| Device testing | [Demo App](docs/en/demo-app.md) | [Examples](examples/README_EN.md) |
+| Contributing or reporting issues | [Contributing](CONTRIBUTING.md) | [Security Policy](SECURITY.md) |
+| Release maintenance | [Release Checklist](docs/en/release-checklist.md) | [CHANGELOG](CHANGELOG.md) |
 
-1. [Getting Started](docs/en/getting-started.md): installation, plain Gson usage, Retrofit integration, Kotlin APIs, and CI self-check.
-2. [Mismatch Capability Matrix](docs/en/mismatch-capability-matrix.md): handling scope for objects, collections, maps, primitives, Kotlin defaults, Retrofit empty bodies, and raw JSON capture.
-3. [Compatibility](docs/en/compatibility.md): Android, JDK, Kotlin, Gson, Retrofit, and R8 version boundaries.
-4. [Configuration](docs/en/configuration.md): config fields, presets, event stream, annotations, and default behavior.
-5. [Android ProGuard](docs/en/android-proguard.md): new project integration, legacy quick integration, R8 fullMode choice, and release validation.
-6. [Demo App](docs/en/demo-app.md): device testing, screen overview, and custom JSON validation.
-7. [Troubleshooting](docs/en/troubleshooting.md): empty responses, raw JSON, adapter creation failures, platform objects, and business schema issues.
-8. [Release Checklist](docs/en/release-checklist.md): AAR, ProGuard, documentation version, and local Maven artifact checks before publishing 1.0.3.
-9. [1.0.3 Release Notes](docs/en/release-notes-1.0.3.md): JSON shape coercion, event reporting, boundaries, and release verification notes.
-10. [1.0.2 Release Notes](docs/en/release-notes-1.0.2.md): transport exception boundary fix, compatibility boundaries, and release verification notes.
-11. [1.0.1 Release Notes](docs/en/release-notes-1.0.1.md): historical stabilization fixes, compatibility boundaries, and release verification notes.
-12. [1.0.0 Release Notes](docs/en/release-notes-1.0.0.md): initial capabilities, compatibility boundaries, and release verification notes.
+Full documentation index:
+
+| Category | Documents |
+| --- | --- |
+| Start | [Getting Started](docs/en/getting-started.md), [API Reference](docs/en/api-reference.md), [Examples](examples/README_EN.md) |
+| Reference | [Configuration](docs/en/configuration.md), [Mismatch Capability Matrix](docs/en/mismatch-capability-matrix.md), [Compatibility](docs/en/compatibility.md), [Troubleshooting](docs/en/troubleshooting.md) |
+| Android | [Android ProGuard](docs/en/android-proguard.md), [Demo App](docs/en/demo-app.md) |
+| Community | [Contributing](CONTRIBUTING.md), [Security Policy](SECURITY.md), [Code of Conduct](CODE_OF_CONDUCT.md) |
+| Releases | [1.0.4 Release Notes](docs/en/release-notes-1.0.4.md), [1.0.3 Release Notes](docs/en/release-notes-1.0.3.md), [1.0.2 Release Notes](docs/en/release-notes-1.0.2.md), [1.0.1 Release Notes](docs/en/release-notes-1.0.1.md), [1.0.0 Release Notes](docs/en/release-notes-1.0.0.md) |
 
 ## Boundaries
 
@@ -414,12 +476,7 @@ Handling boundaries:
 
 GsonSafeParser is an independently maintained Kotlin open-source project.
 
-The current codebase continues to evolve through maintainer-led, AI-assisted refactoring, with the final result reviewed, adjusted, and verified by the maintainer. The AI usage is disclosed separately below:
-
-1. ChatGPT Codex: used for refactoring support, test hardening, documentation organization, and self-review.
-2. DeepSeek DeepSeek-V4-Pro: used for refactoring assistance, documentation polishing, and issue cross-checking.
-
-During design, problem-scenario review, README review, and issue self-checking, the project referred to the public [getActivity/GsonFactory](https://github.com/getActivity/GsonFactory) project. See [NOTICE](NOTICE) for license details, original copyright notice, and the fuller AI-transparency note.
+During design, problem-scenario review, README review, and issue self-checking, the project referred to the public [getActivity/GsonFactory](https://github.com/getActivity/GsonFactory) project. See [NOTICE](NOTICE) for license details and the original copyright notice.
 
 ## License
 

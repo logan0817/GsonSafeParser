@@ -4,7 +4,7 @@
 
 This document is for developers integrating GsonSafeParser for the first time.
 
-It covers 5 things: installation, plain Gson usage, Retrofit usage, Kotlin APIs, and CI self-checks. For the full fallback scope, see the [Mismatch Capability Matrix](mismatch-capability-matrix.md).
+It covers 5 things: installation, plain Gson usage, Retrofit usage, Kotlin APIs, and CI self-checks. For API entry-point choices, see the [API Reference](api-reference.md). For the full fallback scope, see the [Mismatch Capability Matrix](mismatch-capability-matrix.md).
 
 ## 1. Installation
 
@@ -28,7 +28,7 @@ Plain Gson usage:
 Latest version: [![Maven Central: core](https://img.shields.io/maven-central/v/io.github.logan0817/gson-safe-parser-core?label=core)](https://central.sonatype.com/artifact/io.github.logan0817/gson-safe-parser-core)
 
 ```kotlin
-implementation("io.github.logan0817:gson-safe-parser-core:1.0.3")
+implementation("io.github.logan0817:gson-safe-parser-core:1.0.4")
 ```
 
 If the project uses Retrofit, only add:
@@ -36,7 +36,7 @@ If the project uses Retrofit, only add:
 Latest version: [![Maven Central: retrofit](https://img.shields.io/maven-central/v/io.github.logan0817/gson-safe-parser-retrofit?label=retrofit)](https://central.sonatype.com/artifact/io.github.logan0817/gson-safe-parser-retrofit)
 
 ```kotlin
-implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.3")
+implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.4")
 ```
 
 ## 2. Plain Gson Integration
@@ -121,7 +121,7 @@ Exception boundary:
 | Root-level parse failure | Still follows Gson boundaries. |
 | Unsafe-to-isolate failure | `Error`, `ThreadDeath`, `LinkageError`, and `CancellationException` are still thrown. |
 
-field-level adapter read failures emit events and keep the outer object parsing when the current field boundary can isolate them.
+SafeParser built-in adapters emit events and keep the outer object parsing when a field-level mismatch can be isolated. Types explicitly handled by `registerTypeAdapter(...)`, `registerTypeAdapterFactory(...)`, `registerTypeHierarchyAdapter(...)`, or `@JsonAdapter` keep the native Gson path first; exceptions thrown by those custom adapters are thrown outward instead of being disguised as field fallback.
 
 Direct `gson.fromJson(...)` calls keep Gson's native top-level exception wrapping. This preserves native Gson entry semantics.
 
@@ -227,7 +227,7 @@ External Gson rules:
 | --- | --- |
 | Does `parserWithExternalGson(gson, config)` auto-register Safe Adapters? | No. Call `.enableSafeParser(config)` on the same `GsonBuilder` before creating that Gson. |
 | How do I check an external Gson? | Call `GsonSafeParser.diagnostics(gson)` and check whether the field-level Safe Adapter exists. |
-| What does the config passed to `parserWithExternalGson(gson, config)` control? | Raw JSON capture, root primitive fallback, and the `parseSafe` event snapshot. |
+| What does the config passed to `parserWithExternalGson(gson, config)` control? | Raw JSON capture, root primitive fallback when `PrimitiveParsingPolicy.Safe` is explicitly enabled, and the `parseSafe` event snapshot. |
 | Field-level Adapter event callbacks | Owned by the config passed to `.enableSafeParser(...)` when the Gson was created. |
 | Which thread runs callbacks? | The parsing caller thread. Caller-owned lists, log buffers, or metric collectors must be thread-safe under concurrency. |
 

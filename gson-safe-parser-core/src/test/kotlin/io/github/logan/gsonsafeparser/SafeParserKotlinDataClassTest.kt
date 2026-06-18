@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import com.google.gson.JsonIOException
+import com.google.gson.JsonSyntaxException
 import com.google.gson.annotations.SerializedName
 
 /**
@@ -275,11 +276,11 @@ class SafeParserKotlinDataClassTest {
     fun `wrong shaped required string constructor parameter does not keep placeholder string`() {
         val gson = strictGson()
 
-        val error = assertThrows(JsonIOException::class.java) {
+        val error = assertThrows(JsonSyntaxException::class.java) {
             gson.fromJson("""{"name":[]}""", RequiredStringPayload::class.java)
         }
 
-        assertTrue(error.message.orEmpty().contains("Required constructor parameter was not read from JSON"))
+        assertTrue(error.message.orEmpty().contains("Expected a string but was BEGIN_ARRAY"))
     }
 
     /**

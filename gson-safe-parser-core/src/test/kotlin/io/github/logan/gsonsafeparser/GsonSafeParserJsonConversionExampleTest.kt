@@ -691,6 +691,28 @@ class GsonSafeParserJsonConversionExampleTest {
     }
 
     @Test
+    fun `example keeps gson builder last exact adapter registration priority`() {
+        val gson = GsonBuilder()
+            .registerTypeAdapter(
+                RegisteredAdapterPayload::class.java,
+                ExactContainerAdapter("first", RegisteredAdapterPayload("first"))
+            )
+            .registerTypeAdapter(
+                RegisteredAdapterPayload::class.java,
+                ExactContainerAdapter("second", RegisteredAdapterPayload("second"))
+            )
+            .enableSafeParser(SafeParserConfig().withShapeCoercionPolicy(ShapeCoercionPolicy.ObjectAndCollection))
+            .create()
+
+        val result = gson.fromJson(
+            """[{"label":"root"}]""",
+            RegisteredAdapterPayload::class.java
+        )
+
+        assertEquals(RegisteredAdapterPayload("second"), result)
+    }
+
+    @Test
     fun `example keeps gson hierarchy adapters for fields and collection elements`() {
         val gson = GsonBuilder()
             .registerTypeHierarchyAdapter(HierarchyBase::class.java, HierarchyPayloadAdapter())
@@ -709,6 +731,28 @@ class GsonSafeParserJsonConversionExampleTest {
 
         assertEquals(HierarchyPayload("hierarchy-read-array"), result.payload)
         assertEquals(listOf(HierarchyPayload("hierarchy-read-array")), result.items)
+    }
+
+    @Test
+    fun `example keeps gson builder last hierarchy adapter registration priority`() {
+        val gson = GsonBuilder()
+            .registerTypeHierarchyAdapter(
+                HierarchyBase::class.java,
+                ExactContainerAdapter("first", HierarchyPayload("first"))
+            )
+            .registerTypeHierarchyAdapter(
+                HierarchyBase::class.java,
+                ExactContainerAdapter("second", HierarchyPayload("second"))
+            )
+            .enableSafeParser(SafeParserConfig().withShapeCoercionPolicy(ShapeCoercionPolicy.ObjectAndCollection))
+            .create()
+
+        val result = gson.fromJson(
+            """[{"label":"root"}]""",
+            HierarchyPayload::class.java
+        )
+
+        assertEquals(HierarchyPayload("second"), result)
     }
 
     @Test
@@ -743,7 +787,7 @@ class GsonSafeParserJsonConversionExampleTest {
     }
 
     @Test
-    fun `example does not probe opaque custom type adapter factory without static type metadata`() {
+    fun `example delegates opaque custom type adapter factory when it matches target type`() {
         var createCalls = 0
         val factory = object : TypeAdapterFactory {
             @Suppress("UNCHECKED_CAST")
@@ -763,12 +807,12 @@ class GsonSafeParserJsonConversionExampleTest {
             RegisteredAdapterPayload::class.java
         )
 
-        assertNull(result)
-        assertEquals(0, createCalls)
+        assertEquals(RegisteredAdapterPayload("registered-read-array"), result)
+        assertEquals(1, createCalls)
     }
 
     @Test
-    fun `example does not probe unmatched custom type adapter factory during safe fallback`() {
+    fun `example probes unmatched custom type adapter factory before safe fallback`() {
         val seenTypes = mutableListOf<String>()
         val factory = object : TypeAdapterFactory {
             override fun <T> create(gson: com.google.gson.Gson, type: TypeToken<T>): TypeAdapter<T>? {
@@ -787,8 +831,8 @@ class GsonSafeParserJsonConversionExampleTest {
         )
 
         assertEquals(FullPayload(33L, "safe"), result.data)
-        assertFalse(seenTypes.contains(ObjectFieldEnvelope::class.java.name))
-        assertFalse(seenTypes.contains(FullPayload::class.java.name))
+        assertTrue(seenTypes.contains(ObjectFieldEnvelope::class.java.name))
+        assertTrue(seenTypes.contains(FullPayload::class.java.name))
     }
 
     @Test

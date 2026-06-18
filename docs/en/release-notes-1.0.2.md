@@ -13,7 +13,7 @@ Recoverable field-level shape mismatches can still be isolated by the library. N
 1. Network and transport read failures are no longer treated as field mismatches. `InterruptedIOException`, socket reset, broken pipe, and OkHttp stream reset failures are thrown outward.
 2. Retrofit empty-response probing no longer records `EmptyResponse` events when the response body fails because of a transport failure.
 3. Retrofit raw JSON probing no longer records `RawJsonCaptureSkipped` events on transport failures, so troubleshooting points to the network layer instead of JSON shape handling.
-4. Ordinary custom adapter `IOException` behavior is preserved: if the failure can be safely isolated at a field, List item, or Map entry boundary, it still falls back locally.
+4. Ordinary custom adapter `IOException` behavior in `1.0.2` still used local fallback; the current `1.0.3` behavior has been tightened to keep native Gson custom-adapter paths and throw those failures outward.
 5. Aligns the current release version to `1.0.2` across Gradle publishing, Demo version, README, getting started docs, compatibility docs, release checklist, and release notes.
 
 ## Upgrade

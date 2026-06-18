@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
  * 验证基础类型错形兜底。
  *
  * 数字、布尔、字符串字段是接口里最常见的基础字段，后端返回对象或数组时，
- * SafeParser 只能兜底当前字段，不能让整个 Bean 解析失败。
+ * SafeParser 只有在显式开启 `PrimitiveParsingPolicy.Safe` 后才兜底当前字段。
  */
 class SafeParserPrimitiveMismatchTest {
     /** 测试模型：覆盖 Int、Long、BigDecimal、Boolean、String 五类常见基础字段。 */
@@ -57,6 +57,10 @@ class SafeParserPrimitiveMismatchTest {
         val enabled: Boolean = false
     )
 
+    data class IntListPayload(val values: List<Int> = emptyList())
+    data class IntMapPayload(val values: Map<String, Int> = emptyMap())
+    data class IntArrayPayload(val values: Array<Int> = emptyArray())
+
     /** 测试模型：敏感字段被错配成 Boolean 时，事件原因不能带出原始值。 */
     data class SensitiveBooleanPayload(
         val token: Boolean = false
@@ -72,6 +76,36 @@ class SafeParserPrimitiveMismatchTest {
         primitiveParsingPolicy = PrimitiveParsingPolicy.Safe
     )
 
+    @Test
+    fun `primitive fields delegate to Gson by default when backend sends wrong structures`() {
+        val events = mutableListOf<TypeMismatchEvent>()
+        val gson = GsonSafeParser.create(SafeParserConfig(onTypeMismatch = events::add))
+
+        assertThrows(RuntimeException::class.java) {
+            gson.fromJson("""{"count":{},"enabled":[]}""", NonZeroPrimitiveDefaults::class.java)
+        }
+
+        assertTrue(events.isEmpty())
+    }
+
+    @Test
+    fun `primitive container values delegate to Gson by default when backend sends wrong structures`() {
+        val events = mutableListOf<TypeMismatchEvent>()
+        val gson = GsonSafeParser.create(SafeParserConfig(onTypeMismatch = events::add))
+
+        assertThrows(RuntimeException::class.java) {
+            gson.fromJson("""{"values":[{}]}""", IntListPayload::class.java)
+        }
+        assertThrows(RuntimeException::class.java) {
+            gson.fromJson("""{"values":{"bad":{}}}""", IntMapPayload::class.java)
+        }
+        assertThrows(RuntimeException::class.java) {
+            gson.fromJson("""{"values":[{}]}""", IntArrayPayload::class.java)
+        }
+
+        assertTrue(events.isEmpty())
+    }
+
     /**
      * 测试方法说明：验证“primitive fields use safe fallback when backend sends wrong structures”这个具体行为。
      * 阅读时可以按准备数据、执行解析、断言结果的顺序跟下来。
@@ -79,7 +113,7 @@ class SafeParserPrimitiveMismatchTest {
     @Test
     fun `primitive fields use safe fallback when backend sends wrong structures`() {
         // gson 是本用例使用的解析器，默认情况下已经注册 Safe Adapter。
-        val gson = GsonSafeParser.create()
+        val gson = GsonSafeParser.create(safePrimitiveConfig)
         // result 是本次解析或转换得到的实际结果，后面的断言都围绕它展开。
         val result = gson.fromJson(
             """{"count":{},"total":[],"price":{},"enabled":[],"title":[]}""",
@@ -99,7 +133,10 @@ class SafeParserPrimitiveMismatchTest {
      */
     @Test
     fun `primitive fields keep non zero defaults when backend sends wrong structures`() {
-        val result = GsonSafeParser.fromJsonSafe<NonZeroPrimitiveDefaults>("""{"count":{},"enabled":[]}""")
+        val result = GsonSafeParser.fromJsonSafe<NonZeroPrimitiveDefaults>(
+            """{"count":{},"enabled":[]}""",
+            safePrimitiveConfig
+        )
 
         assertEquals(NonZeroPrimitiveDefaults(), result)
     }
@@ -160,7 +197,7 @@ class SafeParserPrimitiveMismatchTest {
     @Test
     fun `invalid floating point strings do not overwrite field defaults`() {
         // gson 是本用例使用的解析器，默认情况下已经注册 Safe Adapter。
-        val gson = GsonSafeParser.create()
+        val gson = GsonSafeParser.create(safePrimitiveConfig)
 
         // result 是本次解析或转换得到的实际结果，后面的断言都围绕它展开。
         val result = gson.fromJson(

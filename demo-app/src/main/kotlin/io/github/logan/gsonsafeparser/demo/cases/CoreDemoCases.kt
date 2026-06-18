@@ -105,12 +105,15 @@ internal fun primitiveMismatchCase(): DemoCase = DemoCase(
         "string-field-mismatch"
     ),
     category = "核心解析",
-    entryPoint = "GsonSafeParser.parseSafe() default contract-first scalar handling",
-    description = "数字、布尔、字符串字段遇到数组或对象时只兜底当前字段，不让整棵 Bean 失败。",
+    entryPoint = "GsonSafeParser.parseSafe(config = PrimitiveParsingPolicy.Safe)",
+    description = "显式开启 Safe 基础类型策略后，数字、布尔、字符串字段遇到数组或对象时只兜底当前字段，不让整棵 Bean 失败。",
     defaultJson = """{"count":{},"total":[],"price":{},"enabled":[],"title":[]}""",
     expected = "count=0,total=0,price=0,enabled=false,title=null，并产生多个错配事件。"
 ) { json ->
-    val result = GsonSafeParser.parseSafe<PrimitiveResponse>(json)
+    val result = GsonSafeParser.parseSafe<PrimitiveResponse>(
+        json = json,
+        config = SafeParserConfig(primitiveParsingPolicy = PrimitiveParsingPolicy.Safe)
+    )
     val expectedPaths = listOf("$.count", "$.total", "$.price", "$.enabled", "$.title")
     val pass = result.value == PrimitiveResponse() &&
             expectedPaths.all { path -> result.events.hasTypeMismatch(path = path) }
@@ -124,12 +127,15 @@ internal fun collectionMapMismatchCase(): DemoCase = DemoCase(
     title = "集合/Map 错形与 item 跳过",
     capabilityIds = setOf("collection-field-mismatch"),
     category = "核心解析",
-    entryPoint = "SafeCollectionAdapterFactory / SafeMapAdapterFactory",
-    description = "集合和 Map 整体错形返回空容器，单个坏 item 只被跳过，后续 item 继续解析。",
+    entryPoint = "SafeCollectionAdapterFactory / SafeMapAdapterFactory + PrimitiveParsingPolicy.Safe",
+    description = "显式开启 Safe 基础类型策略后，集合和 Map 整体错形返回空容器，单个坏 item 只被跳过，后续 item 继续解析。",
     defaultJson = """{"users":{},"tags":{},"profile":true,"scores":[{},2.5]}""",
     expected = "users/tags/profile 为空，scores 只保留 2.5。"
 ) { json ->
-    val result = GsonSafeParser.parseSafe<CollectionResponse>(json)
+    val result = GsonSafeParser.parseSafe<CollectionResponse>(
+        json = json,
+        config = SafeParserConfig(primitiveParsingPolicy = PrimitiveParsingPolicy.Safe)
+    )
     val value = result.value
     val pass = value?.users == emptyList<User>() &&
             value.tags == emptySet<String>() &&
@@ -254,11 +260,14 @@ internal fun containerRuntimeContractCase(): DemoCase = DemoCase(
     title = "集合 Map 运行时类型契约",
     category = "核心解析",
     entryPoint = "SafeObjectConstructor collection/map default implementations",
-    description = "验证具体集合、自定义集合、ConcurrentMap 和 SortedSet 都保持可赋值的运行时类型，避免 demo 只测 List/Map 接口。",
+    description = "显式开启 Safe 基础类型策略后，验证具体集合、自定义集合、ConcurrentMap 和 SortedSet 都保持可赋值的运行时类型，避免 demo 只测 List/Map 接口。",
     defaultJson = """{"arrayList":["a"],"queue":["b"],"sortedSet":["c"],"numbers":["bad",1],"scores":{"ok":2,"bad":[]}}""",
     expected = "具体容器能正常赋值；自定义容器跳过坏 item；ConcurrentMap 和 SortedSet 根类型也能构造。"
 ) { json ->
-    val concrete = GsonSafeParser.fromJsonSafe<ConcreteContainers>(json)
+    val concrete = GsonSafeParser.fromJsonSafe<ConcreteContainers>(
+        json = json,
+        config = SafeParserConfig(primitiveParsingPolicy = PrimitiveParsingPolicy.Safe)
+    )
     val concurrentType = object : TypeToken<ConcurrentMap<String, Int>>() {}.type
     val concurrent = GsonSafeParser.fromJson<ConcurrentMap<String, Int>>("""{"one":1}""", concurrentType)
     val sortedType = object : TypeToken<SortedSet<String>>() {}.type

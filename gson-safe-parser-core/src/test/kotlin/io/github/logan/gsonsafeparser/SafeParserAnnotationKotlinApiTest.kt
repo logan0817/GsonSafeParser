@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertThrows
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 /**
@@ -123,13 +124,14 @@ class SafeParserAnnotationKotlinApiTest {
             )
         )
 
-        val result = gson.fromJson(
-            """{"native":[{"name":"remote"}]}""",
-            NativeJsonAdapterOnlyContainer::class.java
-        )
+        assertThrows(JsonSyntaxException::class.java) {
+            gson.fromJson(
+                """{"native":[{"name":"remote"}]}""",
+                NativeJsonAdapterOnlyContainer::class.java
+            )
+        }
 
-        assertEquals("local", result.native.name)
-        assertFalse(events.any { event -> event is SafeParserEvent.ShapeCoercion })
+        assertTrue(events.isEmpty())
     }
 
     /**

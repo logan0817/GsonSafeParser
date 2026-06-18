@@ -85,7 +85,9 @@ class SafeParserCollectionMismatchTest {
     @Test
     fun `invalid collection item is skipped without failing the whole list`() {
         // gson 是本用例使用的解析器，默认情况下已经注册 Safe Adapter。
-        val gson = GsonSafeParser.create()
+        val gson = GsonSafeParser.create(
+            SafeParserConfig(primitiveParsingPolicy = PrimitiveParsingPolicy.Safe)
+        )
         // result 是本次解析或转换得到的实际结果，后面的断言都围绕它展开。
         val result = gson.fromJson(
             """{"scores":["null",2.5]}""",

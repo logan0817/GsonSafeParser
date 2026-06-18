@@ -1,5 +1,6 @@
 package io.github.logan.gsonsafeparser.internal
 
+import com.google.gson.JsonParseException
 import io.github.logan.gsonsafeparser.GsonSafeParserLowLevelApi
 import java.io.IOException
 import java.io.InterruptedIOException
@@ -23,6 +24,17 @@ internal inline fun <T> runRecovering(block: () -> T): Result<T> {
 }
 
 /**
+ * 调用方自定义 Adapter 的读取失败不属于 SafeParser 可以局部伪装的错形。
+ *
+ * 用 JsonParseException 做边界标记，让外层 Safe Adapter 继续向外抛出，行为更接近 Gson 原生链路。
+ */
+internal class CallerAdapterReadException(error: Throwable) : JsonParseException(error)
+
+internal fun Throwable.asCallerAdapterReadException(): CallerAdapterReadException {
+    return this as? CallerAdapterReadException ?: CallerAdapterReadException(this)
+}
+
+/**
  * 遇到不应被库隔离的异常时直接外抛。
  *
  * 反射调用会把构造器或方法里的异常包进 `InvocationTargetException`，所以这里会检查
@@ -42,6 +54,7 @@ private fun Throwable.unrecoverableCauseOrNull(): Throwable? {
     while (pending.isNotEmpty()) {
         val current = pending.removeFirst()
         if (!visited.add(current)) continue
+        if (current is CallerAdapterReadException) return current
         if (current is Error || current is CancellationException) return current
         if (current is IOException && current.isUnrecoverableTransportIo()) return current
         if (current is InvocationTargetException) {

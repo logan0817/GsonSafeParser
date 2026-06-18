@@ -140,7 +140,7 @@
     <string name="demo_target_org_json_description">Contains JSONObject and JSONArray. Good for checking org.json adapters.</string>
 
     <string name="demo_policy_default_title">Contract-first default</string>
-    <string name="demo_policy_default_description">Uses the SafeParser 1.0.3 default config. Start here to observe mismatch evidence and default return boundaries.</string>
+    <string name="demo_policy_default_description">Uses the SafeParser 1.0.4 default config. Start here to observe mismatch evidence and default return boundaries.</string>
     <string name="demo_policy_low_interference_title">Low-interference NullOnly</string>
     <string name="demo_policy_low_interference_description">Returns null for many mismatched fields and delegates primitives to Gson, staying closer to native Gson.</string>
     <string name="demo_policy_debug_raw_json_title">Debug raw JSON</string>

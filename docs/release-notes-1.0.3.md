@@ -23,6 +23,7 @@
 11. 事件 `reason` 会在进入 `onEvent`、兼容回调和 `parseSafe` 快照前统一脱敏，避免 token、password、Authorization、Cookie 等敏感片段进入日志。
 12. `mapItemKeyPolicy` 默认值从 `Hash` 收紧为 `Omit`；如果线上聚合仍需要稳定哈希，请显式配置 `MapItemKeyPolicy.Hash`，低熵敏感 key 不建议使用裸哈希。
 13. raw JSON 捕获显式开启时新增 `rawJsonCaptureEnabled` 诊断 warning，提醒只在本地排障或受控诊断链路中使用。
+14. 调用方显式注册的 `TypeAdapter`、`TypeAdapterFactory`、`registerTypeHierarchyAdapter(...)` 和 `@JsonAdapter` 优先保留原生 Gson 链路；自定义 Adapter 自己抛出的异常会向外抛出，不再被伪装成字段兜底。
 
 ## 使用方式
 
@@ -81,17 +82,18 @@ data class ApiResponse(
 4. 根级对象、根级集合、根级对象数组、Map、基础类型和字符串二次解析不参与转换。
 5. `ShapeCoercion` 事件、契约报告、观察者失败报告输出正确。
 6. `ThreadDeath`、`LinkageError`、`CancellationException` 和真实传输 I/O 不被吞掉。
-7. Retrofit builder-first 入口能使用字段级 Safe Adapter；传入 plain Gson 的入口不会偷偷注册字段级转换。
-8. core、retrofit、demo debug 单测。
-9. demo release 单测。
-10. core、retrofit、demo release lint。
-11. demo debug 和 release APK 构建。
-12. `publishToMavenLocal`。
-13. Maven local AAR、POM、sources、Dokka javadoc 和 consumer ProGuard 规则校验。
-14. retrofit POM 中 `okhttp 4.12.0` 和 `okio 3.6.0` 依赖版本与 runtime scope 校验。
-15. OSV 依赖漏洞扫描。
-16. Maven Central 发布失败响应脱敏和 Demo 剪贴板报告脱敏。
-17. SafeParser 事件 reason 脱敏、Map item key 默认省略和显式 Hash 迁移路径。
-18. `maxRawJsonCaptureBytesTooLarge` 与 `rawJsonCaptureEnabled` 诊断。
-19. `releaseToMavenCentral --dry-run`。
-20. `git diff --check`。
+7. 调用方自定义 Adapter 命中、抛错和未命中后的 Safe fallback 路径。
+8. Retrofit builder-first 入口能使用字段级 Safe Adapter；传入 plain Gson 的入口不会偷偷注册字段级转换。
+9. core、retrofit、demo debug 单测。
+10. demo release 单测。
+11. core、retrofit、demo release lint。
+12. demo debug 和 release APK 构建。
+13. `publishToMavenLocal`。
+14. Maven local AAR、POM、sources、Dokka javadoc 和 consumer ProGuard 规则校验。
+15. retrofit POM 中 `okhttp 4.12.0` 和 `okio 3.6.0` 依赖版本与 runtime scope 校验。
+16. OSV 依赖漏洞扫描。
+17. Maven Central 发布失败响应脱敏和 Demo 剪贴板报告脱敏。
+18. SafeParser 事件 reason 脱敏、Map item key 默认省略和显式 Hash 迁移路径。
+19. `maxRawJsonCaptureBytesTooLarge` 与 `rawJsonCaptureEnabled` 诊断。
+20. `releaseToMavenCentral --dry-run`。
+21. `git diff --check`。

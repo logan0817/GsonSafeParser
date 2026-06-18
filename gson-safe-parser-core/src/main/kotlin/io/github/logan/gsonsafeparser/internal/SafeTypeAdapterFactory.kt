@@ -44,6 +44,7 @@ internal class SafeTypeAdapterFactory(
         // rawType 是不带泛型的 Class，新手可以把它理解成“运行时能看到的目标类”。
         if (rawType.name.startsWith("com.google.gson.")) return null
         if (rawType.getAnnotation(SafeParseDelegateToGson::class.java) != null) return null
+        nativeFactories.firstNotNullOfOrNull { factory -> factory.create(gson, type) }?.let { return it }
 
         // 基础类型是最容易被后端返回错形影响的地方，但也允许调用方选择完全交回 Gson。
         if (config.primitiveParsingPolicy == PrimitiveParsingPolicy.Safe) {

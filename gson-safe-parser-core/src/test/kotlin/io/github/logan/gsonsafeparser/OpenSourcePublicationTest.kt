@@ -324,12 +324,12 @@ class OpenSourcePublicationTest {
     }
 
     /**
-     * 开源发布需要保留必要的来源、版权和透明说明。
+     * 开源发布需要保留必要的来源、版权和许可说明。
      *
      * README 只放简短入口，详细信息放在 NOTICE，避免项目介绍被第三方来源说明占据。
      */
     @Test
-    fun `open source notice records required credits and transparency`() {
+    fun `open source notice records required credits without private process artifacts`() {
         val noticeFile = File("../NOTICE")
         val chineseReadme = File("../README.md").readText()
         val englishReadme = File("../README_EN.md").readText()
@@ -342,7 +342,14 @@ class OpenSourcePublicationTest {
         assertTrue(notice.contains("https://github.com/getActivity/GsonFactory"))
         assertTrue(notice.contains("Apache License, Version 2.0"))
         assertTrue(notice.contains("Copyright 2020 Huang JinQun"))
-        assertTrue(notice.contains("AI assistance"))
+        val localProcessNote = "local-process-note"
+        val externalReviewDraft = "external-review-draft"
+        val privateReviewExport = "private-review-export"
+        assertFalse(chineseReadme.contains(localProcessNote))
+        assertFalse(englishReadme.contains(localProcessNote))
+        assertFalse(notice.contains(localProcessNote))
+        assertFalse(notice.contains(externalReviewDraft))
+        assertFalse(notice.contains(privateReviewExport))
     }
 
     /**
@@ -471,8 +478,8 @@ class OpenSourcePublicationTest {
      */
     @Test
     fun `android aar consumer rules include framework keep rules`() {
-        val coreRules = File("consumer-proguard-rules.pro").readText()
-        val retrofitRules = File("../gson-safe-parser-retrofit/consumer-proguard-rules.pro").readText()
+        val coreRules = File("consumer-proguard-rules.pro").readNormalizedText()
+        val retrofitRules = File("../gson-safe-parser-retrofit/consumer-proguard-rules.pro").readNormalizedText()
         val combinedRules = coreRules + "\n" + retrofitRules
 
         assertTrue(combinedRules.contains("-keep class kotlin.Metadata"))
@@ -579,7 +586,7 @@ class OpenSourcePublicationTest {
      */
     @Test
     fun `public parsing kdoc states unrecoverable gson exceptions are thrown`() {
-        val parserEntry = File("src/main/kotlin/io/github/logan/gsonsafeparser/GsonSafeParser.kt").readText()
+        val parserEntry = File("src/main/kotlin/io/github/logan/gsonsafeparser/GsonSafeParser.kt").readNormalizedText()
         val kotlinEntry = File("src/main/kotlin/io/github/logan/gsonsafeparser/SafeParserKotlinApi.kt").readText()
         val publicDocs = parserEntry + "\n" + kotlinEntry
 
@@ -602,7 +609,7 @@ class OpenSourcePublicationTest {
      */
     @Test
     fun `default create entry does not depend on gson builder compatibility snapshot`() {
-        val parserEntry = File("src/main/kotlin/io/github/logan/gsonsafeparser/GsonSafeParser.kt").readText()
+        val parserEntry = File("src/main/kotlin/io/github/logan/gsonsafeparser/GsonSafeParser.kt").readNormalizedText()
         val createEntry = parserEntry.substringAfter("fun create(config: SafeParserConfig = SafeParserConfig()): Gson {")
             .substringBefore("    /**\n     * 检查当前运行环境和配置是否适合接入。")
 
@@ -621,9 +628,9 @@ class OpenSourcePublicationTest {
      */
     @Test
     fun `public api keeps explicit external gson and extensible event boundaries`() {
-        val parserEntry = File("src/main/kotlin/io/github/logan/gsonsafeparser/GsonSafeParser.kt").readText()
-        val configEntry = File("src/main/kotlin/io/github/logan/gsonsafeparser/SafeParserConfig.kt").readText()
-        val retrofitEntry = File("../gson-safe-parser-retrofit/src/main/kotlin/io/github/logan/gsonsafeparser/retrofit/GsonSafeConverterFactory.kt").readText()
+        val parserEntry = File("src/main/kotlin/io/github/logan/gsonsafeparser/GsonSafeParser.kt").readNormalizedText()
+        val configEntry = File("src/main/kotlin/io/github/logan/gsonsafeparser/SafeParserConfig.kt").readNormalizedText()
+        val retrofitEntry = File("../gson-safe-parser-retrofit/src/main/kotlin/io/github/logan/gsonsafeparser/retrofit/GsonSafeConverterFactory.kt").readNormalizedText()
 
         assertTrue(parserEntry.contains("fun parserWithExternalGson("))
         assertTrue(parserEntry.contains("fun diagnostics(\n        gson: Gson"))
@@ -858,4 +865,10 @@ class OpenSourcePublicationTest {
             File(path).readText()
         }
     }
+}
+
+private fun File.readNormalizedText(): String = readText().normalizeLineEndings()
+
+private fun String.normalizeLineEndings(): String {
+    return replace("\r\n", "\n").replace('\r', '\n')
 }

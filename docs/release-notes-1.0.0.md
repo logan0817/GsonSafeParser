@@ -8,7 +8,7 @@
 
 ## 首发能力
 
-1. 字段级安全解析：对象、集合、Map、基础类型、Kotlin data class 默认值和 `org.json` 类型都按配置处理可恢复错形。
+1. 字段级安全解析：对象、集合、Map、Kotlin data class 默认值和 `org.json` 类型按配置处理可恢复错形；基础类型只有显式启用 `PrimitiveParsingPolicy.Safe` 时才使用安全基础值。
 2. Gson 回退边界：Safe Adapter 创建失败、GsonBuilder 兼容信息缺失、不可确认类型和不可恢复异常都会回到 Gson 或继续外抛。
 3. Kotlin API：提供 `fromJsonSafe<T>()`、`parseSafe<T>()`、事件快照和可复用 Parser。
 4. Retrofit 接入：提供 `GsonSafeConverterFactory`，支持空响应策略、raw JSON 有界捕获和超限跳过事件。

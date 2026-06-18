@@ -62,7 +62,7 @@ class SafeParserEdgeCaseTest {
         val numbers: IntList = IntList(),
         val scores: StringIntMap = StringIntMap()
     )
-    /** 测试模型：数组 entry 形式的 Map，value 读取失败时应只跳过当前 entry。 */
+    /** 测试模型：数组 entry 形式的 Map，value 的自定义 Adapter 读取失败时应外抛。 */
     data class ArrayEntryMapContainer(
         val values: Map<String, ThrowingItem> = emptyMap()
     )
@@ -298,6 +298,7 @@ class SafeParserEdgeCaseTest {
             json = """{"values":{"bad":null,"ok":"next"}}""",
             type = ConcurrentNullableMapContainer::class.java,
             config = SafeParserConfig(
+                primitiveParsingPolicy = PrimitiveParsingPolicy.Safe,
                 mapItemKeyPolicy = MapItemKeyPolicy.PlainText,
                 onTypeMismatch = events::add
             )
@@ -337,7 +338,9 @@ class SafeParserEdgeCaseTest {
     @Test
     fun `custom collection and map subclasses resolve inherited generic arguments`() {
         // gson 是本用例使用的解析器，默认情况下已经注册 Safe Adapter。
-        val gson = GsonSafeParser.create()
+        val gson = GsonSafeParser.create(
+            SafeParserConfig(primitiveParsingPolicy = PrimitiveParsingPolicy.Safe)
+        )
 
         // result 是本次解析或转换得到的实际结果，后面的断言都围绕它展开。
         val result = gson.fromJson(
@@ -386,22 +389,22 @@ class SafeParserEdgeCaseTest {
     }
 
     /**
-     * 测试方法说明：验证“map array entry item failure does not break following entries”这个具体行为。
-     * 阅读时可以按准备数据、执行解析、断言结果的顺序跟下来。
+     * 测试方法说明：验证数组 entry 形式 Map value 的自定义 Adapter 抛错时不被伪装成坏 entry 跳过。
      */
     @Test
-    fun `map array entry item failure does not break following entries`() {
+    fun `map array entry item adapter failure is rethrown`() {
         // gson 是本用例使用的解析器，默认情况下已经注册 Safe Adapter。
-        val gson = GsonSafeParser.create()
+        val events = mutableListOf<TypeMismatchEvent>()
+        val gson = GsonSafeParser.create(SafeParserConfig(onTypeMismatch = events::add))
 
-        // result 是本次解析或转换得到的实际结果，后面的断言都围绕它展开。
-        val result = gson.fromJson(
-            """{"values":[["bad",{"value":"bad"}],["ok",{"value":"ok"}]]}""",
-            ArrayEntryMapContainer::class.java
-        )
+        assertThrows(JsonParseException::class.java) {
+            gson.fromJson(
+                """{"values":[["bad",{"value":"bad"}],["ok",{"value":"ok"}]]}""",
+                ArrayEntryMapContainer::class.java
+            )
+        }
 
-        assertEquals("ok", result.values["ok"]?.value)
-        assertFalse(result.values.containsKey("bad"))
+        assertTrue(events.isEmpty())
     }
 
     /**

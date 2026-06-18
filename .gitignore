@@ -50,8 +50,8 @@ signing/
 *.pem
 private-key.asc
 
-# 本地沟通记录、外部文档导出和临时审查材料。
-# 正式文档统一放在 README、README_EN 和 docs/*.md，聊天记录或拖拽报告不进仓库。
+# 本地笔记、外部文档导出和临时审查材料。
+# 正式文档统一放在 README、README_EN 和 docs/*.md，临时材料或拖拽报告不进仓库。
 .obsidian/
 *.docx
 *.pages
