@@ -32,25 +32,29 @@ val config = SafeParserConfig(
 
 ### 常用配置
 
-| 配置项 | 默认值 | 作用 | 适合场景 | 风险和验证 |
-| --- | --- | --- | --- | --- |
-| `fallbackPolicy` | `NullOnly` | 控制集合或 Map 整体错形时返回 `null` 还是空容器。 | 后端偶发把数组或 Map 字段返回成对象、字符串时，用默认值减少误写空数据；业务确认空容器更安全时改 `Default`。 | 空容器可能被业务误判为“接口正常但无数据”。用真实模型覆盖 List、Set、Map 字段错形。 |
-| `emptyResponsePolicy` | `DefaultValueForUnitOrVoidOnly` | 控制 Retrofit 空 body 的返回值。 | `Unit`、`Void` 接口保持低干预；业务模型空 body 需要默认对象或 `null` 时再改。 | 不能隐藏断网、取消、连接重置和 TLS 失败。用空 body 与传输失败分别验证。 |
-| `primitiveParsingPolicy` | `DelegateToGson` | 控制基础类型和 `String` 是否继续交回 Gson。 | 金额、分页、状态码等强语义字段保持默认；只有业务接受安全基础值时改 `Safe`。 | `Safe` 可能把错误数据变成 0、false 或空字符串。上线前用非法字符串、对象、数组覆盖核心字段。 |
-| `complexMapKeySerialization` | `false` | 控制 Map 写出时是否兼容 Gson 复杂 key 的数组 entry 格式。 | Map key 是对象、枚举别名或复杂类型，并且服务端能识别数组 entry 格式时打开。 | 服务端不支持时会改变 JSON 结构。用原生 Gson 与 GsonSafeParser 对照写出结果。 |
-| `useJdkUnsafe` | `false` | 控制 SafeParser 自己是否允许 Unsafe 构造对象。 | 老项目明确依赖 Gson Unsafe 构造，并已经有 release 回归时才打开。 | Unsafe 会绕过构造函数和 `init`。用无无参构造、Kotlin 默认值、非空字段模型验证。 |
-| `skippedPlatformTypePrefixes` | `setOf("android.")` | 跳过平台类型，避免反射解析 Android 系统对象。 | 保留默认即可；只在平台包名扩展时增加。 | 不要放业务模型包名前缀，否则字段级兜底会失效。用 diagnostics 和真实 JSON 确认模型没有被跳过。 |
-| `nullValuePolicy` | `WriteExplicitNulls` | 控制后端显式 `null` 写入 nullable 字段的策略。 | 需要区分“字段缺失”和“后端明确返回 null”时保留默认。 | 改动会影响 Kotlin nullable 默认值语义。用字段缺失与显式 `null` 两类 JSON 对照。 |
-| `requiredConstructorParameterPolicy` | `GsonCompatible` | 控制缺失必填构造参数时偏兼容还是强契约。 | 老项目保持默认；新接口、支付、签名、鉴权模型建议评估 `Strict`。 | `Strict` 会暴露更多接口问题，也可能增加调用方异常处理。用缺字段、显式 `null`、未知枚举验证。 |
-| `mapItemKeyPolicy` | `Omit` | 控制事件和报告中是否输出 Map item key。 | 线上默认 `Omit`；需要聚合时用 `Hash`；联调时可临时明文。 | 低熵 key、手机号、用户 ID 即使哈希也可能被枚举。检查日志、监控和报告脱敏结果。 |
-| `captureRawJsonInCallbacks` | `false` | 控制事件回调是否携带 raw JSON 片段。 | 只在联调、CI 复盘或灰度排障时临时打开。 | raw JSON 可能含敏感数据。上线前确认关闭或设置合理上限。 |
-| `maxRawJsonCaptureBytes` | `1 MiB` | 控制 raw JSON 捕获上限。 | 大响应排障可临时调大，小内存设备可调小。 | 上限过大增加内存与隐私风险。用 gzip、chunked、未知长度响应验证 `captureSkipReason`。 |
+| 配置项 | 说明 |
+| --- | --- |
+| `fallbackPolicy` | 默认 `NullOnly`。集合或 Map 整体错形时返回 `null`；业务确认空容器更安全时再改 `Default`。 |
+| `emptyResponsePolicy` | 默认 `DefaultValueForUnitOrVoidOnly`。`Unit`、`Void` 空 body 低干预；业务模型空 body 需要默认对象或 `null` 时再改。 |
+| `primitiveParsingPolicy` | 默认 `DelegateToGson`。基础类型和 `String` 继续交回 Gson；业务接受安全基础值时才改 `Safe`。 |
+| `complexMapKeySerialization` | 默认 `false`。Map key 是对象、枚举别名或复杂类型，并且服务端能识别数组 entry 时再打开。 |
+| `useJdkUnsafe` | 默认 `false`。SafeParser 自己不允许 Unsafe；老项目明确依赖 Gson Unsafe 构造时才打开。 |
+| `skippedPlatformTypePrefixes` | 默认 `setOf("android.")`。跳过平台类型；不要放业务模型包名前缀，否则字段级兜底会失效。 |
+| `nullValuePolicy` | 默认 `WriteExplicitNulls`。需要区分“字段缺失”和“后端明确返回 null”时保留默认。 |
+| `requiredConstructorParameterPolicy` | 默认 `GsonCompatible`。老项目保持默认；新接口、支付、签名、鉴权模型可以评估 `Strict`。 |
+| `mapItemKeyPolicy` | 默认 `Omit`。线上不输出 Map item key；需要聚合时用 `Hash`，联调时才临时明文。 |
+| `captureRawJsonInCallbacks` | 默认 `false`。只在联调、CI 复盘或灰度排障时临时打开。 |
+| `maxRawJsonCaptureBytes` | 默认 `1 MiB`。大响应排障可临时调大，小内存设备可调小。 |
+
+验证配置时，用真实模型覆盖 List、Set、Map 字段错形、空 body、传输失败、缺字段、显式 `null`、未知枚举和基础类型非法值。打开 raw JSON 或 Map key 输出时，还要检查日志和契约报告的脱敏结果。
 
 ### 可选能力开关
 
-| 能力 | 默认状态 | 作用 | 适合场景 | 不适合场景 |
-| --- | --- | --- | --- | --- |
-| JSON 形态转换 | `Disabled` | 把对象字段收到的数组恢复成第 1 个对象，或把集合字段收到的对象包装成单元素容器。 | 后端字段 object/array 偶发漂移，并且业务接受“取第 1 个”或“包装成 1 个”的明确规则。 | 签名载荷、支付金额、鉴权信息、强契约字段不建议开启；这些字段应让错形暴露出来。 |
+| 能力 | 说明 |
+| --- | --- |
+| JSON 形态转换 | 默认关闭。只在 object/array 漂移已确认，且业务接受明确恢复规则时开启。 |
+
+签名载荷、支付金额、鉴权信息、强契约字段不建议开启 JSON 形态转换；这些字段应该让错形暴露出来。
 
 ### raw JSON 捕获规则
 
@@ -74,12 +78,12 @@ val config = SafeParserConfig(
 
 默认推荐 `GsonCompatible + useJdkUnsafe = false`。这组配置适合直接接入已有 Gson 项目：SafeParser 自己不使用 Unsafe，Gson 回退路径保持原生行为。
 
-| 配置组合 | SafeParser 自己是否允许 Unsafe | Gson 回退路径是否允许 Unsafe | 适合场景 |
-| --- | --- | --- | --- |
-| `GsonCompatible + useJdkUnsafe = false` | 不允许。 | 保留 Gson 原生行为。 | 默认配置，适合大多数项目。 |
-| `GsonCompatible + useJdkUnsafe = true` | 允许。 | 保留 Gson 原生行为。 | 仅用于项目明确依赖原生 Gson Unsafe 构造的场景。 |
-| `Strict + useJdkUnsafe = false` | 不允许。 | 不允许。 | 新接口或强契约场景。 |
-| `Strict + useJdkUnsafe = true` | 不允许。 | 不允许。 | 不建议使用；`Strict` 优先级最高，`useJdkUnsafe = true` 会被忽略。 |
+| 配置组合 | 说明 |
+| --- | --- |
+| `GsonCompatible + useJdkUnsafe = false` | 默认配置。SafeParser 自己不允许 Unsafe，Gson 回退路径保持原生行为，适合大多数项目。 |
+| `GsonCompatible + useJdkUnsafe = true` | 仅用于项目明确依赖原生 Gson Unsafe 构造的场景；Gson 回退路径仍保持原生行为。 |
+| `Strict + useJdkUnsafe = false` | 新接口或强契约场景。Strict 下 SafeParser 和 Gson 回退路径都不允许 Unsafe。 |
+| `Strict + useJdkUnsafe = true` | 不建议使用。`Strict` 优先级最高，`useJdkUnsafe = true` 会被忽略。 |
 
 推荐用法：
 

@@ -105,12 +105,14 @@ val result = GsonSafeParser.parseSafe<ApiResponse>(json)
 
 入口选择：
 
-| 需求 | 推荐入口 | 适合场景 | 失败先查 |
-| --- | --- | --- | --- |
-| 只要字段级兜底 | `GsonSafeParser.create()` 或 `GsonBuilder.enableSafeParser()`。 | 没有观测需求，只想让对象、集合、Map 字段错形不拖垮外层 Bean。 | 模型是否被混淆、类型是否被 `@SafeParseDelegateToGson` 或自定义 Adapter 接管。 |
-| 要解析结果和事件快照 | `GsonSafeParser.parseSafe<T>()`。 | 想把字段 path、实际 JSON 形状和兜底动作记录到日志、监控或契约报告。 | 是否真的走了 `parseSafe`，以及回调里是否过滤了事件。 |
-| 要复用同一套配置 | `GsonSafeParser.parser(config)`。 | Repository、数据源、批量解析任务里高频解析同一类接口。 | Parser 是否被重复创建，配置是否和线上预期一致。 |
-| 已有外部 Gson | 先在 Builder 上 `.enableSafeParser(config)`，再用 `parserWithExternalGson(gson, config)`。 | App 已统一维护 Gson，但还想使用 `parseSafe` 事件快照。 | `GsonSafeParser.diagnostics(gson)` 是否显示 Safe Adapter 已注册。 |
+| 需求 | 推荐入口与排查点 |
+| --- | --- |
+| 只要字段级兜底 | 用 `GsonSafeParser.create()` 或 `GsonBuilder.enableSafeParser()`，让对象、集合、Map 字段错形不拖垮外层 Bean。 |
+| 要解析结果和事件快照 | 用 `GsonSafeParser.parseSafe<T>()`。适合把字段 path、实际 JSON 形状和兜底动作记录到日志、监控或契约报告；失败先查是否真的走了 `parseSafe`。 |
+| 要复用同一套配置 | 用 `GsonSafeParser.parser(config)`。适合 Repository、数据源、批量解析任务；失败先查 Parser 是否被重复创建，以及配置是否和线上一致。 |
+| 已有外部 Gson | 创建 Gson 前先在 Builder 上 `.enableSafeParser(config)`，再用 `parserWithExternalGson(gson, config)`。 |
+
+入口不生效时，先查模型是否被混淆、类型是否被 `@SafeParseDelegateToGson` 或自定义 Adapter 接管、是否真的走了 `parseSafe`，以及 `GsonSafeParser.diagnostics(gson)` 是否显示 Safe Adapter 已注册。
 
 异常边界：
 
@@ -219,12 +221,14 @@ Parser 和 Gson 都可以复用，也可以作为单例、DI 对象或 Repositor
 
 外部 Gson 的规则请按这张表判断：`parserWithExternalGson(gson, config)` 不会自动给外部 Gson 注册 Safe Adapter。
 
-| 场景 | 正确做法 | 失败表现 | 怎么验证 |
-| --- | --- | --- | --- |
-| 外部 Gson 需要字段级兜底 | 在创建这份 Gson 前，对同一个 `GsonBuilder` 调用 `.enableSafeParser(config)`。 | 对象字段收到数组时仍按原生 Gson 抛异常，外层 Bean 无法继续解析。 | 调用 `GsonSafeParser.diagnostics(gson)`，确认字段级 Safe Adapter 已注册。 |
-| 只想复用已有 Gson 做 `parseSafe` 事件快照 | 使用 `parserWithExternalGson(gson, config)` 包装它。 | `parseSafe` 有事件容器，但字段级兜底取决于这份 Gson 创建时是否已经注册 Safe Adapter。 | 用 `{"data":[]}` 这类字段错形 JSON 跑一次真实模型。 |
-| `parserWithExternalGson(gson, config)` 的 config 生效范围 | 主要控制 raw JSON 捕获、显式 `PrimitiveParsingPolicy.Safe` 下的根基础类型兜底和 `parseSafe` 事件快照。 | 以为传入新 config 就能改变外部 Gson 内部字段级 Adapter 的回调。 | 字段级 Adapter 的事件回调归属归创建 Gson 时传给 `.enableSafeParser(...)` 的配置。 |
-| 多线程解析共享同一个 Parser 或 Gson | 回调里写入的外部集合、日志缓冲或指标容器由调用方保证线程安全。 | 并发解析时日志丢失、顺序错乱或外部集合异常。 | 在并发单测里使用线程安全队列或指标对象承接回调。 |
+| 场景 | 正确做法与验证 |
+| --- | --- |
+| 外部 Gson 需要字段级兜底 | 创建这份 Gson 前，对同一个 `GsonBuilder` 调用 `.enableSafeParser(config)`。 |
+| 只想复用已有 Gson 做 `parseSafe` 事件快照 | 使用 `parserWithExternalGson(gson, config)` 包装它；字段级兜底仍取决于这份 Gson 的创建方式。 |
+| `parserWithExternalGson(gson, config)` 的 config 生效范围 | 控制 raw JSON 捕获、根基础类型兜底和 `parseSafe` 事件快照。 |
+| 多线程解析共享同一个 Parser 或 Gson | 回调里写入的外部集合、日志缓冲或指标容器由调用方保证线程安全。并发单测里使用线程安全队列或指标对象承接回调。 |
+
+外部 Gson 场景建议用 `GsonSafeParser.diagnostics(gson)` 确认 Safe Adapter 已注册，并用 `{"data":[]}` 这类字段错形 JSON 跑一次真实模型。字段级 Adapter 的事件回调归属：创建 Gson 时传给 `.enableSafeParser(...)` 的配置。
 
 ## 7. Retrofit 接入
 
@@ -281,11 +285,11 @@ val retrofit = Retrofit.Builder()
 
 这里容易误解，按当前情况选入口就行：
 
-| 当前情况 | 推荐写法 | 原因 |
-| --- | --- | --- |
-| 还在配置 `GsonBuilder` | `GsonSafeConverterFactory.create(builder, config)` | 工厂会在 `builder.create()` 前注册 Safe Adapter。 |
-| 已经有统一维护的 `Gson` | 先在创建它的 `GsonBuilder` 上调用 `.enableSafeParser(config)`，再传给 `create(gson, config)` | `Gson` 创建后配置已经固定，库不会偷偷改这个实例。 |
-| 只写 `create(gson, config)` | 只复用这份 `Gson`，并使用 Retrofit 层的空响应、raw JSON 和事件配置 | 这不会自动给外部 Gson 注册 Safe Adapter。 |
+| 当前情况 | 推荐写法与原因 |
+| --- | --- |
+| 还在配置 `GsonBuilder` | 用 `GsonSafeConverterFactory.create(builder, config)`。工厂会在 `builder.create()` 前注册 Safe Adapter。 |
+| 已经有统一维护的 `Gson` | 先在创建它的 `GsonBuilder` 上调用 `.enableSafeParser(config)`，再传给 `create(gson, config)`。`Gson` 创建后配置已经固定，库不会偷偷改这个实例。 |
+| 只写 `create(gson, config)` | 只会复用这份 `Gson`，并使用 Retrofit 层的空响应、raw JSON 和事件配置；它不会自动给外部 Gson 注册 Safe Adapter。 |
 
 ## 8. CI 自检
 

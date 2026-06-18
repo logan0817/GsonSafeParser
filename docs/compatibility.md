@@ -14,32 +14,32 @@
 
 ## 1. 版本矩阵
 
-| 内容 | 当前验证版本 | 限制类型 | 低版本风险 | 建议 |
-| --- | --- | --- | --- | --- |
-| 发布产物 | Android AAR | 硬边界 | 纯 JVM 项目不能按 Android AAR 方式消费。 | Android 项目直接接入；纯 JVM 需要单独产物。 |
-| 库版本 | `1.0.4` | 当前稳定发布版本 | `1.0.0` 是首个公开兼容基线，低于 `1.0.0` 的内部迭代版本不作为公开兼容承诺。 | 新接入使用 `1.0.4`。 |
-| Android `minSdk` | `minSdk 23` | 硬边界 | App 低于 23 时，AAR 合并或运行验证可能失败。 | 业务 App 保持 `minSdk 23` 或更高。 |
-| Android `compileSdk` | `compileSdk 36` | 构建边界 | 低 `compileSdk` 可能遇到 AAR metadata、Lint 或工具链差异。 | 推荐 `compileSdk 36`；低于 36 必须跑完整验证。 |
-| JDK | `JDK 17` | 硬边界 | JDK 8 / 11 构建链消费 Java 17 产物风险高。 | 使用 JDK 17 或更高版本。 |
-| Kotlin 插件 | `Kotlin 2.0.21` | 编译兼容边界 | 老 Kotlin 编译器读取 Kotlin 2.x metadata 时可能失败，尤其是 reified API、扩展函数和默认参数。 | Kotlin 项目推荐 `Kotlin 2.0.21` 或更高。 |
-| Kotlin runtime | `Kotlin 2.0.21` 系列 | 运行边界 | 强制降级 stdlib 可能出现运行期方法缺失或 metadata 行为差异。 | 不要强制降级 Kotlin runtime。 |
-| `kotlin-reflect` | `kotlin-reflect 2.0.21` | 功能依赖 | Kotlin data class 默认值、主构造参数和非空字段兜底可能失效。 | 保持 `kotlin-reflect 2.0.21`，或与项目 Kotlin 主版本一致后完整回归。 |
-| Gson | `Gson 2.13.2` | 核心依赖 | 强制降级 Gson 可能导致 GsonBuilder 内部字段读取失败，Safe Adapter 降级回 Gson 原生链路。 | 使用 `Gson 2.13.2`；覆盖版本后先跑 `diagnostics()`。 |
-| Retrofit | `Retrofit 2.8.1` | Retrofit 模块依赖 | 强制更低版本可能出现 Converter API 差异。 | Retrofit 场景不要低于 `2.8.1`。 |
-| `converter-gson` | `2.8.1` | Retrofit 内部实现 | 与 Retrofit 主版本不一致时，转换链路行为可能不同。 | 保持 Retrofit 和 converter-gson 版本一致。 |
-| OkHttp | `OkHttp 4.12.0` | Retrofit 网络栈安全基线 | Retrofit 2.8.1 的传递依赖会落到 OkHttp 3.14.x；强制降级会重新暴露旧网络栈风险。 | 让 Gradle 解析到 `4.12.0` 或更高，并用 `dependencyInsight --dependency okhttp` 核对。 |
-| Okio | `Okio 3.6.0` | Retrofit 网络栈安全基线 | Okio 1.x 与 OkHttp 4.x 运行组合不符合当前验证矩阵。 | 让 Gradle 解析到 `3.6.0` 或更高，并用 `dependencyInsight --dependency okio` 核对。 |
-| R8 / ProGuard | AAR 内置框架规则 | release 稳定边界 | 业务模型字段名、构造方法、Kotlin Metadata 被裁剪后，Gson 绑定会失真。 | release 包必须配置业务模型 keep 规则。 |
+| 内容 | 当前验证版本与含义 |
+| --- | --- |
+| 发布产物 | Android AAR。纯 JVM 项目不能按普通 JVM jar 消费，Android 项目可直接接入。 |
+| 库版本 | `1.0.4` 是当前稳定发布版本；`1.0.0` 是首个公开兼容基线。 |
+| Android `minSdk` | `minSdk 23` 是硬边界。低于 23 时，AAR 合并或运行验证可能失败。 |
+| Android `compileSdk` | `compileSdk 36` 是构建边界。低于 36 必须跑完整验证。 |
+| JDK | `JDK 17` 是硬边界。JDK 8 / 11 构建链消费 Java 17 产物风险高。 |
+| Kotlin 插件 | `Kotlin 2.0.21` 是编译兼容基线。老编译器可能读不稳 Kotlin 2.x metadata。 |
+| Kotlin runtime | `Kotlin 2.0.21` 系列是运行基线。不要强制降级 Kotlin runtime。 |
+| `kotlin-reflect` | `kotlin-reflect 2.0.21` 是功能依赖。缺失后 data class 默认值和非空字段兜底可能失效。 |
+| Gson | `Gson 2.13.2` 是核心依赖。强制降级可能让 Safe Adapter 回退到原生 Gson。 |
+| Retrofit | `Retrofit 2.8.1` 是 Retrofit 模块依赖。更低版本可能有 Converter API 差异。 |
+| `converter-gson` | `2.8.1` 应与 Retrofit 主版本保持一致。 |
+| OkHttp | `OkHttp 4.12.0` 是网络栈安全基线。让 Gradle 解析到 `4.12.0` 或更高。 |
+| Okio | `Okio 3.6.0` 是网络栈安全基线。让 Gradle 解析到 `3.6.0` 或更高。 |
+| R8 / ProGuard | AAR 内置框架规则已提供基础支持，但业务模型仍要补 keep 规则。 |
 
 ## 2. 低版本项目接入判断
 
-| 项目状态 | 是否建议直接上线 | 原因 | 处理方式 |
-| --- | --- | --- | --- |
-| `minSdk >= 23`，JDK 17，Gson 2.13.2 | 可以进入灰度 | 符合当前验证矩阵。 | 跑 debug/release 对照和业务 JSON 回归。 |
-| Kotlin 低于 2.0 | 不建议直接上线 | Kotlin metadata 和 reified API 兼容性不确定。 | 优先升级 Kotlin；短期内用 `Class` / `Type` API 并跑完整回归。 |
-| 强制降级 Gson | 不建议直接上线 | Safe Adapter 依赖 GsonBuilder 内部字段快照，旧 Gson 可能缺字段。 | 调用 `GsonSafeParser.diagnostics()` 和 `integrationCheck()`。 |
-| `minSdk < 23` | 不建议接入当前 AAR | 当前库没有声明支持低于 23 的 Android 运行环境。 | 升级业务 `minSdk`，或讨论是否需要新兼容目标。 |
-| release 开启 R8 | 可以上线但不能零配置 | 业务模型规则不属于库能自动推断的范围。 | 按 [Android 混淆配置](android-proguard.md) 配置 keep。 |
+| 项目状态 | 是否建议直接上线与原因 |
+| --- | --- |
+| `minSdk >= 23`，JDK 17，Gson 2.13.2 | 可以进入灰度。它符合当前验证矩阵，后续跑 debug/release 对照和业务 JSON 回归即可。 |
+| Kotlin 低于 2.0 | 不建议直接上线。Kotlin metadata 和 reified API 兼容性不确定，先升级 Kotlin 再跑完整回归。 |
+| 强制降级 Gson | 不建议直接上线。先跑 `GsonSafeParser.diagnostics()` 和 `integrationCheck()`，确认 Safe Adapter 没有回退风险。 |
+| `minSdk < 23` | 不建议接入当前 AAR。这个库没有声明支持低于 23 的 Android 运行环境。 |
+| release 开启 R8 | 可以上线，但不能零配置。业务模型规则不属于库能自动推断的范围，必须按 [Android 混淆配置](android-proguard.md) 配置 keep。 |
 
 ## 3. Retrofit 版本说明
 

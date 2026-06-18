@@ -8,18 +8,18 @@ This page helps adopters choose the right GsonSafeParser entry point and underst
 
 Choose by what you already own: from scratch, use `GsonSafeParser.create(config)`; with an existing `GsonBuilder`, use `GsonBuilder.enableSafeParser(config)` or `GsonSafeParser.parser(builder, config)`; with an already-created `Gson`, first confirm Safe Adapter registration and then use `parserWithExternalGson(gson, config)`; for Retrofit, use `GsonSafeConverterFactory.create(...)`.
 
-| API | Use Case | Returns Events | Reuses Gson | Boundary |
-| --- | --- | --- | --- | --- |
-| `GsonSafeParser.create(config)` | Create a Gson instance with Safe Adapter registration | No | The returned Gson is reusable | Field-level fallback works; direct `gson.fromJson(...)` keeps Gson root exception behavior |
-| `GsonBuilder.enableSafeParser(config)` | Existing project-owned `GsonBuilder` | No | Caller owns Builder / Gson | Registers Safe Adapter before `create()` and preserves Builder config where possible |
-| `GsonSafeParser.parser(config)` | Repository, data source, or batch parsing | `parseSafe` returns events | Yes | Creates one Gson internally |
-| `GsonSafeParser.parser(builder, config)` | Reuse Builder config and Parser | `parseSafe` returns events | Yes | Recommended when the app owns a shared GsonBuilder |
-| `GsonSafeParser.parserWithExternalGson(gson, config)` | Wrap an already-created Gson | `parseSafe` returns events | Yes | Does not auto-register Safe Adapter |
-| `GsonSafeParser.fromJson(json, type, config)` | Low-frequency parsing or tests | No | No | Creates Gson from config per call |
-| `GsonSafeParser.fromJson(gson, json, type, config)` | Parse with caller-provided Gson | No | Uses the provided Gson | Field-level fallback depends on whether that Gson was created with Safe Adapter registration |
-| `GsonSafeParser.fromJsonSafe<T>(json, config)` | Kotlin caller, parsed value only | No | No | Reified Kotlin API |
-| `GsonSafeParser.parseSafe<T>(json, config)` | Kotlin caller, value plus event snapshot | Yes | No | Good for logging, monitoring, and contract reports |
-| `GsonSafeConverterFactory.create(...)` | Retrofit response conversion | Observed through config callbacks | Depends on creation path | Handles JSON conversion, empty body policy, and raw JSON observation; network failures stay with Retrofit / OkHttp |
+| API | Use case and boundary |
+| --- | --- |
+| `GsonSafeParser.create(config)` | Creates a Gson instance with Safe Adapter registration. The returned Gson is reusable; direct `gson.fromJson(...)` still keeps Gson root exception behavior. |
+| `GsonBuilder.enableSafeParser(config)` | Use when the project already owns a `GsonBuilder`. It registers Safe Adapters before `create()` and preserves Builder config where possible. |
+| `GsonSafeParser.parser(config)` | Use in repositories, data sources, or batch parsing. The Parser creates one Gson internally, and `parseSafe` returns events. |
+| `GsonSafeParser.parser(builder, config)` | Use when both Builder config and Parser reuse matter. Recommended when the app owns a shared GsonBuilder. |
+| `GsonSafeParser.parserWithExternalGson(gson, config)` | Wraps an already-created Gson and returns events from `parseSafe`; it does not auto-register Safe Adapter. |
+| `GsonSafeParser.fromJson(json, type, config)` | Use for low-frequency parsing or tests. It creates Gson from config per call and does not return events. |
+| `GsonSafeParser.fromJson(gson, json, type, config)` | Parses with caller-provided Gson. Field-level fallback depends on whether that Gson was created with Safe Adapter registration. |
+| `GsonSafeParser.fromJsonSafe<T>(json, config)` | Kotlin convenience entry for parsed values only; the reified API is Kotlin-only. |
+| `GsonSafeParser.parseSafe<T>(json, config)` | Kotlin convenience entry for value plus event snapshot. Good for logging, monitoring, and contract reports. |
+| `GsonSafeConverterFactory.create(...)` | Retrofit response conversion entry. It handles JSON conversion, empty bodies, and raw JSON observation; network failures stay with Retrofit / OkHttp. |
 
 ## 2. Minimal Usage
 
@@ -104,7 +104,7 @@ val retrofit = Retrofit.Builder()
 | One bad Map entry | Skip that entry and continue reading other entries | Map item keys are omitted by default |
 | Primitive field mismatch | Delegates to Gson by default; read failures are thrown and do not emit SafeParser events | Safe primitive defaults and events apply only when `PrimitiveParsingPolicy.Safe` is enabled |
 | Safe Adapter creation failure | Emits an event, then delegates to Gson | Prevents the extension layer from becoming a new crash source |
-| Caller-registered `TypeAdapter`, `TypeAdapterFactory`, `registerTypeHierarchyAdapter(...)`, or `@JsonAdapter` matches | Uses the caller adapter first | Exceptions thrown by custom adapters are thrown outward, not disguised as field fallback |
+| Caller-registered custom adapter matches | Uses the caller adapter first | Exceptions from `TypeAdapter`, `TypeAdapterFactory`, `registerTypeHierarchyAdapter(...)`, or `@JsonAdapter` are thrown outward |
 | Class-level `@JsonAdapter` or `@SafeParseDelegateToGson` | Delegates to Gson | Use this for strict-contract or custom parsing types |
 | JSON syntax error | Rethrown | Not converted into defaults |
 | `Error`, `ThreadDeath`, `LinkageError`, `CancellationException` | Rethrown | VM, thread, class-loading, and cancellation signals are not swallowed |

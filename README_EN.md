@@ -85,25 +85,27 @@ The default config is meant for existing Gson projects. Before integrating, reme
 
 ### Default Config Quick Reference
 
-| Config | Default | What it controls | When to change it | How to verify |
-| --- | --- | --- | --- | --- |
-| `fallbackPolicy` | `FallbackPolicy.NullOnly` | Whether whole collection or Map shape mismatches return `null` or empty containers. | Change to `FallbackPolicy.Default` only when empty collections and empty maps mean "no data" in your business logic. | Feed object or string JSON into List, Set, and Map fields, then check field values and events. |
-| `primitiveParsingPolicy` | `PrimitiveParsingPolicy.DelegateToGson` | Whether Int, Long, Boolean, String, and similar values delegate to Gson. | Change to `PrimitiveParsingPolicy.Safe` only when the business accepts invalid primitives being recovered. | Try invalid strings, objects, and arrays for primitive fields; default should throw or explicit Safe should emit events. |
-| `emptyResponsePolicy` | `EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly` | Return values for empty Retrofit bodies. | Change when empty model bodies should return a default object or `null`. | Cover `Unit`, `Void`, and business model endpoints with empty bodies. |
-| `useJdkUnsafe` | `false` | Whether SafeParser itself may construct objects with Unsafe. | Enable only when the project explicitly depends on native Gson Unsafe construction. | Run release regressions with models that have no no-arg constructor and Kotlin defaults. |
-| `requiredConstructorParameterPolicy` | `RequiredConstructorParameterPolicy.GsonCompatible` | Whether missing required constructor parameters stay Gson-compatible or fail as strict contract errors. | Switch to `Strict` for new APIs where missing fields, `null`, or unknown enums should be treated as contract failures. | Test missing fields, explicit `null`, and unknown enums on real models. |
-| `mapItemKeyPolicy` | `MapItemKeyPolicy.Omit` | Whether events include Map item keys. | Use `Hash` for production aggregation or plaintext for debugging; avoid output for sensitive or low-entropy keys. | Inspect logs and contract reports to confirm user identifiers are not leaked. |
+| Config | Default and guidance |
+| --- | --- |
+| `fallbackPolicy` | Default: `FallbackPolicy.NullOnly`. Whole collection or Map shape mismatches do not become empty containers unless the business treats empty collections or maps as "no data". |
+| `primitiveParsingPolicy` | Default: `PrimitiveParsingPolicy.DelegateToGson`. Int, Long, Boolean, String, and similar values stay with Gson unless invalid primitive recovery is explicitly accepted. |
+| `emptyResponsePolicy` | Default: `EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly`. Empty Retrofit bodies use defaults only for `Unit` and `Void`; model bodies must opt into default objects or `null`. |
+| `useJdkUnsafe` | Default: `false`. SafeParser itself does not use Unsafe construction. Enable it only for projects that knowingly depend on native Gson Unsafe behavior. |
+| `requiredConstructorParameterPolicy` | Default: `RequiredConstructorParameterPolicy.GsonCompatible`. Use `Strict` only when missing fields, `null`, or unknown enums are contract failures. |
+| `mapItemKeyPolicy` | Default: `MapItemKeyPolicy.Omit`. Production events omit Map item keys; use `Hash` for aggregation, and plaintext only during short debugging sessions. |
+
+Before changing config, test real models with field mismatches, empty bodies, missing fields, and explicit `null`. For Map keys or raw JSON, also inspect logs, metrics, and reports for identifier leaks.
 
 JSON shape coercion defaults to `ShapeCoercionPolicy.Disabled`. Enable `ShapeCoercionPolicy.ObjectAndCollection` or field-level `@SafeParseShapeCoercion` only when backend object/array drift is known and the business accepts an explicit recovery rule. See [Configuration](docs/en/configuration.md) for the full config reference.
 
 ### Fixed Boundaries
 
-| Scenario | Default handling | Why | Next action |
-| --- | --- | --- | --- |
-| Object field receives `[]`, `""`, or `1` | Returns `null` or keeps the constructed field default; the outer object keeps parsing. | A field-level mismatch can be isolated safely. | Use `parseSafe<T>()` to inspect the event path and report it to the backend. |
-| Root object receives `[]`, `""`, or `1` | Root-level failures keep Gson boundaries and are not disguised as complete default objects. | There is no outer object to isolate, and hiding root failures can mask protocol errors. | Separate empty responses, syntax errors, and API contract failures at the call site. |
-| Primitive / `String` field receives `{}`, `[]`, or invalid strings | Delegates to the native Gson adapter by default and throws on failure. | Primitive values often drive money, state, or paging logic, so silent changes are risky. | Opt into `PrimitiveParsingPolicy.Safe` only after business review. |
-| Caller-owned custom adapter throws | Exceptions thrown by those custom adapters are thrown outward, not disguised as field fallback. | The caller explicitly owns that type's Gson behavior. | Handle recoverable errors inside the custom adapter, or delegate the type back to native Gson. |
+| Scenario | Default handling and next action |
+| --- | --- |
+| Object field receives `[]`, `""`, or `1` | Returns `null` or keeps the constructed field default while the outer object keeps parsing. Use `parseSafe<T>()` to inspect the event path and report it to the backend. |
+| Root object receives `[]`, `""`, or `1` | Keeps Gson root-level boundaries and is not disguised as a complete default object. Separate empty responses, syntax errors, and API contract failures at the call site. |
+| Primitive / `String` field receives `{}`, `[]`, or invalid strings | Delegates to the native Gson adapter by default and throws on failure. Opt into `PrimitiveParsingPolicy.Safe` only after business review. |
+| Caller-owned custom adapter throws | Exceptions thrown by those custom adapters go outward, not into field fallback. Handle recoverable errors inside the custom adapter, or delegate the type back to native Gson. |
 
 ## Installation
 
@@ -313,11 +315,11 @@ This form reuses the existing Gson and keeps Retrofit-level empty response, raw 
 
 Choose the entry by what you currently have:
 
-| Current state | Recommended usage | Why |
-| --- | --- | --- |
-| You still have a `GsonBuilder` | `GsonSafeConverterFactory.create(builder, config)` | The factory registers Safe Adapters before `builder.create()`. |
-| You already own a shared `Gson` | Call `.enableSafeParser(config)` on the `GsonBuilder` that creates it, then pass the final Gson to `create(gson, config)` | A created `Gson` has fixed configuration, and the library will not secretly mutate it. |
-| You only call `create(gson, config)` | Reuses that Gson and applies Retrofit-level empty response, raw JSON, and event config | This does not automatically register Safe Adapter on the external Gson. |
+| Current state | Recommended usage and reason |
+| --- | --- |
+| You still have a `GsonBuilder` | Use `GsonSafeConverterFactory.create(builder, config)`. The factory registers Safe Adapters before `builder.create()`. |
+| You already own a shared `Gson` | Enable SafeParser on the `GsonBuilder` that creates it, then pass the final Gson to `create(gson, config)`. The library will not mutate a created Gson. |
+| You only call `create(gson, config)` | This reuses that Gson and applies Retrofit-level empty response, raw JSON, and event config. It does not register Safe Adapter on the external Gson. |
 
 Use `GsonSafeParser.diagnostics(gson)` if you are not sure whether an external Gson has field-level safe parsing enabled.
 
@@ -353,11 +355,11 @@ val debug = SafeParserConfig.debug()
 val lowInterference = SafeParserConfig.lowInterference()
 ```
 
-| Preset | Best for | Main behavior | Trade-off |
-| --- | --- | --- | --- |
-| `production()` | Default production traffic. | Observes events, omits Map item keys by default, and does not attach full raw JSON. | Enough signals for operations with lower memory and privacy risk. |
-| `debug()` | Integration testing and API troubleshooting. | Uses the production read policy but attaches bounded raw JSON. | Easier diagnosis, not recommended for long-term production use. |
-| `lowInterference()` | Gradual rollout and low-interference adoption. | Whole-field, collection, and Map mismatches prefer `null`; primitives delegate to native Gson. | Closer to Gson, but fewer safe default values. |
+| Preset | Notes |
+| --- | --- |
+| `production()` | Default production traffic. Observes events, omits Map item keys, and does not attach full raw JSON. |
+| `debug()` | Integration testing and API troubleshooting. It uses the production read policy but attaches bounded raw JSON, so avoid long-term production use. |
+| `lowInterference()` | Gradual rollout or low-interference adoption. Whole-field, collection, and Map mismatches prefer `null`; primitives delegate to native Gson. |
 
 ## Annotations
 
@@ -420,7 +422,15 @@ Full documentation index:
 | Reference | [Configuration](docs/en/configuration.md), [Mismatch Capability Matrix](docs/en/mismatch-capability-matrix.md), [Compatibility](docs/en/compatibility.md), [Troubleshooting](docs/en/troubleshooting.md) |
 | Android | [Android ProGuard](docs/en/android-proguard.md), [Demo App](docs/en/demo-app.md) |
 | Community | [Contributing](CONTRIBUTING.md), [Security Policy](SECURITY.md), [Code of Conduct](CODE_OF_CONDUCT.md) |
-| Releases | [1.0.4 Release Notes](docs/en/release-notes-1.0.4.md), [1.0.3 Release Notes](docs/en/release-notes-1.0.3.md), [1.0.2 Release Notes](docs/en/release-notes-1.0.2.md), [1.0.1 Release Notes](docs/en/release-notes-1.0.1.md), [1.0.0 Release Notes](docs/en/release-notes-1.0.0.md) |
+| Releases | See the version notes below. |
+
+Releases:
+
+1. [1.0.4 Release Notes](docs/en/release-notes-1.0.4.md)
+2. [1.0.3 Release Notes](docs/en/release-notes-1.0.3.md)
+3. [1.0.2 Release Notes](docs/en/release-notes-1.0.2.md)
+4. [1.0.1 Release Notes](docs/en/release-notes-1.0.1.md)
+5. [1.0.0 Release Notes](docs/en/release-notes-1.0.0.md)
 
 ## Boundaries
 

@@ -19,12 +19,14 @@
 | `fallbackPolicy = FallbackPolicy.NullOnly` | 字段形状不一致时优先返回 `null` 或保留构造默认值。 |
 | `primitiveParsingPolicy = PrimitiveParsingPolicy.DelegateToGson` | 基础类型默认交回 Gson 原生 Adapter。 |
 | `emptyResponsePolicy = EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly` | Retrofit 空 body 只为 `Unit` / `Void` 返回空值。 |
-| `useJdkUnsafe = false` | 默认兼容模式下，SafeParser 自己不使用 JDK Unsafe 构造对象；开启 `Strict` 后会强制禁用 SafeParser 和 Gson 回退路径里的 Unsafe。 |
-| `requiredConstructorParameterPolicy = RequiredConstructorParameterPolicy.GsonCompatible` | Kotlin 非空必填构造参数缺失时保持 Gson 兼容；引用字段保持 `null`，primitive 保持 JVM 默认值。 |
+| `useJdkUnsafe = false` | SafeParser 自己默认不使用 JDK Unsafe 构造对象。 |
+| `requiredConstructorParameterPolicy = RequiredConstructorParameterPolicy.GsonCompatible` | Kotlin 非空必填构造参数缺失时保持 Gson 兼容。 |
 | `mapItemKeyPolicy = MapItemKeyPolicy.Omit` | Map item 事件默认不输出 key；需要聚合时再显式改成 `Hash`。 |
 | JSON 形态转换 | 默认关闭，状态为 `ShapeCoercionPolicy.Disabled`；调用 `withShapeCoercionPolicy(...)` 或字段注解后才启用。 |
 
 下面的“默认处理”都按这组默认状态描述。只有显式切到 `FallbackPolicy.Default`、`PrimitiveParsingPolicy.Safe` 或 `ShapeCoercionPolicy.*` 时，才会启用空集合、空 Map、基础类型安全值或对象数组形态转换。
+
+开启 `Strict` 后会强制禁用 SafeParser 和 Gson 回退路径里的 Unsafe。构造参数兼容模式下，引用字段保持 `null`，primitive 保持 JVM 默认值。
 
 总览：
 

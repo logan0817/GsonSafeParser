@@ -14,32 +14,32 @@ Start with the short version:
 
 ## 1. Version Matrix
 
-| Area | Verified version | Boundary type | Legacy risk | Recommendation |
-| --- | --- | --- | --- | --- |
-| Artifact | Android AAR | Hard boundary | Plain JVM projects cannot consume it as a normal JVM jar. | Use it directly in Android projects; a JVM artifact would need separate publishing. |
-| Library | `1.0.4` | Current stable release | `1.0.0` is the first public compatibility baseline; internal pre-1.0 iterations are not covered by the public compatibility promise. | Use `1.0.4` for new integration. |
-| Android `minSdk` | `minSdk 23` | Hard boundary | Apps below 23 may fail AAR merge or runtime validation. | Keep the app at `minSdk 23` or higher. |
-| Android `compileSdk` | `compileSdk 36` | Build boundary | Lower `compileSdk` values may hit AAR metadata, Lint, or toolchain differences. | Prefer `compileSdk 36`; run full validation if lower. |
-| JDK | `JDK 17` | Hard boundary | JDK 8 / 11 build chains are risky for Java 17 artifacts. | Use JDK 17 or later. |
-| Kotlin plugin | `Kotlin 2.0.21` | Compile boundary | Older Kotlin compilers may fail on Kotlin 2.x metadata, especially reified APIs, extension functions, and default parameters. | Kotlin projects should use `Kotlin 2.0.21` or later. |
-| Kotlin runtime | `Kotlin 2.0.21` line | Runtime boundary | A forced downgrade of stdlib can cause missing runtime methods or metadata differences. | Do not force a Kotlin runtime downgrade. |
-| `kotlin-reflect` | `kotlin-reflect 2.0.21` | Functional dependency | Kotlin data class defaults, primary constructor parameters, and non-null fallback may fail. | Keep `kotlin-reflect 2.0.21`, or align it with the project Kotlin version and run full regression. |
-| Gson | `Gson 2.13.2` | Core dependency | A forced downgrade may break GsonBuilder internal-field snapshots, causing Safe Adapters to fall back to native Gson. | Use `Gson 2.13.2`; run `diagnostics()` after overriding. |
-| Retrofit | `Retrofit 2.8.1` | Retrofit module dependency | Older versions may differ in Converter APIs. | Do not go below `2.8.1` for Retrofit integration. |
-| `converter-gson` | `2.8.1` | Retrofit implementation detail | If it differs from the main Retrofit version, converter behavior may differ. | Keep Retrofit and converter-gson aligned. |
-| OkHttp | `OkHttp 4.12.0` | Retrofit network-stack safety baseline | Retrofit 2.8.1 can otherwise resolve back to OkHttp 3.14.x through transitive dependencies. | Let Gradle resolve to `4.12.0` or later, then check with `dependencyInsight --dependency okhttp`. |
-| Okio | `Okio 3.6.0` | Retrofit network-stack safety baseline | Okio 1.x with OkHttp 4.x is outside the verified matrix. | Let Gradle resolve to `3.6.0` or later, then check with `dependencyInsight --dependency okio`. |
-| R8 / ProGuard | Framework rules bundled in AAR | Release stability boundary | If business model field names, constructors, or Kotlin Metadata are stripped, Gson binding changes. | Configure business model keep rules for release builds. |
+| Area | Verified version and meaning |
+| --- | --- |
+| Artifact | Android AAR. Plain JVM projects cannot consume it as a normal JVM jar; Android projects can use it directly. |
+| Library | `1.0.4` is the current stable release; `1.0.0` is the first public compatibility baseline. |
+| Android `minSdk` | `minSdk 23` is a hard boundary. Apps below 23 may fail AAR merge or runtime validation. |
+| Android `compileSdk` | `compileSdk 36` is the build baseline. Run full validation if your project uses a lower value. |
+| JDK | `JDK 17` is a hard boundary. JDK 8 / 11 build chains are risky for Java 17 artifacts. |
+| Kotlin plugin | `Kotlin 2.0.21` is the compile baseline. Older compilers may fail on Kotlin 2.x metadata. |
+| Kotlin runtime | The `Kotlin 2.0.21` line is the runtime baseline. Do not force a Kotlin runtime downgrade. |
+| `kotlin-reflect` | `kotlin-reflect 2.0.21` is a functional dependency. Without it, data class defaults and non-null fallback may fail. |
+| Gson | `Gson 2.13.2` is the core dependency. Forced downgrades may push Safe Adapters back to native Gson. |
+| Retrofit | `Retrofit 2.8.1` is the Retrofit module dependency. Older versions may differ in Converter APIs. |
+| `converter-gson` | `2.8.1` should stay aligned with the main Retrofit version. |
+| OkHttp | `OkHttp 4.12.0` is the network-stack safety baseline. Let Gradle resolve to `4.12.0` or later. |
+| Okio | `Okio 3.6.0` is the network-stack safety baseline. Let Gradle resolve to `3.6.0` or later. |
+| R8 / ProGuard | Framework rules are bundled in the AAR, but business model keep rules are still required. |
 
 ## 2. Legacy Project Decision Table
 
-| Project state | Ready for production directly | Why | What to do |
-| --- | --- | --- | --- |
-| `minSdk >= 23`, JDK 17, Gson 2.13.2 | Yes, after rollout checks | It matches the verified matrix. | Run debug/release comparison and real JSON regression. |
-| Kotlin below 2.0 | No | Kotlin metadata and reified API compatibility are uncertain. | Prefer upgrading Kotlin; if short-term blocked, use `Class` / `Type` APIs and run full regression. |
-| Forced Gson downgrade | No | Safe Adapter setup depends on GsonBuilder internal snapshots; older Gson may miss fields. | Run `GsonSafeParser.diagnostics()` and `integrationCheck()`. |
-| `minSdk < 23` | No | This AAR does not declare support below Android 23. | Raise business `minSdk`, or discuss a new compatibility target. |
-| Release build with R8 | Yes, but not zero config | Business model rules cannot be inferred by the library. | Follow [Android ProGuard](android-proguard.md). |
+| Project state | Production readiness and reason |
+| --- | --- |
+| `minSdk >= 23`, JDK 17, Gson 2.13.2 | Ready for gray release. It matches the verified matrix; still run debug/release comparison and real JSON regression. |
+| Kotlin below 2.0 | Not ready for direct production. Kotlin metadata and reified API compatibility are uncertain, so upgrade Kotlin first when possible. |
+| Forced Gson downgrade | Not ready for direct production. Run `GsonSafeParser.diagnostics()` and `integrationCheck()` before rollout. |
+| `minSdk < 23` | Not supported by the current AAR. Raise the business `minSdk`, or define a new compatibility target first. |
+| Release build with R8 | Production is possible, but not zero config. Follow [Android ProGuard](android-proguard.md) for business model keep rules. |
 
 ## 3. Retrofit Version Notes
 
@@ -80,3 +80,5 @@ check(integrationCheck.hasErrors.not()) { integrationCheck.checks.joinToString("
 ```
 
 If your project overrides Gson, Kotlin, Retrofit, or R8 behavior, run these checks first, then compare debug and release builds against real API JSON.
+
+A forced downgrade of Gson, Kotlin, Retrofit, OkHttp, or Okio must be treated as a compatibility change and validated before rollout.

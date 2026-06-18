@@ -30,25 +30,31 @@ The default config is low-interference: field-level problems fall back locally, 
 
 ### Common Config Fields
 
-| Config | Default | What it controls | Best for | Risk and verification |
-| --- | --- | --- | --- | --- |
-| `fallbackPolicy` | `NullOnly` | Whether whole collection or Map shape mismatches return `null` or empty containers. | Keep the default when backend arrays or maps may drift into objects or strings; use `Default` only when empty containers are safer for your business logic. | Empty containers can be mistaken for "valid but no data". Test real List, Set, and Map fields with wrong JSON shapes. |
-| `emptyResponsePolicy` | `DefaultValueForUnitOrVoidOnly` | Return values for empty Retrofit bodies. | Low-interference `Unit` / `Void` handling by default; model bodies can opt into default objects or `null`. | It must not hide offline state, cancellation, connection reset, or TLS failure. Verify empty body and transport failure separately. |
-| `primitiveParsingPolicy` | `DelegateToGson` | Whether primitives and `String` continue to delegate to Gson. | Keep the default for money, paging, status, and other strong semantic fields; use `Safe` only after business review. | `Safe` may turn bad data into 0, false, or empty strings. Test invalid strings, objects, and arrays on core fields. |
-| `complexMapKeySerialization` | `false` | Whether Map writing uses Gson's complex-key array-entry format. | Enable when Map keys are objects, aliased enums, or complex values and the server accepts array entries. | Servers that expect object form may reject the JSON. Compare native Gson and GsonSafeParser output. |
-| `useJdkUnsafe` | `false` | Whether SafeParser itself may construct objects with Unsafe. | Only for legacy projects that explicitly depend on Gson Unsafe construction and already have release regression coverage. | Unsafe bypasses constructors and `init`. Verify models with no no-arg constructor, Kotlin defaults, and non-null fields. |
-| `skippedPlatformTypePrefixes` | `setOf("android.")` | Skips platform types so Android system objects are not reflectively parsed. | Keep the default; extend only for platform package prefixes. | Do not add business model package prefixes here or field-level fallback will be skipped. Use diagnostics and real JSON tests. |
-| `nullValuePolicy` | `WriteExplicitNulls` | How explicit backend `null` writes into nullable fields. | Keep the default when you need to distinguish missing fields from explicit backend nulls. | Changes affect Kotlin nullable defaults. Compare missing-field JSON with explicit-null JSON. |
-| `requiredConstructorParameterPolicy` | `GsonCompatible` | Whether missing required constructor parameters stay Gson-compatible or become strict contract errors. | Keep the default for legacy Gson projects; consider `Strict` for new APIs, payment, signing, or auth models. | `Strict` surfaces more API issues and may require caller error handling. Test missing fields, explicit `null`, and unknown enums. |
-| `mapItemKeyPolicy` | `Omit` | Whether events and reports include Map item keys. | `Omit` in production, `Hash` for aggregation, plaintext only during debugging. | Low-entropy keys, phone numbers, and user IDs can be enumerable even when hashed. Inspect logs, metrics, and reports. |
-| `captureRawJsonInCallbacks` | `false` | Whether event callbacks carry raw JSON snippets. | Enable only temporarily for debugging, CI review, or staged troubleshooting. | Raw JSON may contain sensitive data. Confirm it is off for production or bounded safely. |
-| `maxRawJsonCaptureBytes` | `1 MiB` | Bound for raw JSON capture. | Increase temporarily for large-response debugging or lower it for memory-sensitive devices. | Large limits increase memory and privacy risk. Test gzip, chunked, and unknown-length responses with `captureSkipReason`. |
+| Config | Notes |
+| --- | --- |
+| `fallbackPolicy` | Default: `NullOnly`. Whole collection or Map shape mismatches return `null`; use `Default` only when empty containers are safer. |
+| `emptyResponsePolicy` | Default: `DefaultValueForUnitOrVoidOnly`. `Unit` / `Void` stay low-interference; model bodies must opt into default objects or `null`. |
+| `primitiveParsingPolicy` | Default: `DelegateToGson`. Primitives and `String` stay with Gson; use `Safe` only after business review. |
+| `complexMapKeySerialization` | Default: `false`. Enable only when complex Map keys and array-entry JSON are accepted by the server. |
+| `useJdkUnsafe` | Default: `false`. SafeParser itself does not use Unsafe unless a legacy Gson dependency requires it. |
+| `skippedPlatformTypePrefixes` | Default: `setOf("android.")`. Skip platform types; do not add business model package prefixes. |
+| `nullValuePolicy` | Default: `WriteExplicitNulls`. Keep it when missing fields and explicit backend `null` must stay distinct. |
+| `requiredConstructorParameterPolicy` | Default: `GsonCompatible`. Keep it for legacy Gson projects; consider `Strict` for new API, payment, signing, or auth models. |
+| `mapItemKeyPolicy` | Default: `Omit`. Use `Hash` for production aggregation and plaintext only during debugging. |
+| `captureRawJsonInCallbacks` | Default: `false`. Enable only temporarily for debugging, CI review, or staged troubleshooting. |
+| `maxRawJsonCaptureBytes` | Default: `1 MiB`. Increase briefly for large-response debugging or lower it for memory-sensitive devices. |
+
+When validating config, cover real List, Set, and Map shape mismatches, empty bodies, transport failures, missing fields, explicit `null`, unknown enums, and invalid primitives. If raw JSON or Map keys are enabled, inspect logs and reports for identifier leaks.
+
+Do not add business model package prefixes here; otherwise field-level fallback can be skipped for your own models.
 
 ### Optional Capability Switches
 
-| Capability | Default state | What it does | Best for | Not for |
-| --- | --- | --- | --- | --- |
-| JSON shape coercion | `Disabled` | Recovers an object field from the first object in an array, or wraps a single object as a one-item collection. | Known backend object/array drift where the business accepts "take the first item" or "wrap one item" as an explicit rule. | Signed payloads, payment amounts, auth data, and strict-contract fields; those should expose the mismatch. |
+| Capability | Notes |
+| --- | --- |
+| JSON shape coercion | Disabled by default. Enable it only when object/array drift is known and the business accepts an explicit recovery rule. |
+
+Do not use JSON shape coercion for signed payloads, payment amounts, auth data, or strict-contract fields. Those mismatches should remain visible.
 
 ### Raw JSON Capture Rules
 
@@ -72,12 +78,12 @@ This section answers one question: when an object has no safe construction path,
 
 The recommended default is `GsonCompatible + useJdkUnsafe = false`. It is suitable for existing Gson projects: SafeParser itself does not use Unsafe, while the Gson fallback path keeps native Gson behavior.
 
-| Config combination | May SafeParser itself use Unsafe? | May the Gson fallback path use Unsafe? | Best for |
-| --- | --- | --- | --- |
-| `GsonCompatible + useJdkUnsafe = false` | No. | Keeps native Gson behavior. | Default config for most projects. |
-| `GsonCompatible + useJdkUnsafe = true` | Yes. | Keeps native Gson behavior. | Only for projects that explicitly depend on native Gson Unsafe construction. |
-| `Strict + useJdkUnsafe = false` | No. | No. | New APIs or strict contracts. |
-| `Strict + useJdkUnsafe = true` | No. | No. | Avoid this combination; `Strict` has the highest priority and ignores `useJdkUnsafe = true`. |
+| Config combination | Notes |
+| --- | --- |
+| `GsonCompatible + useJdkUnsafe = false` | Default config. SafeParser itself does not use Unsafe, while the Gson fallback path keeps native Gson behavior. |
+| `GsonCompatible + useJdkUnsafe = true` | Only for projects that explicitly depend on native Gson Unsafe construction; the Gson fallback path still keeps native behavior. |
+| `Strict + useJdkUnsafe = false` | For new APIs or strict contracts. Strict mode disables Unsafe for both SafeParser and the Gson fallback path. |
+| `Strict + useJdkUnsafe = true` | Avoid this combination. `Strict` has the highest priority and ignores `useJdkUnsafe = true`. |
 
 Recommended usage:
 

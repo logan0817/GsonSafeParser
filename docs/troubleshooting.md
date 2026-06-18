@@ -81,10 +81,12 @@ SafeParserConfig(
 
 `diagnostics()` 会把这些字段拆开报告：
 
-| 结果 | 含义 | 优先处理 |
-| --- | --- | --- |
-| `critical` 字段不可读 | builder-first 入口不能确认反射访问限制或 Unsafe 开关，会回到 Gson 原生链路。 | 先检查 AAR consumer ProGuard 规则是否合并，再确认 Gson 版本是否被强制覆盖。 |
-| `optional` 字段不可读 | 字段级安全注册仍可继续，但对应 Builder 配置继承会降级。 | 检查是否真的依赖该 Builder 配置；依赖时补版本回归。 |
+| 结果 | 含义 |
+| --- | --- |
+| `critical` 字段不可读 | builder-first 入口不能确认反射访问限制或 Unsafe 开关，会回到 Gson 原生链路。 |
+| `optional` 字段不可读 | 字段级安全注册仍可继续，但对应 Builder 配置继承会降级。 |
+
+优先检查 AAR consumer ProGuard 规则是否合并，再确认 Gson 版本是否被强制覆盖。只有业务确实依赖对应 Builder 配置时，才需要补版本回归。
 
 如果没有自定义 `GsonBuilder`，优先使用 `GsonSafeParser.create(config)` 或 `GsonSafeConverterFactory.create(config)`。
 

@@ -85,25 +85,27 @@ val retrofit = Retrofit.Builder()
 
 ### 默认配置速查
 
-| 配置 | 默认值 | 作用 | 什么时候改 | 验证方式 |
-| --- | --- | --- | --- | --- |
-| `fallbackPolicy` | `FallbackPolicy.NullOnly` | 控制集合或 Map 整体错形时返回 `null` 还是空容器。 | 业务明确把空集合、空 Map 当成“无数据”时，改成 `FallbackPolicy.Default`。 | 用对象、字符串等错误 JSON 喂给 List、Set、Map 字段，看字段结果和事件是否符合预期。 |
-| `primitiveParsingPolicy` | `PrimitiveParsingPolicy.DelegateToGson` | 控制 Int、Long、Boolean、String 等基础值是否交回 Gson。 | 只有业务接受非法基础值被兜底时，改成 `PrimitiveParsingPolicy.Safe`。 | 用非法字符串、对象、数组验证基础字段，确认默认会外抛或显式 Safe 后记录事件。 |
-| `emptyResponsePolicy` | `EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly` | 控制 Retrofit 空 body 的返回值。 | 业务模型空 body 要返回默认对象或 `null` 时再改。 | 用空 body 覆盖 `Unit`、`Void`、业务模型 3 类接口。 |
-| `useJdkUnsafe` | `false` | 控制 SafeParser 自己是否允许 Unsafe 构造对象。 | 只有项目明确依赖原生 Gson Unsafe 构造行为时才打开。 | 用没有无参构造、带 Kotlin 默认值的模型跑 release 回归。 |
-| `requiredConstructorParameterPolicy` | `RequiredConstructorParameterPolicy.GsonCompatible` | 控制缺失必填构造参数时偏兼容还是强契约。 | 新接口想把缺字段、`null`、未知枚举当契约错误时，改成 `Strict`。 | 对缺字段、显式 `null`、未知枚举分别跑真实模型。 |
-| `mapItemKeyPolicy` | `MapItemKeyPolicy.Omit` | 控制事件里是否输出 Map item key。 | 线上聚合排障可用 `Hash`，联调可用明文；敏感或低熵 key 不建议输出。 | 检查日志和契约报告，确认没有泄露用户标识。 |
+| 配置 | 默认值与使用建议 |
+| --- | --- |
+| `fallbackPolicy` | 默认 `FallbackPolicy.NullOnly`。集合或 Map 整体错形时不主动伪造成空容器，业务确认空集合或空 Map 就是“无数据”时再改 `FallbackPolicy.Default`。 |
+| `primitiveParsingPolicy` | 默认 `PrimitiveParsingPolicy.DelegateToGson`。基础值继续交回 Gson；业务接受非法基础值兜底时才改 `PrimitiveParsingPolicy.Safe`。 |
+| `emptyResponsePolicy` | 默认 `EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly`。Retrofit 空 body 只为 `Unit`、`Void` 走默认值，业务模型空响应要返回默认对象或 `null` 时再改。 |
+| `useJdkUnsafe` | 默认 `false`。SafeParser 自己不使用 Unsafe 构造对象；只有项目明确依赖原生 Gson Unsafe 构造行为，并且有 release 回归时才打开。 |
+| `requiredConstructorParameterPolicy` | 默认 `RequiredConstructorParameterPolicy.GsonCompatible`。老项目保持 Gson 兼容；新接口要把缺字段、`null`、未知枚举当契约错误时再改 `Strict`。 |
+| `mapItemKeyPolicy` | 默认 `MapItemKeyPolicy.Omit`。线上默认不输出 Map item key；需要聚合排障时用 `Hash`，联调明文只能临时使用。 |
+
+改动配置前，至少用字段错形、空 body、缺字段或显式 `null` 这 3 类样例跑一遍真实模型。涉及 Map key 或 raw JSON 时，还要确认日志、监控和契约报告不会泄露用户标识。
 
 JSON 形态转换默认是 `ShapeCoercionPolicy.Disabled`。只有后端确实存在 object/array 漂移，并且业务接受明确恢复规则时，才开启 `ShapeCoercionPolicy.ObjectAndCollection` 或字段级 `@SafeParseShapeCoercion`。完整配置见 [配置说明](docs/configuration.md)。
 
 ### 固定边界
 
-| 场景 | 默认处理 | 为什么这样做 | 下一步 |
-| --- | --- | --- | --- |
-| `Object` 字段收到 `[]`、`""`、`1` | 当前字段返回 `null` 或保留构造默认值，外层对象继续解析。 | 字段级错形可以安全隔离，不应拖垮整个 Bean。 | 用 `parseSafe<T>()` 看事件 path，再反馈后端。 |
-| 顶层 `Object` 收到 `[]`、`""`、`1` | 根级解析失败继续遵循 Gson 边界，通常不会伪装成完整默认对象。 | 根级没有外层对象可隔离，强行兜底容易掩盖协议错误。 | 在调用层区分空响应、语法错误和接口契约错误。 |
-| 基础类型 / `String` 字段收到 `{}`、`[]`、非法字符串 | 默认交回 Gson 原生 Adapter，失败时外抛。 | 基础值往往参与金额、状态、分页等业务判断，默认不静默改值。 | 业务确认可接受后，再显式启用 `PrimitiveParsingPolicy.Safe`。 |
-| 调用方自定义 Adapter 抛异常 | 自定义 Adapter 自己抛出的异常会向外抛出，不伪装成字段兜底。 | 调用方已经显式接管该类型，SafeParser 不应吞掉业务 Adapter 的失败语义。 | 在自定义 Adapter 内部自行处理可恢复错误，或交回 Gson 原生链路。 |
+| 场景 | 默认处理与建议 |
+| --- | --- |
+| `Object` 字段收到 `[]`、`""`、`1` | 当前字段返回 `null` 或保留构造默认值，外层对象继续解析。字段级错形可以安全隔离；用 `parseSafe<T>()` 看事件 path，再反馈后端。 |
+| 顶层 `Object` 收到 `[]`、`""`、`1` | 根级解析失败继续遵循 Gson 边界，通常不会伪装成完整默认对象。调用层应区分空响应、语法错误和接口契约错误。 |
+| 基础类型 / `String` 字段收到 `{}`、`[]`、非法字符串 | 默认交回 Gson 原生 Adapter，失败时外抛。金额、状态、分页等字段确认后再启用 `PrimitiveParsingPolicy.Safe`。 |
+| 调用方自定义 Adapter 抛异常 | 自定义 Adapter 自己抛出的异常会向外抛出，不伪装成字段兜底。可恢复错误应在自定义 Adapter 内部处理，或交回 Gson 原生链路。 |
 
 ## 使用安装
 
@@ -355,11 +357,11 @@ val debug = SafeParserConfig.debug()
 val lowInterference = SafeParserConfig.lowInterference()
 ```
 
-| 预设 | 适合场景 | 主要行为 | 风险取舍 |
-| --- | --- | --- | --- |
-| `production()` | 正式上线默认配置。 | 开启事件观测，默认不输出 Map item key，不携带整段 raw JSON。 | 排障信息够用，长期内存和隐私风险更低。 |
-| `debug()` | 联调、测试、接口排障。 | 和线上读策略一致，但会在上限内携带 raw JSON。 | 更容易定位问题，不建议长期用于线上。 |
-| `lowInterference()` | 灰度接入、低干预优先。 | 字段、集合、Map 整体形状不一致优先返回 `null`，基础类型交回 Gson 原生 Adapter。 | 更接近原生 Gson，但安全默认值更少。 |
+| 预设 | 说明 |
+| --- | --- |
+| `production()` | 正式上线默认配置。开启事件观测，默认不输出 Map item key，也不携带整段 raw JSON。 |
+| `debug()` | 联调、测试和接口排障使用。读策略和线上一致，但会在上限内携带 raw JSON，不建议长期用于线上。 |
+| `lowInterference()` | 灰度接入或低干预优先时使用。字段、集合、Map 整体错形优先返回 `null`，基础类型交回 Gson 原生 Adapter。 |
 
 ## 注解
 
@@ -422,7 +424,15 @@ Demo App 支持内置用例和用户自定义 JSON。你可以把接口返回直
 | 参考 | [配置说明](docs/configuration.md)、[错形能力矩阵](docs/mismatch-capability-matrix.md)、[兼容性说明](docs/compatibility.md)、[排障指南](docs/troubleshooting.md) |
 | Android | [Android 混淆](docs/android-proguard.md)、[Demo App](docs/demo-app.md) |
 | 开源协作 | [贡献指南](CONTRIBUTING.md)、[安全策略](SECURITY.md)、[行为准则](CODE_OF_CONDUCT.md) |
-| 发布记录 | [1.0.4 发布说明](docs/release-notes-1.0.4.md)、[1.0.3 发布说明](docs/release-notes-1.0.3.md)、[1.0.2 发布说明](docs/release-notes-1.0.2.md)、[1.0.1 发布说明](docs/release-notes-1.0.1.md)、[1.0.0 发布说明](docs/release-notes-1.0.0.md) |
+| 发布记录 | 见下方版本说明。 |
+
+发布记录：
+
+1. [1.0.4 发布说明](docs/release-notes-1.0.4.md)
+2. [1.0.3 发布说明](docs/release-notes-1.0.3.md)
+3. [1.0.2 发布说明](docs/release-notes-1.0.2.md)
+4. [1.0.1 发布说明](docs/release-notes-1.0.1.md)
+5. [1.0.0 发布说明](docs/release-notes-1.0.0.md)
 
 ## 风险边界
 

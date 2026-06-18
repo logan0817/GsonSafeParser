@@ -83,10 +83,12 @@ The default `GsonSafeParser.create(config)` entry does not read `GsonBuilder` in
 
 `diagnostics()` reports those fields separately:
 
-| Result | Meaning | First check |
-| --- | --- | --- |
-| A `critical` field is unreadable | Builder-first entries cannot confirm reflection filters or the Unsafe switch, so they return to native Gson behavior. | Check whether AAR consumer ProGuard rules were merged, then confirm whether the Gson version was forced. |
-| An `optional` field is unreadable | Field-level safe registration can continue, but the related Builder config inheritance degrades. | Check whether the app depends on that Builder setting; add version regression coverage if it does. |
+| Result | Meaning |
+| --- | --- |
+| A `critical` field is unreadable | Builder-first entries cannot confirm reflection filters or the Unsafe switch, so they return to native Gson behavior. |
+| An `optional` field is unreadable | Field-level safe registration can continue, but the related Builder config inheritance degrades. |
+
+First check whether AAR consumer ProGuard rules were merged, then confirm whether the Gson version was forced. Add version regression coverage only when the app depends on the affected Builder setting.
 
 If you do not need a custom `GsonBuilder`, prefer `GsonSafeParser.create(config)` or `GsonSafeConverterFactory.create(config)`.
 

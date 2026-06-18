@@ -105,12 +105,14 @@ val result = GsonSafeParser.parseSafe<ApiResponse>(json)
 
 Entry choice:
 
-| Need | Recommended entry | Best for | Check first when it fails |
-| --- | --- | --- | --- |
-| Field-level fallback only | `GsonSafeParser.create()` or `GsonBuilder.enableSafeParser()`. | Object, collection, and Map field mismatches should not break the outer bean. | Model obfuscation, `@SafeParseDelegateToGson`, or caller-owned custom adapters. |
-| Parsed value plus event snapshot | `GsonSafeParser.parseSafe<T>()`. | Logging field paths, actual JSON shapes, and fallback actions for monitoring or contract reports. | Whether the code actually calls `parseSafe`, and whether callbacks filter events. |
-| Reuse the same config | `GsonSafeParser.parser(config)`. | Repositories, data sources, and batch parsing jobs that parse the same API family often. | Whether the Parser is recreated repeatedly, and whether the config matches production. |
-| Existing external Gson | Call `.enableSafeParser(config)` on the Builder first, then use `parserWithExternalGson(gson, config)`. | The app owns a shared Gson but still needs `parseSafe` event snapshots. | Whether `GsonSafeParser.diagnostics(gson)` reports Safe Adapter registration. |
+| Need | Recommended entry and first check |
+| --- | --- |
+| Field-level fallback only | Use `GsonSafeParser.create()` or `GsonBuilder.enableSafeParser()` for object, collection, and Map field mismatches. |
+| Parsed value plus event snapshot | Use `GsonSafeParser.parseSafe<T>()`. This fits logs, monitoring, and contract reports; first check whether the code actually calls `parseSafe`. |
+| Reuse the same config | Use `GsonSafeParser.parser(config)`. This fits repositories, data sources, and batch parsing; first check repeated Parser creation and production config drift. |
+| Existing external Gson | Enable SafeParser on the Builder before creating Gson, then use `parserWithExternalGson(gson, config)`. |
+
+When an entry does not behave as expected, first check model obfuscation, `@SafeParseDelegateToGson`, custom adapters, whether the code really calls `parseSafe`, and whether `GsonSafeParser.diagnostics(gson)` reports Safe Adapter registration.
 
 Exception boundary:
 
@@ -221,12 +223,14 @@ Parser and Gson instances can be reused as singletons, DI objects, or repository
 
 External Gson rules: `parserWithExternalGson(gson, config)` does not automatically register Safe Adapter on an external Gson.
 
-| Scenario | Correct usage | Failure symptom | How to verify |
-| --- | --- | --- | --- |
-| External Gson needs field-level fallback | Call `.enableSafeParser(config)` on the same `GsonBuilder` before creating that Gson. | An object field receiving an array still throws like native Gson, and the outer bean cannot continue parsing. | Call `GsonSafeParser.diagnostics(gson)` and confirm the field-level Safe Adapter is registered. |
-| You only need `parseSafe` snapshots around an existing Gson | Wrap it with `parserWithExternalGson(gson, config)`. | `parseSafe` has an event container, but field-level fallback still depends on how that Gson was created. | Run a real model with a field-mismatch JSON such as `{"data":[]}`. |
-| What the config passed to `parserWithExternalGson(gson, config)` controls | Raw JSON capture, root primitive fallback when `PrimitiveParsingPolicy.Safe` is explicitly enabled, and the `parseSafe` event snapshot. | Expecting the new config to change callbacks inside field-level adapters already registered on the external Gson. | Field-level Adapter event callbacks are owned by the config passed to `.enableSafeParser(...)` when the Gson was created. |
-| Multiple threads share one Parser or Gson | Caller-owned lists, log buffers, or metric collectors written by callbacks must be thread-safe. | Concurrent parsing loses logs, scrambles ordering, or fails on external collections. | Use a thread-safe queue or metrics object in concurrency tests. |
+| Scenario | Correct usage and verification |
+| --- | --- |
+| External Gson needs field-level fallback | Call `.enableSafeParser(config)` on the same `GsonBuilder` before creating that Gson. |
+| You only need `parseSafe` snapshots around an existing Gson | Wrap it with `parserWithExternalGson(gson, config)`; field-level fallback still depends on how that Gson was created. |
+| What the config passed to `parserWithExternalGson(gson, config)` controls | It controls raw JSON capture, root primitive fallback, and the `parseSafe` event snapshot. |
+| Multiple threads share one Parser or Gson | Caller-owned lists, log buffers, or metric collectors written by callbacks must be thread-safe. Use a thread-safe queue or metrics object in concurrency tests. |
+
+For external Gson, verify with `GsonSafeParser.diagnostics(gson)` and a real field-mismatch JSON such as `{"data":[]}`. Field-level Adapter event callbacks are owned by the config passed to `.enableSafeParser(...)` when the Gson was created.
 
 ## 7. Retrofit Integration
 
@@ -283,11 +287,11 @@ This form reuses the existing Gson and keeps Retrofit-level empty response, raw 
 
 Choose the entry by what you currently have:
 
-| Current state | Recommended usage | Why |
-| --- | --- | --- |
-| You still have a `GsonBuilder` | `GsonSafeConverterFactory.create(builder, config)` | The factory registers Safe Adapters before `builder.create()`. |
-| You already own a shared `Gson` | Call `.enableSafeParser(config)` on the `GsonBuilder` that creates it, then pass the final Gson to `create(gson, config)` | A created `Gson` has fixed configuration, and the library will not secretly mutate it. |
-| You only call `create(gson, config)` | Reuses that Gson and applies Retrofit-level empty response, raw JSON, and event config | This does not automatically register Safe Adapter on the external Gson. |
+| Current state | Recommended usage and reason |
+| --- | --- |
+| You still have a `GsonBuilder` | Use `GsonSafeConverterFactory.create(builder, config)`. The factory registers Safe Adapters before `builder.create()`. |
+| You already own a shared `Gson` | Enable SafeParser on the Builder that creates it, then pass the final Gson to `create(gson, config)`. The library will not mutate a created Gson. |
+| You only call `create(gson, config)` | This reuses that Gson and applies Retrofit-level empty response, raw JSON, and event config. It does not automatically register Safe Adapter on the external Gson. |
 
 ## 8. CI Self-Check
 

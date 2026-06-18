@@ -19,12 +19,14 @@ Out-of-the-box defaults and optional capability states:
 | `fallbackPolicy = FallbackPolicy.NullOnly` | Unexpected field shapes prefer `null` or constructed defaults. |
 | `primitiveParsingPolicy = PrimitiveParsingPolicy.DelegateToGson` | Primitive values delegate to native Gson adapters by default. |
 | `emptyResponsePolicy = EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly` | Empty Retrofit bodies return empty values only for `Unit` / `Void`. |
-| `useJdkUnsafe = false` | In compatible mode, SafeParser itself does not use JDK Unsafe for object construction by default; after `Strict` is enabled, Unsafe is disabled for both SafeParser and the Gson fallback path. |
-| `requiredConstructorParameterPolicy = RequiredConstructorParameterPolicy.GsonCompatible` | Missing non-null Kotlin constructor parameters keep Gson-compatible behavior; reference fields stay `null`, and primitives keep JVM defaults. |
+| `useJdkUnsafe = false` | SafeParser itself does not use JDK Unsafe by default. |
+| `requiredConstructorParameterPolicy = RequiredConstructorParameterPolicy.GsonCompatible` | Missing non-null Kotlin constructor parameters keep Gson-compatible behavior. |
 | `mapItemKeyPolicy = MapItemKeyPolicy.Omit` | Map item events omit keys by default; opt into `Hash` only when aggregation needs it. |
 | JSON shape coercion | Disabled by default, with state `ShapeCoercionPolicy.Disabled`; enabled only by calling `withShapeCoercionPolicy(...)` or using a field annotation. |
 
 The "Default handling" rows below describe these default states. Empty collections, empty maps, primitive safe values, and object-array shape coercion are used only when callers explicitly choose `FallbackPolicy.Default`, `PrimitiveParsingPolicy.Safe`, or `ShapeCoercionPolicy.*`.
+
+After `Strict` is enabled, Unsafe is disabled for both SafeParser and the Gson fallback path. In compatible constructor-parameter mode, reference fields stay `null`, and primitives keep JVM defaults.
 
 Overview:
 
