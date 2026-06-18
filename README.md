@@ -81,66 +81,29 @@ val retrofit = Retrofit.Builder()
 
 ## 默认行为
 
-默认配置适合直接接入已有 Gson 项目。库只处理能安全隔离的字段问题；基础类型、根级异常和不可确认的问题继续交回 Gson。
+默认配置适合直接接入已有 Gson 项目。接入前先记住 4 条：1. 字段级对象、集合、Map 形状不一致时，库只处理当前字段，字段有构造默认值时，会优先保留默认值 2. 基础类型和 `String` 默认交回 Gson，显式改成 `PrimitiveParsingPolicy.Safe` 后才启用安全基础值 3. 顶层 `Object`、JSON 语法错误、自定义 Adapter 自己抛出的异常会向外抛出 4. Retrofit 断网、取消、连接重置和 TLS 失败属于网络层，不会被空响应策略隐藏。
 
-### 默认配置
+### 默认配置速查
 
-| 配置 | 默认值 |
-| --- | --- |
-| `fallbackPolicy` | `FallbackPolicy.NullOnly` |
-| `primitiveParsingPolicy` | `PrimitiveParsingPolicy.DelegateToGson` |
-| `emptyResponsePolicy` | `EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly` |
-| `useJdkUnsafe` | `false` |
-| `requiredConstructorParameterPolicy` | `RequiredConstructorParameterPolicy.GsonCompatible` |
-| `mapItemKeyPolicy` | `MapItemKeyPolicy.Omit` |
+| 配置 | 默认值 | 作用 | 什么时候改 | 验证方式 |
+| --- | --- | --- | --- | --- |
+| `fallbackPolicy` | `FallbackPolicy.NullOnly` | 控制集合或 Map 整体错形时返回 `null` 还是空容器。 | 业务明确把空集合、空 Map 当成“无数据”时，改成 `FallbackPolicy.Default`。 | 用对象、字符串等错误 JSON 喂给 List、Set、Map 字段，看字段结果和事件是否符合预期。 |
+| `primitiveParsingPolicy` | `PrimitiveParsingPolicy.DelegateToGson` | 控制 Int、Long、Boolean、String 等基础值是否交回 Gson。 | 只有业务接受非法基础值被兜底时，改成 `PrimitiveParsingPolicy.Safe`。 | 用非法字符串、对象、数组验证基础字段，确认默认会外抛或显式 Safe 后记录事件。 |
+| `emptyResponsePolicy` | `EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly` | 控制 Retrofit 空 body 的返回值。 | 业务模型空 body 要返回默认对象或 `null` 时再改。 | 用空 body 覆盖 `Unit`、`Void`、业务模型 3 类接口。 |
+| `useJdkUnsafe` | `false` | 控制 SafeParser 自己是否允许 Unsafe 构造对象。 | 只有项目明确依赖原生 Gson Unsafe 构造行为时才打开。 | 用没有无参构造、带 Kotlin 默认值的模型跑 release 回归。 |
+| `requiredConstructorParameterPolicy` | `RequiredConstructorParameterPolicy.GsonCompatible` | 控制缺失必填构造参数时偏兼容还是强契约。 | 新接口想把缺字段、`null`、未知枚举当契约错误时，改成 `Strict`。 | 对缺字段、显式 `null`、未知枚举分别跑真实模型。 |
+| `mapItemKeyPolicy` | `MapItemKeyPolicy.Omit` | 控制事件里是否输出 Map item key。 | 线上聚合排障可用 `Hash`，联调可用明文；敏感或低熵 key 不建议输出。 | 检查日志和契约报告，确认没有泄露用户标识。 |
 
-### 可选能力状态
-
-| 能力 | 默认状态 | 启用方式 |
-| --- | --- | --- |
-| JSON 形态转换 | `ShapeCoercionPolicy.Disabled` | 调用 `withShapeCoercionPolicy(...)`，或在字段上使用 `@SafeParseShapeCoercion`。 |
-
-### 构造策略
-
-默认使用 `GsonCompatible + useJdkUnsafe = false`。这组配置保持 Gson 兼容，同时避免 SafeParser 自己用 Unsafe 绕过构造函数。
-
-| 目标 | 推荐配置 |
-| --- | --- |
-| 直接接入已有项目 | 保持默认配置。 |
-| 项目明确依赖原生 Gson 的 Unsafe 构造行为 | 使用 `GsonCompatible + useJdkUnsafe = true`。 |
-| 把缺字段、`null` 或未知枚举值当成接口契约错误 | 使用 `Strict + useJdkUnsafe = false`。 |
-
-完整配置见 [配置说明](docs/configuration.md)。
+JSON 形态转换默认是 `ShapeCoercionPolicy.Disabled`。只有后端确实存在 object/array 漂移，并且业务接受明确恢复规则时，才开启 `ShapeCoercionPolicy.ObjectAndCollection` 或字段级 `@SafeParseShapeCoercion`。完整配置见 [配置说明](docs/configuration.md)。
 
 ### 固定边界
 
-| 场景 | 实际 JSON | 处理结果 |
-| --- | --- | --- |
-| `Object` 字段 | `[]`、`""`、`1` | 字段形状不一致默认返回 `null` 或保留构造默认值，外层对象继续解析。 |
-| 顶层 `Object` | `[]`、`""`、`1` | 顶层 JSON 不是对象时通常返回 `null`；不可恢复 Gson 异常会继续抛出。 |
-| 基础类型 / `String` 字段 | `{}`、`[]` | 默认交回 Gson 原生 Adapter；读取失败会按 Gson 原生异常外抛，不产生 SafeParser 事件。 |
-
-`FallbackPolicy`（默认：`FallbackPolicy.NullOnly`）：
-
-| 目标类型 | 实际 JSON | `FallbackPolicy.NullOnly`（默认） | `FallbackPolicy.Default` |
+| 场景 | 默认处理 | 为什么这样做 | 下一步 |
 | --- | --- | --- | --- |
-| List / Set | `{}`、`""` | 返回 `null`。 | 返回空集合。 |
-| Map | `[]`、`""` | 返回 `null`。 | 返回空 Map。 |
-
-说明：字段有构造默认值时，会优先保留默认值。顶层解析或没有默认值的字段，仍按表格返回 `null`。
-
-`PrimitiveParsingPolicy`（默认：`PrimitiveParsingPolicy.DelegateToGson`）：
-
-| 目标类型 | 实际 JSON | `PrimitiveParsingPolicy.DelegateToGson`（默认） | `PrimitiveParsingPolicy.Safe` |
-| --- | --- | --- | --- |
-| Int / Long / Boolean / String | `{}`、`[]`、非法字符串 | 交回 Gson 原生 Adapter，失败时外抛。 | 使用安全基础值或保留构造默认值，并记录事件。 |
-
-`EmptyResponsePolicy`（默认：`EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly`）：
-
-| 场景 | 响应内容 | `DefaultValueForUnitOrVoidOnly`（默认） | `DefaultValue` | `Null` | `DelegateToGson` |
-| --- | --- | --- | --- | --- | --- |
-| Retrofit `Unit` / `Void` 空 body | 空响应体 | `Unit` 返回 `Unit`，`Void` 返回 `null`。 | 返回各自空值。 | 返回 `null`。 | 返回 Retrofit 空值 `Unit` / `null`，不向 Gson 请求 delegate。 |
-| Retrofit 业务模型空 body | 空响应体 | 返回 `null`。 | 返回默认对象。 | 返回 `null`。 | 通常会得到 `EOFException`。 |
+| `Object` 字段收到 `[]`、`""`、`1` | 当前字段返回 `null` 或保留构造默认值，外层对象继续解析。 | 字段级错形可以安全隔离，不应拖垮整个 Bean。 | 用 `parseSafe<T>()` 看事件 path，再反馈后端。 |
+| 顶层 `Object` 收到 `[]`、`""`、`1` | 根级解析失败继续遵循 Gson 边界，通常不会伪装成完整默认对象。 | 根级没有外层对象可隔离，强行兜底容易掩盖协议错误。 | 在调用层区分空响应、语法错误和接口契约错误。 |
+| 基础类型 / `String` 字段收到 `{}`、`[]`、非法字符串 | 默认交回 Gson 原生 Adapter，失败时外抛。 | 基础值往往参与金额、状态、分页等业务判断，默认不静默改值。 | 业务确认可接受后，再显式启用 `PrimitiveParsingPolicy.Safe`。 |
+| 调用方自定义 Adapter 抛异常 | 自定义 Adapter 自己抛出的异常会向外抛出，不伪装成字段兜底。 | 调用方已经显式接管该类型，SafeParser 不应吞掉业务 Adapter 的失败语义。 | 在自定义 Adapter 内部自行处理可恢复错误，或交回 Gson 原生链路。 |
 
 ## 使用安装
 

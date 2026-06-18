@@ -32,25 +32,25 @@ val config = SafeParserConfig(
 
 ### 常用配置
 
-| 配置项 | 默认值 | 什么时候改它 |
-| --- | --- | --- |
-| `fallbackPolicy` | `NullOnly` | 集合或 Map 整体形状不一致时，如果你希望返回空集合、空 Map，再改成 `Default`。 |
-| `emptyResponsePolicy` | `DefaultValueForUnitOrVoidOnly` | Retrofit 空 body 要返回默认对象、`null` 或交回 Gson 时再改。 |
-| `primitiveParsingPolicy` | `DelegateToGson` | 基础类型需要宽松兜底，例如字符串数字、空字符串、形状不一致默认值时再改成 `Safe`。 |
-| `complexMapKeySerialization` | `false` | 需要兼容 Gson 复杂 Map key 的数组 entry 写法时再打开。 |
-| `useJdkUnsafe` | `false` | 只在 `GsonCompatible` 模式下控制 SafeParser 自己是否用 Unsafe 构造对象；`Strict` 会强制禁用它。 |
-| `skippedPlatformTypePrefixes` | `setOf("android.")` | 只用于跳过平台类型；不要放业务模型包名前缀。 |
-| `nullValuePolicy` | `WriteExplicitNulls` | 后端显式返回 `null` 时，需要调整 nullable 字段写入策略时再改。 |
-| `requiredConstructorParameterPolicy` | `GsonCompatible` | 已有项目希望保持 Gson 宽松行为时用默认值；新接口想强约束缺字段时改成 `Strict`。 |
-| `mapItemKeyPolicy` | `Omit` | 线上默认不输出 Map key；需要聚合时可显式改成 `Hash`，低熵敏感 key 不建议使用裸哈希。 |
-| `captureRawJsonInCallbacks` | `false` | 排障时临时打开，线上默认关闭。 |
-| `maxRawJsonCaptureBytes` | `1 MiB` | raw JSON 排障需要更小或更大的捕获上限时再改。 |
+| 配置项 | 默认值 | 作用 | 适合场景 | 风险和验证 |
+| --- | --- | --- | --- | --- |
+| `fallbackPolicy` | `NullOnly` | 控制集合或 Map 整体错形时返回 `null` 还是空容器。 | 后端偶发把数组或 Map 字段返回成对象、字符串时，用默认值减少误写空数据；业务确认空容器更安全时改 `Default`。 | 空容器可能被业务误判为“接口正常但无数据”。用真实模型覆盖 List、Set、Map 字段错形。 |
+| `emptyResponsePolicy` | `DefaultValueForUnitOrVoidOnly` | 控制 Retrofit 空 body 的返回值。 | `Unit`、`Void` 接口保持低干预；业务模型空 body 需要默认对象或 `null` 时再改。 | 不能隐藏断网、取消、连接重置和 TLS 失败。用空 body 与传输失败分别验证。 |
+| `primitiveParsingPolicy` | `DelegateToGson` | 控制基础类型和 `String` 是否继续交回 Gson。 | 金额、分页、状态码等强语义字段保持默认；只有业务接受安全基础值时改 `Safe`。 | `Safe` 可能把错误数据变成 0、false 或空字符串。上线前用非法字符串、对象、数组覆盖核心字段。 |
+| `complexMapKeySerialization` | `false` | 控制 Map 写出时是否兼容 Gson 复杂 key 的数组 entry 格式。 | Map key 是对象、枚举别名或复杂类型，并且服务端能识别数组 entry 格式时打开。 | 服务端不支持时会改变 JSON 结构。用原生 Gson 与 GsonSafeParser 对照写出结果。 |
+| `useJdkUnsafe` | `false` | 控制 SafeParser 自己是否允许 Unsafe 构造对象。 | 老项目明确依赖 Gson Unsafe 构造，并已经有 release 回归时才打开。 | Unsafe 会绕过构造函数和 `init`。用无无参构造、Kotlin 默认值、非空字段模型验证。 |
+| `skippedPlatformTypePrefixes` | `setOf("android.")` | 跳过平台类型，避免反射解析 Android 系统对象。 | 保留默认即可；只在平台包名扩展时增加。 | 不要放业务模型包名前缀，否则字段级兜底会失效。用 diagnostics 和真实 JSON 确认模型没有被跳过。 |
+| `nullValuePolicy` | `WriteExplicitNulls` | 控制后端显式 `null` 写入 nullable 字段的策略。 | 需要区分“字段缺失”和“后端明确返回 null”时保留默认。 | 改动会影响 Kotlin nullable 默认值语义。用字段缺失与显式 `null` 两类 JSON 对照。 |
+| `requiredConstructorParameterPolicy` | `GsonCompatible` | 控制缺失必填构造参数时偏兼容还是强契约。 | 老项目保持默认；新接口、支付、签名、鉴权模型建议评估 `Strict`。 | `Strict` 会暴露更多接口问题，也可能增加调用方异常处理。用缺字段、显式 `null`、未知枚举验证。 |
+| `mapItemKeyPolicy` | `Omit` | 控制事件和报告中是否输出 Map item key。 | 线上默认 `Omit`；需要聚合时用 `Hash`；联调时可临时明文。 | 低熵 key、手机号、用户 ID 即使哈希也可能被枚举。检查日志、监控和报告脱敏结果。 |
+| `captureRawJsonInCallbacks` | `false` | 控制事件回调是否携带 raw JSON 片段。 | 只在联调、CI 复盘或灰度排障时临时打开。 | raw JSON 可能含敏感数据。上线前确认关闭或设置合理上限。 |
+| `maxRawJsonCaptureBytes` | `1 MiB` | 控制 raw JSON 捕获上限。 | 大响应排障可临时调大，小内存设备可调小。 | 上限过大增加内存与隐私风险。用 gzip、chunked、未知长度响应验证 `captureSkipReason`。 |
 
 ### 可选能力开关
 
-| 能力 | 默认状态 | 启用方式 |
-| --- | --- | --- |
-| JSON 形态转换 | `Disabled` | 后端对象和数组偶发互换，并且业务可以接受明确恢复规则时，调用 `withShapeCoercionPolicy(...)`，或在字段上使用 `@SafeParseShapeCoercion`。 |
+| 能力 | 默认状态 | 作用 | 适合场景 | 不适合场景 |
+| --- | --- | --- | --- | --- |
+| JSON 形态转换 | `Disabled` | 把对象字段收到的数组恢复成第 1 个对象，或把集合字段收到的对象包装成单元素容器。 | 后端字段 object/array 偶发漂移，并且业务接受“取第 1 个”或“包装成 1 个”的明确规则。 | 签名载荷、支付金额、鉴权信息、强契约字段不建议开启；这些字段应让错形暴露出来。 |
 
 ### raw JSON 捕获规则
 

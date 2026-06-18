@@ -34,7 +34,7 @@ jobs:
         run: ./gradlew writeOsvReleaseRuntimeLockfile --warning-mode=fail
 
       - name: Run dependency vulnerability scan
-        uses: google/osv-scanner-action@v2.3.8
+        uses: google/osv-scanner-action/osv-scanner-action@v2.3.8
         with:
           scan-args: |-
             scan

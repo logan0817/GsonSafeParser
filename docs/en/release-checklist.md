@@ -72,14 +72,14 @@ Before publishing, confirm:
 5. The README documentation table links to Getting Started, Compatibility, Configuration, Mismatch Capability Matrix, Android ProGuard, Demo App, Troubleshooting, Release Checklist, 1.0.4 Release Notes, historical 1.0.3 Release Notes, historical 1.0.2 Release Notes, historical 1.0.1 Release Notes, and historical 1.0.0 Release Notes.
 6. `docs/compatibility.md` and `docs/en/compatibility.md` list `minSdk 23`, `compileSdk 36`, `JDK 17`, `Kotlin 2.0.21`, `kotlin-reflect 2.0.21`, `Gson 2.13.2`, `Retrofit 2.8.1`, and R8 / ProGuard boundaries.
 7. `CHANGELOG.md` exists and treats `1.0.4` as the current release and `1.0.0` as the first public compatibility baseline.
-8. `docs/release-notes-1.0.4.md` and `docs/en/release-notes-1.0.4.md` list the custom-adapter propagation boundary, native Gson ordering, default primitive policy, open-source release files, and release verification.
+8. `docs/release-notes-1.0.4.md` and `docs/en/release-notes-1.0.4.md` list the custom-adapter propagation boundary, native Gson ordering, default primitive policy, Map duplicate-key boundary, AAR consumer ProGuard keepnames, open-source release files, and release verification.
 9. `docs/release-notes-1.0.3.md` and `docs/en/release-notes-1.0.3.md` keep JSON shape coercion, event reporting, fallback boundaries, and release verification.
 10. `docs/release-notes-1.0.2.md` and `docs/en/release-notes-1.0.2.md` keep the transport exception boundary fix, compatibility boundaries, and release verification.
 11. `docs/release-notes-1.0.1.md` and `docs/en/release-notes-1.0.1.md` keep the historical stabilization fixes, compatibility boundaries, and release verification.
 12. `docs/release-notes-1.0.0.md` and `docs/en/release-notes-1.0.0.md` keep the initial capabilities, compatibility boundaries, and release verification.
 13. `README.md`, `README_EN.md`, `docs/compatibility.md`, `docs/en/compatibility.md`, `docs/troubleshooting.md`, and `docs/en/troubleshooting.md` all state that network or transport read failures return to Retrofit / OkHttp and must not be hidden with `emptyResponsePolicy`.
 14. `README.md`, `README_EN.md`, `docs/compatibility.md`, and `docs/en/compatibility.md` document the Retrofit network-stack safety baseline, runtime scope, `OkHttp 4.12.0`, `Okio 3.6.0`, `dependencyInsight`, and dependency resolution verification.
-15. `CHANGELOG.md`, the bilingual 1.0.4 release notes, and this checklist record the custom-adapter propagation boundary, native Gson ordering, default primitive policy, and open-source release file cleanup.
+15. `CHANGELOG.md`, the bilingual 1.0.4 release notes, and this checklist record the custom-adapter propagation boundary, native Gson ordering, default primitive policy, Map duplicate-key boundary, AAR consumer ProGuard keepnames, and open-source release file cleanup.
 
 ## 5. Before Remote Publication
 

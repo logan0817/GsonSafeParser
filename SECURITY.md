@@ -8,6 +8,7 @@ GsonSafeParser 处理 JSON 解析、事件观测和 raw JSON 捕获，因此安�
 | --- | --- |
 | `1.0.4` | 当前维护版本 |
 | `1.0.3` | 历史版本，仅接受高风险安全问题回溯判断 |
+| `1.0.2` | 历史版本，仅接受传输异常边界相关高风险问题回溯判断 |
 | `1.0.1` 及更早 | 不承诺常规安全修复 |
 
 ## 2. 如何报告安全问题
@@ -50,9 +51,9 @@ Do not paste tokens, cookies, phone numbers, identity numbers, real user data, p
 
 ## 6. 临时缓解建议
 
-| 风险 | 临时处理 |
-| --- | --- |
-| raw JSON 日志风险 | 关闭 `captureRawJsonInCallbacks`，或调小 `maxRawJsonCaptureBytes` |
-| Map key 泄露风险 | 使用默认 `MapItemKeyPolicy.Omit` |
-| 自定义 Adapter 行为不确定 | 给类型加 `@SafeParseDelegateToGson`，先交回 Gson |
-| release 混淆导致行为异常 | 按 [Android 混淆](docs/android-proguard.md) 保留业务模型字段、构造方法和 Kotlin Metadata |
+| 风险 | 临时处理 | 如何确认生效 |
+| --- | --- | --- |
+| raw JSON 日志风险 | 关闭 `captureRawJsonInCallbacks`，或调小 `maxRawJsonCaptureBytes` | 检查事件、日志和契约报告里没有 raw JSON 正文；超限场景只出现捕获跳过原因。 |
+| Map key 泄露风险 | 使用默认 `MapItemKeyPolicy.Omit` | 检查 `TypeMismatchEvent` 和报告中不出现业务 key、手机号、用户 ID 等字段值。 |
+| 自定义 Adapter 行为不确定 | 给类型加 `@SafeParseDelegateToGson`，先交回 Gson | 用会触发 Adapter 异常的最小 JSON 验证异常外抛，不产生误导性字段兜底事件。 |
+| release 混淆导致行为异常 | 按 [Android 混淆](docs/android-proguard.md) 保留业务模型字段、构造方法和 Kotlin Metadata | 跑 release 单测、`integrationCheck` 的 `modelProbes`，并用同一份真实 JSON 对比 debug 和 release。 |

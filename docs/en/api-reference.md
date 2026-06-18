@@ -6,6 +6,8 @@ This page helps adopters choose the right GsonSafeParser entry point and underst
 
 ## 1. Entry Points
 
+Choose by what you already own: from scratch, use `GsonSafeParser.create(config)`; with an existing `GsonBuilder`, use `GsonBuilder.enableSafeParser(config)` or `GsonSafeParser.parser(builder, config)`; with an already-created `Gson`, first confirm Safe Adapter registration and then use `parserWithExternalGson(gson, config)`; for Retrofit, use `GsonSafeConverterFactory.create(...)`.
+
 | API | Use Case | Returns Events | Reuses Gson | Boundary |
 | --- | --- | --- | --- | --- |
 | `GsonSafeParser.create(config)` | Create a Gson instance with Safe Adapter registration | No | The returned Gson is reusable | Field-level fallback works; direct `gson.fromJson(...)` keeps Gson root exception behavior |

@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.math.BigDecimal
 import com.google.gson.GsonBuilder
+import com.google.gson.JsonSyntaxException
 import com.google.gson.annotations.SerializedName
 import com.google.gson.TypeAdapter
 import com.google.gson.annotations.JsonAdapter
@@ -57,6 +58,8 @@ class SafeParserBehaviorTest {
     data class BooleanListDefaults(val values: List<Boolean?> = emptyList())
     /** 测试模型：Map value 使用 boxed Boolean。 */
     data class BooleanMapValueDefaults(val values: Map<String, Boolean?> = emptyMap())
+    /** 测试模型：Map value 允许 null，用来对齐 Gson 原生重复 key 边界。 */
+    data class NullableStringMap(val values: Map<String, String?> = emptyMap())
     /** 测试模型：Map key 使用 boxed Boolean。 */
     data class BooleanKeyMapDefaults(val values: Map<Boolean, String> = emptyMap())
     /** 测试模型：Int key 的 Map，用来验证对象形式 Map key 能被正确解析。 */
@@ -392,6 +395,85 @@ class SafeParserBehaviorTest {
 
         assertEquals("one", result.values[1])
         assertEquals("two", result.values[2])
+    }
+
+    /**
+     * 测试方法说明：验证对象形式 Map 遇到重复 key 时保持 Gson 原生失败语义，不能静默以后值覆盖前值。
+     */
+    @Test
+    fun `map object form duplicate key fails like Gson`() {
+        val events = mutableListOf<TypeMismatchEvent>()
+        val gson = GsonSafeParser.create(SafeParserConfig(onTypeMismatch = events::add))
+
+        val error = assertThrows(JsonSyntaxException::class.java) {
+            gson.fromJson(
+                """{"values":{"1":"one","1":"again"}}""",
+                IntKeyMap::class.java
+            )
+        }
+
+        assertTrue(error.message.orEmpty().contains("duplicate key: 1"))
+        assertTrue(events.isEmpty())
+    }
+
+    /**
+     * 测试方法说明：验证数组 entry 形式 Map 遇到重复 key 时保持 Gson 原生失败语义，不能静默以后值覆盖前值。
+     */
+    @Test
+    fun `map array entry form duplicate key fails like Gson`() {
+        val events = mutableListOf<TypeMismatchEvent>()
+        val gson = GsonSafeParser.create(SafeParserConfig(onTypeMismatch = events::add))
+
+        val error = assertThrows(JsonSyntaxException::class.java) {
+            gson.fromJson(
+                """{"values":[[1,"one"],[1,"again"]]}""",
+                IntKeyMap::class.java
+            )
+        }
+
+        assertTrue(error.message.orEmpty().contains("duplicate key: 1"))
+        assertTrue(events.isEmpty())
+    }
+
+    /**
+     * 测试方法说明：验证旧 value 是 null 的重复 key 保持 Gson 原生覆盖语义。
+     *
+     * Gson 2.13.2 使用 `Map.put` 的返回值判重；旧 value 为 null 时不会抛 duplicate key。
+     * SafeParser 这里不额外加严，避免同一份 JSON 在原生 Gson 和 SafeParser 下表现不一致。
+     */
+    @Test
+    fun `map duplicate key after null value follows Gson overwrite behavior`() {
+        val gson = GsonSafeParser.create()
+
+        val objectForm = gson.fromJson(
+            """{"values":{"name":null,"name":"again"}}""",
+            NullableStringMap::class.java
+        )
+        val arrayEntryForm = gson.fromJson(
+            """{"values":[["name",null],["name","again"]]}""",
+            NullableStringMap::class.java
+        )
+
+        assertEquals(mapOf("name" to "again"), objectForm.values)
+        assertEquals(mapOf("name" to "again"), arrayEntryForm.values)
+    }
+
+    /**
+     * 测试方法说明：验证复杂 key 的数组 entry 形式遇到重复 key 时同样保持 Gson 原生失败语义。
+     */
+    @Test
+    fun `map complex key array entry duplicate key fails like Gson`() {
+        val gson = GsonSafeParser.create()
+        val type = object : TypeToken<Map<ObjectKey, String>>() {}.type
+
+        val error = assertThrows(JsonSyntaxException::class.java) {
+            gson.fromJson<Map<ObjectKey, String>>(
+                """[[{"name":"same"},"one"],[{"name":"same"},"again"]]""",
+                type
+            )
+        }
+
+        assertTrue(error.message.orEmpty().contains("duplicate key: same"))
     }
 
     /**

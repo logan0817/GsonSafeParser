@@ -3,6 +3,7 @@ package io.github.logan.gsonsafeparser.internal.adapter
 import com.google.gson.Gson
 import com.google.gson.JsonElement
 import com.google.gson.JsonPrimitive
+import com.google.gson.JsonSyntaxException
 import com.google.gson.TypeAdapter
 import com.google.gson.annotations.JsonAdapter
 import com.google.gson.internal.GsonTypes
@@ -179,11 +180,16 @@ internal object SafeMapAdapterFactory {
                                     config = config
                                 )
                             ) {
-                                is ParsedMapValue.Success -> values[(key as ParsedMapKey.Success).value] = value.value
+                                is ParsedMapValue.Success -> putMapValue(
+                                    values = values,
+                                    key = (key as ParsedMapKey.Success).value,
+                                    value = value.value
+                                )
                                 ParsedMapValue.Skipped -> Unit
                             }
                         }
                             .onFailure {
+                                it.throwIfDuplicateMapKey()
                                 if (valueHandlesOwnShape) {
                                     throw it.asCallerAdapterReadException()
                                 }
@@ -290,11 +296,16 @@ internal object SafeMapAdapterFactory {
                                         config = config
                                     )
                                 ) {
-                                    is ParsedMapValue.Success -> values[key] = value.value
+                                    is ParsedMapValue.Success -> putMapValue(
+                                        values = values,
+                                        key = key,
+                                        value = value.value
+                                    )
                                     ParsedMapValue.Skipped -> Unit
                                 }
                             }
                         }.onFailure {
+                            it.throwIfDuplicateMapKey()
                             if (valueHandlesOwnShape) {
                                 throw it.asCallerAdapterReadException()
                             }
@@ -508,6 +519,19 @@ internal object SafeMapAdapterFactory {
             )
         }
         return ParsedMapValue.Success(value)
+    }
+
+    private fun putMapValue(values: MutableMap<Any?, Any?>, key: Any?, value: Any?) {
+        val replaced = values.put(key, value)
+        if (replaced != null) {
+            throw JsonSyntaxException("duplicate key: $key")
+        }
+    }
+
+    private fun Throwable.throwIfDuplicateMapKey() {
+        if (this is JsonSyntaxException && message.orEmpty().startsWith("duplicate key: ")) {
+            throw this
+        }
     }
 
     /**

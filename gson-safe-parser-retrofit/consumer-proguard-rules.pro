@@ -33,3 +33,7 @@
 -keepnames class com.google.gson.internal.bind.CollectionTypeAdapterFactory**
 -keepnames class com.google.gson.internal.bind.MapTypeAdapterFactory**
 -keepnames class com.google.gson.internal.bind.ArrayTypeAdapter**
+-keepnames class com.google.gson.internal.bind.TreeTypeAdapter**
+-keepnames class com.google.gson.internal.bind.TypeAdapters**
+-keepnames class com.google.gson.internal.bind.EnumTypeAdapter**
+-keepnames class com.google.gson.internal.bind.NumberTypeAdapter**

@@ -30,25 +30,25 @@ The default config is low-interference: field-level problems fall back locally, 
 
 ### Common Config Fields
 
-| Config | Default | When to change it |
-| --- | --- | --- |
-| `fallbackPolicy` | `NullOnly` | Change to `Default` only when collection or Map shape mismatches should return empty values. |
-| `emptyResponsePolicy` | `DefaultValueForUnitOrVoidOnly` | Change when Retrofit empty bodies should return default objects, `null`, or native Gson behavior. |
-| `primitiveParsingPolicy` | `DelegateToGson` | Change to `Safe` only when primitive values need lenient fallback. |
-| `complexMapKeySerialization` | `false` | Enable only when Gson complex Map key array-entry format is needed. |
-| `useJdkUnsafe` | `false` | Applies only in `GsonCompatible` mode and controls whether SafeParser itself may use Unsafe construction; `Strict` forces it off. |
-| `skippedPlatformTypePrefixes` | `setOf("android.")` | Use for platform types only. Do not add business model package prefixes here. |
-| `nullValuePolicy` | `WriteExplicitNulls` | Change when explicit backend `null` needs a different nullable-field write policy. |
-| `requiredConstructorParameterPolicy` | `GsonCompatible` | Keep the default for existing Gson projects; switch to `Strict` only when missing non-null Kotlin constructor parameters should fail fast. |
-| `mapItemKeyPolicy` | `Omit` | Production omits Map keys by default; opt into `Hash` only for aggregation, and avoid bare hashes for low-entropy sensitive keys. |
-| `captureRawJsonInCallbacks` | `false` | Enable temporarily for troubleshooting. |
-| `maxRawJsonCaptureBytes` | `1 MiB` | Tune when raw JSON capture needs a smaller or larger bound. |
+| Config | Default | What it controls | Best for | Risk and verification |
+| --- | --- | --- | --- | --- |
+| `fallbackPolicy` | `NullOnly` | Whether whole collection or Map shape mismatches return `null` or empty containers. | Keep the default when backend arrays or maps may drift into objects or strings; use `Default` only when empty containers are safer for your business logic. | Empty containers can be mistaken for "valid but no data". Test real List, Set, and Map fields with wrong JSON shapes. |
+| `emptyResponsePolicy` | `DefaultValueForUnitOrVoidOnly` | Return values for empty Retrofit bodies. | Low-interference `Unit` / `Void` handling by default; model bodies can opt into default objects or `null`. | It must not hide offline state, cancellation, connection reset, or TLS failure. Verify empty body and transport failure separately. |
+| `primitiveParsingPolicy` | `DelegateToGson` | Whether primitives and `String` continue to delegate to Gson. | Keep the default for money, paging, status, and other strong semantic fields; use `Safe` only after business review. | `Safe` may turn bad data into 0, false, or empty strings. Test invalid strings, objects, and arrays on core fields. |
+| `complexMapKeySerialization` | `false` | Whether Map writing uses Gson's complex-key array-entry format. | Enable when Map keys are objects, aliased enums, or complex values and the server accepts array entries. | Servers that expect object form may reject the JSON. Compare native Gson and GsonSafeParser output. |
+| `useJdkUnsafe` | `false` | Whether SafeParser itself may construct objects with Unsafe. | Only for legacy projects that explicitly depend on Gson Unsafe construction and already have release regression coverage. | Unsafe bypasses constructors and `init`. Verify models with no no-arg constructor, Kotlin defaults, and non-null fields. |
+| `skippedPlatformTypePrefixes` | `setOf("android.")` | Skips platform types so Android system objects are not reflectively parsed. | Keep the default; extend only for platform package prefixes. | Do not add business model package prefixes here or field-level fallback will be skipped. Use diagnostics and real JSON tests. |
+| `nullValuePolicy` | `WriteExplicitNulls` | How explicit backend `null` writes into nullable fields. | Keep the default when you need to distinguish missing fields from explicit backend nulls. | Changes affect Kotlin nullable defaults. Compare missing-field JSON with explicit-null JSON. |
+| `requiredConstructorParameterPolicy` | `GsonCompatible` | Whether missing required constructor parameters stay Gson-compatible or become strict contract errors. | Keep the default for legacy Gson projects; consider `Strict` for new APIs, payment, signing, or auth models. | `Strict` surfaces more API issues and may require caller error handling. Test missing fields, explicit `null`, and unknown enums. |
+| `mapItemKeyPolicy` | `Omit` | Whether events and reports include Map item keys. | `Omit` in production, `Hash` for aggregation, plaintext only during debugging. | Low-entropy keys, phone numbers, and user IDs can be enumerable even when hashed. Inspect logs, metrics, and reports. |
+| `captureRawJsonInCallbacks` | `false` | Whether event callbacks carry raw JSON snippets. | Enable only temporarily for debugging, CI review, or staged troubleshooting. | Raw JSON may contain sensitive data. Confirm it is off for production or bounded safely. |
+| `maxRawJsonCaptureBytes` | `1 MiB` | Bound for raw JSON capture. | Increase temporarily for large-response debugging or lower it for memory-sensitive devices. | Large limits increase memory and privacy risk. Test gzip, chunked, and unknown-length responses with `captureSkipReason`. |
 
 ### Optional Capability Switches
 
-| Capability | Default state | How to enable |
-| --- | --- | --- |
-| JSON shape coercion | `Disabled` | Enable only when backend object-array drift is known and the business accepts an explicit recovery rule. Call `withShapeCoercionPolicy(...)`, or annotate a field with `@SafeParseShapeCoercion`. |
+| Capability | Default state | What it does | Best for | Not for |
+| --- | --- | --- | --- | --- |
+| JSON shape coercion | `Disabled` | Recovers an object field from the first object in an array, or wraps a single object as a one-item collection. | Known backend object/array drift where the business accepts "take the first item" or "wrap one item" as an explicit rule. | Signed payloads, payment amounts, auth data, and strict-contract fields; those should expose the mismatch. |
 
 ### Raw JSON Capture Rules
 

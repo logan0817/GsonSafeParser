@@ -9,10 +9,12 @@ Custom adapter boundary and open-source release readiness update.
 1. Preserves the native Gson path for caller-owned `TypeAdapter`, `TypeAdapterFactory`, `registerTypeHierarchyAdapter(...)`, and `@JsonAdapter`; exceptions from those custom adapters now propagate instead of being reported as SafeParser field fallback.
 2. Keeps Gson's last-registered-wins adapter ordering when SafeParser inspects caller-provided factories.
 3. Keeps primitive and `String` mismatches delegated to native Gson by default; safe primitive fallback stays opt-in through `PrimitiveParsingPolicy.Safe`.
-4. Expands boundary tests for reflective objects, collections, maps, arrays, nested adapters, primitive policies, and Retrofit converter behavior.
-5. Improves README, API reference, examples, release checklist, and open-source collaboration files for public framework publication.
-6. Normalizes documentation contract tests across Windows CRLF and Unix LF line endings.
-7. Aligns Gradle publishing version, Demo version, dependency snippets, compatibility docs, release checklist, and release notes with `1.0.4`.
+4. Keeps duplicate Map key handling aligned with native Gson, including the `duplicate key` exception boundary and the Gson 2.13.2 previous-`null` overwrite case.
+5. Expands boundary tests for reflective objects, collections, maps, arrays, nested adapters, primitive policies, and Retrofit converter behavior.
+6. Adds Gson internal adapter keepnames to core and retrofit AAR consumer ProGuard rules and verifies those rules in Maven local artifacts and demo release merging.
+7. Improves README, configuration docs, API reference, examples, release checklist, and open-source collaboration files for public framework publication.
+8. Normalizes documentation contract tests across Windows CRLF and Unix LF line endings.
+9. Aligns Gradle publishing version, Demo version, dependency snippets, compatibility docs, release checklist, and release notes with `1.0.4`.
 
 Details: [中文](docs/release-notes-1.0.4.md) / [English](docs/en/release-notes-1.0.4.md)
 

@@ -105,12 +105,12 @@ val result = GsonSafeParser.parseSafe<ApiResponse>(json)
 
 Entry choice:
 
-| Need | Recommended entry |
-| --- | --- |
-| Field-level fallback only | `GsonSafeParser.create()` or `GsonBuilder.enableSafeParser()`. |
-| Parsed value plus event snapshot | `GsonSafeParser.parseSafe<T>()`. |
-| Reuse the same config | `GsonSafeParser.parser(config)`. |
-| Existing external Gson | Call `.enableSafeParser(config)` on the Builder first, then use `parserWithExternalGson(gson, config)`. |
+| Need | Recommended entry | Best for | Check first when it fails |
+| --- | --- | --- | --- |
+| Field-level fallback only | `GsonSafeParser.create()` or `GsonBuilder.enableSafeParser()`. | Object, collection, and Map field mismatches should not break the outer bean. | Model obfuscation, `@SafeParseDelegateToGson`, or caller-owned custom adapters. |
+| Parsed value plus event snapshot | `GsonSafeParser.parseSafe<T>()`. | Logging field paths, actual JSON shapes, and fallback actions for monitoring or contract reports. | Whether the code actually calls `parseSafe`, and whether callbacks filter events. |
+| Reuse the same config | `GsonSafeParser.parser(config)`. | Repositories, data sources, and batch parsing jobs that parse the same API family often. | Whether the Parser is recreated repeatedly, and whether the config matches production. |
+| Existing external Gson | Call `.enableSafeParser(config)` on the Builder first, then use `parserWithExternalGson(gson, config)`. | The app owns a shared Gson but still needs `parseSafe` event snapshots. | Whether `GsonSafeParser.diagnostics(gson)` reports Safe Adapter registration. |
 
 Exception boundary:
 
@@ -219,17 +219,14 @@ val parser = GsonSafeParser.parserWithExternalGson(gson, config)
 
 Parser and Gson instances can be reused as singletons, DI objects, or repository members.
 
-External Gson rules:
+External Gson rules: `parserWithExternalGson(gson, config)` does not automatically register Safe Adapter on an external Gson.
 
-`parserWithExternalGson(gson, config)` does not automatically register Safe Adapter on an external Gson.
-
-| Question | Answer |
-| --- | --- |
-| Does `parserWithExternalGson(gson, config)` auto-register Safe Adapters? | No. Call `.enableSafeParser(config)` on the same `GsonBuilder` before creating that Gson. |
-| How do I check an external Gson? | Call `GsonSafeParser.diagnostics(gson)` and check whether the field-level Safe Adapter exists. |
-| What does the config passed to `parserWithExternalGson(gson, config)` control? | Raw JSON capture, root primitive fallback when `PrimitiveParsingPolicy.Safe` is explicitly enabled, and the `parseSafe` event snapshot. |
-| Field-level Adapter event callbacks | Owned by the config passed to `.enableSafeParser(...)` when the Gson was created. |
-| Which thread runs callbacks? | The parsing caller thread. Caller-owned lists, log buffers, or metric collectors must be thread-safe under concurrency. |
+| Scenario | Correct usage | Failure symptom | How to verify |
+| --- | --- | --- | --- |
+| External Gson needs field-level fallback | Call `.enableSafeParser(config)` on the same `GsonBuilder` before creating that Gson. | An object field receiving an array still throws like native Gson, and the outer bean cannot continue parsing. | Call `GsonSafeParser.diagnostics(gson)` and confirm the field-level Safe Adapter is registered. |
+| You only need `parseSafe` snapshots around an existing Gson | Wrap it with `parserWithExternalGson(gson, config)`. | `parseSafe` has an event container, but field-level fallback still depends on how that Gson was created. | Run a real model with a field-mismatch JSON such as `{"data":[]}`. |
+| What the config passed to `parserWithExternalGson(gson, config)` controls | Raw JSON capture, root primitive fallback when `PrimitiveParsingPolicy.Safe` is explicitly enabled, and the `parseSafe` event snapshot. | Expecting the new config to change callbacks inside field-level adapters already registered on the external Gson. | Field-level Adapter event callbacks are owned by the config passed to `.enableSafeParser(...)` when the Gson was created. |
+| Multiple threads share one Parser or Gson | Caller-owned lists, log buffers, or metric collectors written by callbacks must be thread-safe. | Concurrent parsing loses logs, scrambles ordering, or fails on external collections. | Use a thread-safe queue or metrics object in concurrency tests. |
 
 ## 7. Retrofit Integration
 

@@ -81,66 +81,29 @@ Recommended first read: 1. [Getting Started](docs/en/getting-started.md) 2. [API
 
 ## Default Behavior
 
-The default config is meant for existing Gson projects. The library handles only field problems that can be safely isolated; primitives, root-level failures, and uncertain cases keep native Gson behavior.
+The default config is meant for existing Gson projects. Before integrating, remember 4 boundaries: 1. field-level object, collection, and map shape mismatches are isolated to the current field, and fields with constructed defaults keep those defaults 2. primitives and `String` delegate to Gson by default; safe primitive values require explicit `PrimitiveParsingPolicy.Safe` 3. Root object mismatch, JSON syntax errors, and exceptions thrown by caller-owned custom adapters are thrown outward 4. Retrofit offline state, cancellation, connection reset, and TLS failure belong to the network layer and are not hidden by empty-response handling.
 
-### Default Config
+### Default Config Quick Reference
 
-| Config | Default |
-| --- | --- |
-| `fallbackPolicy` | `FallbackPolicy.NullOnly` |
-| `primitiveParsingPolicy` | `PrimitiveParsingPolicy.DelegateToGson` |
-| `emptyResponsePolicy` | `EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly` |
-| `useJdkUnsafe` | `false` |
-| `requiredConstructorParameterPolicy` | `RequiredConstructorParameterPolicy.GsonCompatible` |
-| `mapItemKeyPolicy` | `MapItemKeyPolicy.Omit` |
+| Config | Default | What it controls | When to change it | How to verify |
+| --- | --- | --- | --- | --- |
+| `fallbackPolicy` | `FallbackPolicy.NullOnly` | Whether whole collection or Map shape mismatches return `null` or empty containers. | Change to `FallbackPolicy.Default` only when empty collections and empty maps mean "no data" in your business logic. | Feed object or string JSON into List, Set, and Map fields, then check field values and events. |
+| `primitiveParsingPolicy` | `PrimitiveParsingPolicy.DelegateToGson` | Whether Int, Long, Boolean, String, and similar values delegate to Gson. | Change to `PrimitiveParsingPolicy.Safe` only when the business accepts invalid primitives being recovered. | Try invalid strings, objects, and arrays for primitive fields; default should throw or explicit Safe should emit events. |
+| `emptyResponsePolicy` | `EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly` | Return values for empty Retrofit bodies. | Change when empty model bodies should return a default object or `null`. | Cover `Unit`, `Void`, and business model endpoints with empty bodies. |
+| `useJdkUnsafe` | `false` | Whether SafeParser itself may construct objects with Unsafe. | Enable only when the project explicitly depends on native Gson Unsafe construction. | Run release regressions with models that have no no-arg constructor and Kotlin defaults. |
+| `requiredConstructorParameterPolicy` | `RequiredConstructorParameterPolicy.GsonCompatible` | Whether missing required constructor parameters stay Gson-compatible or fail as strict contract errors. | Switch to `Strict` for new APIs where missing fields, `null`, or unknown enums should be treated as contract failures. | Test missing fields, explicit `null`, and unknown enums on real models. |
+| `mapItemKeyPolicy` | `MapItemKeyPolicy.Omit` | Whether events include Map item keys. | Use `Hash` for production aggregation or plaintext for debugging; avoid output for sensitive or low-entropy keys. | Inspect logs and contract reports to confirm user identifiers are not leaked. |
 
-### Optional Capability State
-
-| Capability | Default state | How to enable |
-| --- | --- | --- |
-| JSON shape coercion | `ShapeCoercionPolicy.Disabled` | Call `withShapeCoercionPolicy(...)`, or annotate a field with `@SafeParseShapeCoercion`. |
-
-### Constructor Policy
-
-The default is `GsonCompatible + useJdkUnsafe = false`. It keeps Gson-compatible behavior while preventing SafeParser itself from bypassing constructors with Unsafe.
-
-| Goal | Recommended config |
-| --- | --- |
-| Adopt the library in an existing project | Keep the default config. |
-| Match native Gson Unsafe construction because the project depends on it | Use `GsonCompatible + useJdkUnsafe = true`. |
-| Treat missing fields, `null`, or unknown enum values as API contract errors | Use `Strict + useJdkUnsafe = false`. |
-
-See [Configuration](docs/en/configuration.md) for the full config reference.
+JSON shape coercion defaults to `ShapeCoercionPolicy.Disabled`. Enable `ShapeCoercionPolicy.ObjectAndCollection` or field-level `@SafeParseShapeCoercion` only when backend object/array drift is known and the business accepts an explicit recovery rule. See [Configuration](docs/en/configuration.md) for the full config reference.
 
 ### Fixed Boundaries
 
-| Scenario | Unexpected JSON | Result |
-| --- | --- | --- |
-| Object field mismatch | `[]`, `""`, `1` | Returns `null` or keeps the constructed field default by default, while the outer object keeps parsing. |
-| Root object mismatch | `[]`, `""`, `1` | Usually returns `null`; unrecoverable Gson exceptions are still thrown. |
-| Primitive / `String` field | `{}`, `[]` | Delegates to the native Gson adapter by default; read failures are thrown as native Gson exceptions and do not emit SafeParser events. |
-
-`FallbackPolicy` (default: `FallbackPolicy.NullOnly`):
-
-| Target type | Unexpected JSON | `FallbackPolicy.NullOnly` (default) | `FallbackPolicy.Default` |
+| Scenario | Default handling | Why | Next action |
 | --- | --- | --- | --- |
-| List / Set | `{}`, `""` | Returns `null`. | Returns an empty collection. |
-| Map | `[]`, `""` | Returns `null`. | Returns an empty map. |
-
-Note: fields with constructed defaults keep those defaults. Root values or fields without defaults still follow the table and return `null`.
-
-`PrimitiveParsingPolicy` (default: `PrimitiveParsingPolicy.DelegateToGson`):
-
-| Target type | Unexpected JSON | `PrimitiveParsingPolicy.DelegateToGson` (default) | `PrimitiveParsingPolicy.Safe` |
-| --- | --- | --- | --- |
-| Int / Long / Boolean / String | `{}`, `[]`, invalid strings | Delegates to the native Gson adapter and throws on failure. | Uses safe primitive defaults or keeps constructed defaults, and records events. |
-
-`EmptyResponsePolicy` (default: `EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly`):
-
-| Scenario | Response | `DefaultValueForUnitOrVoidOnly` (default) | `DefaultValue` | `Null` | `DelegateToGson` |
-| --- | --- | --- | --- | --- | --- |
-| Empty Retrofit `Unit` / `Void` body | Empty body | `Unit` returns `Unit`; `Void` returns `null`. | Returns each empty value. | Returns `null`. | Returns Retrofit empty values `Unit` / `null`; no Gson delegate is requested. |
-| Empty Retrofit model body | Empty body | Returns `null`. | Returns a default object. | Returns `null`. | Usually ends with `EOFException`. |
+| Object field receives `[]`, `""`, or `1` | Returns `null` or keeps the constructed field default; the outer object keeps parsing. | A field-level mismatch can be isolated safely. | Use `parseSafe<T>()` to inspect the event path and report it to the backend. |
+| Root object receives `[]`, `""`, or `1` | Root-level failures keep Gson boundaries and are not disguised as complete default objects. | There is no outer object to isolate, and hiding root failures can mask protocol errors. | Separate empty responses, syntax errors, and API contract failures at the call site. |
+| Primitive / `String` field receives `{}`, `[]`, or invalid strings | Delegates to the native Gson adapter by default and throws on failure. | Primitive values often drive money, state, or paging logic, so silent changes are risky. | Opt into `PrimitiveParsingPolicy.Safe` only after business review. |
+| Caller-owned custom adapter throws | Exceptions thrown by those custom adapters are thrown outward, not disguised as field fallback. | The caller explicitly owns that type's Gson behavior. | Handle recoverable errors inside the custom adapter, or delegate the type back to native Gson. |
 
 ## Installation
 

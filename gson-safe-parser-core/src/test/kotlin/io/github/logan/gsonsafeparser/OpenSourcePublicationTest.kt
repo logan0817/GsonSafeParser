@@ -119,7 +119,7 @@ class OpenSourcePublicationTest {
         assertTrue(ciWorkflow.contains("Generate OSV release runtime lockfile"))
         assertTrue(ciWorkflow.contains("./gradlew writeOsvReleaseRuntimeLockfile --warning-mode=fail"))
         assertTrue(ciWorkflow.contains("Run dependency vulnerability scan"))
-        assertTrue(ciWorkflow.contains("google/osv-scanner-action@v2.3.8"))
+        assertTrue(ciWorkflow.contains("google/osv-scanner-action/osv-scanner-action@v2.3.8"))
         assertTrue(!ciWorkflow.contains("google/osv-scanner-action@v2\n"))
         assertTrue(ciWorkflow.contains("scan-args:"))
         assertTrue(ciWorkflow.contains("scan"))
@@ -495,6 +495,24 @@ class OpenSourcePublicationTest {
         assertTrue(combinedRules.contains("com.google.gson.ToNumberStrategy objectToNumberStrategy"))
         assertTrue(combinedRules.contains("boolean useJdkUnsafe"))
         assertTrue(combinedRules.contains("boolean complexMapKeySerialization"))
+        listOf(coreRules to "core", retrofitRules to "retrofit").forEach { (rules, moduleName) ->
+            assertTrue(
+                rules.contains("-keepnames class com.google.gson.internal.bind.TreeTypeAdapter**"),
+                "$moduleName consumer rules must keep TreeTypeAdapter names"
+            )
+            assertTrue(
+                rules.contains("-keepnames class com.google.gson.internal.bind.TypeAdapters**"),
+                "$moduleName consumer rules must keep TypeAdapters names"
+            )
+            assertTrue(
+                rules.contains("-keepnames class com.google.gson.internal.bind.EnumTypeAdapter**"),
+                "$moduleName consumer rules must keep EnumTypeAdapter names"
+            )
+            assertTrue(
+                rules.contains("-keepnames class com.google.gson.internal.bind.NumberTypeAdapter**"),
+                "$moduleName consumer rules must keep NumberTypeAdapter names"
+            )
+        }
         assertTrue(combinedRules.contains("@com.google.gson.annotations.SerializedName <fields>"))
         assertTrue(!combinedRules.contains("com.yourcompany"))
         assertTrue(!combinedRules.contains("io.github.logan.gsonsafeparser.demo.model"))

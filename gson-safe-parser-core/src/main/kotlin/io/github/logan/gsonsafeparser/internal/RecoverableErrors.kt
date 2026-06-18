@@ -1,6 +1,7 @@
 package io.github.logan.gsonsafeparser.internal
 
 import com.google.gson.JsonParseException
+import com.google.gson.JsonSyntaxException
 import io.github.logan.gsonsafeparser.GsonSafeParserLowLevelApi
 import java.io.IOException
 import java.io.InterruptedIOException
@@ -55,6 +56,9 @@ private fun Throwable.unrecoverableCauseOrNull(): Throwable? {
         val current = pending.removeFirst()
         if (!visited.add(current)) continue
         if (current is CallerAdapterReadException) return current
+        if (current is JsonSyntaxException && current.message.orEmpty().startsWith("duplicate key: ")) {
+            return current
+        }
         if (current is Error || current is CancellationException) return current
         if (current is IOException && current.isUnrecoverableTransportIo()) return current
         if (current is InvocationTargetException) {

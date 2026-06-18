@@ -72,14 +72,14 @@ git diff --cached --check
 5. README 文档表能找到快速开始、兼容性说明、配置说明、错形能力矩阵（JSON 形状不一致）、Android 混淆、Demo App、排障指南、发布清单、1.0.4 发布说明、1.0.3 历史发布说明、1.0.2 历史发布说明、1.0.1 历史发布说明和 1.0.0 历史发布说明。
 6. `docs/compatibility.md` 和 `docs/en/compatibility.md` 明确列出 `minSdk 23`、`compileSdk 36`、`JDK 17`、`Kotlin 2.0.21`、`kotlin-reflect 2.0.21`、`Gson 2.13.2`、`Retrofit 2.8.1` 和 R8 / ProGuard 边界。
 7. `CHANGELOG.md` 存在，并以 `1.0.4` 作为当前发布版本、`1.0.0` 作为首个公开兼容基线。
-8. `docs/release-notes-1.0.4.md` 和 `docs/en/release-notes-1.0.4.md` 明确列出自定义 Adapter 外抛边界、原生 Gson 顺序、默认基础类型策略、开源发布文件和发布验证。
+8. `docs/release-notes-1.0.4.md` 和 `docs/en/release-notes-1.0.4.md` 明确列出自定义 Adapter 外抛边界、原生 Gson 顺序、默认基础类型策略、Map 重复 key 边界、AAR consumer ProGuard keepnames、开源发布文件和发布验证。
 9. `docs/release-notes-1.0.3.md` 和 `docs/en/release-notes-1.0.3.md` 继续保留 JSON 形态转换、事件报告、边界规则和发布验证。
 10. `docs/release-notes-1.0.2.md` 和 `docs/en/release-notes-1.0.2.md` 继续保留传输异常边界修正、兼容边界和发布验证。
 11. `docs/release-notes-1.0.1.md` 和 `docs/en/release-notes-1.0.1.md` 继续保留历史稳定性修正、兼容边界和发布验证。
 12. `docs/release-notes-1.0.0.md` 和 `docs/en/release-notes-1.0.0.md` 继续保留首发能力、兼容边界和发布验证。
 13. `README.md`、`README_EN.md`、`docs/compatibility.md`、`docs/en/compatibility.md`、`docs/troubleshooting.md`、`docs/en/troubleshooting.md` 都明确说明网络或传输读流异常会交回 Retrofit / OkHttp，不能用 `emptyResponsePolicy` 隐藏。
 14. `README.md`、`README_EN.md`、`docs/compatibility.md` 和 `docs/en/compatibility.md` 都明确说明 Retrofit 网络栈安全基线、runtime scope、`OkHttp 4.12.0`、`Okio 3.6.0`、`dependencyInsight` 和依赖解析验证。
-15. `CHANGELOG.md`、1.0.4 中英文发布说明和本清单都记录自定义 Adapter 外抛边界、原生 Gson 顺序、默认基础类型策略和开源发布文件整理。
+15. `CHANGELOG.md`、1.0.4 中英文发布说明和本清单都记录自定义 Adapter 外抛边界、原生 Gson 顺序、默认基础类型策略、Map 重复 key 边界、AAR consumer ProGuard keepnames 和开源发布文件整理。
 
 ## 5. 远程发布前检查
 

@@ -6,6 +6,8 @@
 
 ## 1. 入口速查
 
+先按手里有什么选入口：从零创建 Gson 用 `GsonSafeParser.create(config)`；已有 `GsonBuilder` 用 `GsonBuilder.enableSafeParser(config)` 或 `GsonSafeParser.parser(builder, config)`；已有创建好的 `Gson`，先确认它已经注册 Safe Adapter，再用 `parserWithExternalGson(gson, config)`；Retrofit 统一走 `GsonSafeConverterFactory.create(...)`。
+
 | API | 适用场景 | 返回事件 | 是否复用 Gson | 关键边界 |
 | --- | --- | --- | --- | --- |
 | `GsonSafeParser.create(config)` | 从零创建一份带 Safe Adapter 的 Gson | 否 | 返回的 Gson 可复用 | 字段级兜底生效；直接 `gson.fromJson(...)` 仍保留 Gson 根级异常包装 |
