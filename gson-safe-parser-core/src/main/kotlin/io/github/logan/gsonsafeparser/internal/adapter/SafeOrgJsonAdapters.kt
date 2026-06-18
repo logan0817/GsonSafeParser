@@ -50,7 +50,7 @@ internal object SafeOrgJsonAdapters {
         config: SafeParserConfig
     ): TypeAdapter<JSONObject?> {
         val proxy = gson.getAdapter(JsonElement::class.java)
-        return object : TypeAdapter<JSONObject?>() {
+        return object : TypeAdapter<JSONObject?>(), SafeRuntimeTypeAdapter {
             override fun write(out: JsonWriter, value: JSONObject?) {
                 if (value == null) {
                     out.nullValue()
@@ -88,7 +88,7 @@ internal object SafeOrgJsonAdapters {
         config: SafeParserConfig
     ): TypeAdapter<JSONArray?> {
         val proxy = gson.getAdapter(JsonElement::class.java)
-        return object : TypeAdapter<JSONArray?>() {
+        return object : TypeAdapter<JSONArray?>(), SafeRuntimeTypeAdapter {
             override fun write(out: JsonWriter, value: JSONArray?) {
                 if (value == null) {
                     out.nullValue()

@@ -46,7 +46,7 @@ internal object SafeArrayAdapterFactory {
             componentRawType.delegatesPrimitiveInputShape(config)
         val componentAcceptsObject = TokenRules.accepts(componentType, componentRawType, JsonToken.BEGIN_OBJECT)
 
-        return object : TypeAdapter<T>() {
+        return object : TypeAdapter<T>(), SafeRuntimeTypeAdapter {
             override fun write(out: JsonWriter, value: T?) {
                 delegate.write(out, value)
             }

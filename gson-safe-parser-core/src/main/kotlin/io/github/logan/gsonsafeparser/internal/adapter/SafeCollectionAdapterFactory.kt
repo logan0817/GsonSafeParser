@@ -52,7 +52,7 @@ internal object SafeCollectionAdapterFactory {
         val elementAcceptsObject = TokenRules.accepts(elementType, elementRawType, JsonToken.BEGIN_OBJECT)
         val rawType = type.rawType
 
-        return object : TypeAdapter<T>() {
+        return object : TypeAdapter<T>(), SafeRuntimeTypeAdapter {
             /**
              * 把集合写成 JSON 数组。
              *

@@ -59,7 +59,7 @@ internal object SafeMapAdapterFactory {
         val rawType = type.rawType
         val complexMapKeySerialization = config.complexMapKeySerialization
 
-        return object : TypeAdapter<T>() {
+        return object : TypeAdapter<T>(), SafeRuntimeTypeAdapter {
             /**
              * 写出 Map。
              *

@@ -9,6 +9,7 @@ import com.google.gson.stream.JsonWriter
 import io.github.logan.gsonsafeparser.SafeParserConfig
 import io.github.logan.gsonsafeparser.TypeMismatchEvent
 import io.github.logan.gsonsafeparser.dispatchTypeMismatch
+import io.github.logan.gsonsafeparser.internal.adapter.SafeRuntimeTypeAdapter
 import io.github.logan.gsonsafeparser.internal.adapter.leafFieldNameFromPath
 import io.github.logan.gsonsafeparser.internal.throwIfFatal
 import java.io.IOException
@@ -31,7 +32,7 @@ internal class SafeTypeAdapter<T>(
     private val rawType: Class<*>,
     private val delegate: TypeAdapter<T>,
     private val config: SafeParserConfig
-) : TypeAdapter<T>() {
+) : TypeAdapter<T>(), SafeRuntimeTypeAdapter {
     /**
      * 序列化仍然交给原始 delegate。
      *

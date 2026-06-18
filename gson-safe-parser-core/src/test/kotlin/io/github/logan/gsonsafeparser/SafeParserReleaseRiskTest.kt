@@ -8,6 +8,11 @@ import com.google.gson.annotations.JsonAdapter
 import com.google.gson.reflect.TypeToken
 import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonWriter
+import io.github.logan.gsonsafeparser.internal.adapter.SafeRuntimeTypeAdapter
+import io.github.logan.gsonsafeparser.internal.adapter.handlesOwnInputShape
+import java.math.BigDecimal
+import java.math.BigInteger
+import java.util.Queue
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -35,11 +40,34 @@ class SafeParserReleaseRiskTest {
     data class MapValueResponse(val values: Map<String, User> = emptyMap())
     data class RawJsonResponse(val child: User = User())
     data class SensitiveReasonResponse(val value: Int = 0)
+    data class NumericContainerResponse(
+        val list: List<Double> = emptyList(),
+        val set: Set<Double> = emptySet(),
+        val queue: Queue<Double> = java.util.ArrayDeque(),
+        val map: Map<String, Double> = emptyMap(),
+        val arrayEntryMap: Map<String, Double> = emptyMap()
+    )
+    data class ScalarReleaseResponse(
+        val intValue: Int = 6,
+        val longValue: Long = 7L,
+        val shortValue: Short = 8,
+        val byteValue: Byte = 9,
+        val floatValue: Float = 1.5f,
+        val doubleValue: Double = 2.5,
+        val decimal: BigDecimal = BigDecimal("3.5"),
+        val integer: BigInteger = BigInteger.TEN,
+        val enabled: Boolean = true,
+        val emptyInt: Int = 11,
+        val emptyDecimal: BigDecimal = BigDecimal("12.5")
+    )
     data class GenericBox<T>(val value: T? = null)
     data class ExplicitJsonAdapterShapeResponse(
         @field:SafeParseShapeCoercion(ShapeCoercionPolicy.ObjectFromFirstArrayItem)
         val value: NativeJsonAdapterOnly? = null
     )
+    enum class ReleaseRiskRole {
+        Admin
+    }
 
     @SafeParseDelegateToGson
     class NativeOnly {
@@ -70,6 +98,108 @@ class SafeParserReleaseRiskTest {
             reader.endObject()
             return result
         }
+    }
+
+    @Test
+    fun `safe adapters expose stable marker for minified release classification`() {
+        val gson = GsonSafeParser.create(
+            SafeParserConfig(primitiveParsingPolicy = PrimitiveParsingPolicy.Safe)
+        )
+
+        listOf(
+            gson.getAdapter(Double::class.javaObjectType),
+            gson.getAdapter(object : TypeToken<List<Double>>() {}),
+            gson.getAdapter(object : TypeToken<Map<String, Double>>() {}),
+            gson.getAdapter(object : TypeToken<Array<User>>() {}),
+            gson.getAdapter(UserResponse::class.java),
+            gson.getAdapter(ReleaseRiskRole::class.java)
+        ).forEach { adapter ->
+            assertSafeInternalAdapter(adapter)
+        }
+    }
+
+    @Test
+    fun `numeric collection and map items skip structural mismatches in release risk paths`() {
+        val events = mutableListOf<SafeParserEvent>()
+        val gson = GsonSafeParser.create(
+            SafeParserConfig(
+                primitiveParsingPolicy = PrimitiveParsingPolicy.Safe,
+                mapItemKeyPolicy = MapItemKeyPolicy.PlainText,
+                onEvent = events::add
+            )
+        )
+
+        val result = gson.fromJson(
+            """
+            {
+              "list": [{}, 2.5],
+              "set": [{}, 2.5],
+              "queue": [{}, 2.5],
+              "map": {"bad": {}, "ok": 2.5},
+              "arrayEntryMap": [["bad", {}], ["ok", 2.5]]
+            }
+            """.trimIndent(),
+            NumericContainerResponse::class.java
+        )
+
+        assertEquals(listOf(2.5), result.list)
+        assertEquals(setOf(2.5), result.set)
+        assertEquals(listOf(2.5), result.queue.toList())
+        assertEquals(mapOf("ok" to 2.5), result.map)
+        assertEquals(mapOf("ok" to 2.5), result.arrayEntryMap)
+
+        val mismatches = events.filterIsInstance<SafeParserEvent.TypeMismatch>().map { event -> event.detail }
+        assertTrue(mismatches.any { event -> event.kind == ParseExceptionKind.LIST_ITEM && event.path == "$.list[0]" })
+        assertTrue(mismatches.any { event -> event.kind == ParseExceptionKind.LIST_ITEM && event.path == "$.set[0]" })
+        assertTrue(mismatches.any { event -> event.kind == ParseExceptionKind.LIST_ITEM && event.path == "$.queue[0]" })
+        assertEquals(
+            2,
+            mismatches.count { event -> event.kind == ParseExceptionKind.MAP_ITEM && event.mapItemKey == "bad" }
+        )
+    }
+
+    @Test
+    fun `invalid safe primitive field strings keep defaults while empty numeric strings use zero fallback`() {
+        val events = mutableListOf<SafeParserEvent>()
+
+        val result = GsonSafeParser.fromJson(
+            """
+            {
+              "intValue": "bad",
+              "longValue": "bad",
+              "shortValue": "bad",
+              "byteValue": "bad",
+              "floatValue": "NaN",
+              "doubleValue": "Infinity",
+              "decimal": "bad",
+              "integer": "bad",
+              "enabled": "not_boolean",
+              "emptyInt": "",
+              "emptyDecimal": ""
+            }
+            """.trimIndent(),
+            ScalarReleaseResponse::class.java,
+            SafeParserConfig(
+                fallbackPolicy = FallbackPolicy.Default,
+                primitiveParsingPolicy = PrimitiveParsingPolicy.Safe,
+                onEvent = events::add
+            )
+        )
+
+        assertEquals(
+            ScalarReleaseResponse(
+                emptyInt = 0,
+                emptyDecimal = BigDecimal.ZERO
+            ),
+            result
+        )
+        val mismatchPaths = events.filterIsInstance<SafeParserEvent.TypeMismatch>()
+            .map { event -> event.detail.path }
+            .toSet()
+        assertTrue("$.intValue" in mismatchPaths)
+        assertTrue("$.enabled" in mismatchPaths)
+        assertTrue("$.emptyInt" !in mismatchPaths)
+        assertTrue("$.emptyDecimal" !in mismatchPaths)
     }
 
     @Test
@@ -441,5 +571,13 @@ class SafeParserReleaseRiskTest {
         assertEquals(DiagnosticSeverity.WARNING, warning.severity)
         assertTrue(warning.message.contains("Raw JSON capture is enabled"))
         assertFalse(diagnostics.hasErrors)
+    }
+
+    private fun assertSafeInternalAdapter(adapter: TypeAdapter<*>) {
+        assertTrue(
+            adapter is SafeRuntimeTypeAdapter,
+            "Safe adapter ${adapter.javaClass.name} must not depend on class names for release classification."
+        )
+        assertFalse(adapter.handlesOwnInputShape())
     }
 }

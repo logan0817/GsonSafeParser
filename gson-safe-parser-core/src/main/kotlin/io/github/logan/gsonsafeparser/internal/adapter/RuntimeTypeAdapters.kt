@@ -11,11 +11,18 @@ import java.lang.reflect.Type
 import java.lang.reflect.TypeVariable
 
 /**
+ * 标记当前 Adapter 由 GsonSafeParser 内部创建。
+ *
+ * 这个接口用于运行时分类，不能依赖类名判断；release 混淆后接口关系仍然稳定。
+ */
+internal interface SafeRuntimeTypeAdapter
+
+/**
  * 标记当前 Adapter 是 Safe Reflective Adapter。
  *
  * 序列化时需要知道声明类型和运行时类型哪个 Adapter 更应该被使用，避免子类反射 Adapter 覆盖显式声明的自定义 Adapter。
  */
-internal interface ReflectiveRuntimeTypeAdapter
+internal interface ReflectiveRuntimeTypeAdapter : SafeRuntimeTypeAdapter
 
 /**
  * 按 Gson 的运行时类型规则写出字段值。
@@ -68,10 +75,9 @@ private fun TypeAdapter<*>.isReflectiveAdapter(): Boolean {
  * 了读取规则，SafeParser 不应在外层先做 token 形状过滤或 shape coercion。
  */
 internal fun TypeAdapter<*>.handlesOwnInputShape(): Boolean {
+    if (this is SafeRuntimeTypeAdapter) return false
     val name = javaClass.name
     return when {
-        this is ReflectiveRuntimeTypeAdapter -> false
-        name.startsWith("io.github.logan.gsonsafeparser.internal.") -> false
         name.startsWith("com.google.gson.Gson\$") -> false
         name.startsWith("com.google.gson.internal.bind.TreeTypeAdapter") -> true
         gsonBuiltInAnonymousAdapterName.matches(name) -> false

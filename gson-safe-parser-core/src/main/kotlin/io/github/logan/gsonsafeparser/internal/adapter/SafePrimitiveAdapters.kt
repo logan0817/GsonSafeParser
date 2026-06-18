@@ -86,7 +86,7 @@ internal object SafePrimitiveAdapters {
      * @return 能宽松读取字符串的 Adapter。
      */
     private fun stringAdapter(type: TypeToken<*>, config: SafeParserConfig): TypeAdapter<String?> {
-        return object : TypeAdapter<String?>() {
+        return object : TypeAdapter<String?>(), SafeRuntimeTypeAdapter {
             /**
              * 写出字符串值。
              *
@@ -130,7 +130,7 @@ internal object SafePrimitiveAdapters {
      * @return 能兼容 true/false、0/1 和字符串布尔值的 Adapter。
      */
     private fun booleanAdapter(type: TypeToken<*>, rawType: Class<*>, config: SafeParserConfig): TypeAdapter<Boolean?> {
-        return object : TypeAdapter<Boolean?>() {
+        return object : TypeAdapter<Boolean?>(), SafeRuntimeTypeAdapter {
             /**
              * 写出布尔值。
              *
@@ -207,7 +207,7 @@ internal object SafePrimitiveAdapters {
         config: SafeParserConfig,
         parse: (String) -> N
     ): TypeAdapter<N?> {
-        return object : TypeAdapter<N?>() {
+        return object : TypeAdapter<N?>(), SafeRuntimeTypeAdapter {
             /**
              * 写出数字值。
              *
