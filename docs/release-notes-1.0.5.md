@@ -80,7 +80,7 @@ git diff --cached --check
 
 ## 验证记录与待办
 
-2026-11-16 已对本地 `1.0.5` 候选工作区完成以下验证。工作区基于提交 `6008490`，包含尚未提交的稳定性修复和定版改动；以下结果不能归属于远端旧提交。
+2026-11-16 已完成以下验证。稳定性修复和定版改动已提交为 `d438cd4`；修复 CI 的 SDK 工具包安装后，提交 `21a0c64` 通过远端 CI #25。本地验证覆盖同一份运行时代码；设备结果对应下方 APK 摘要。
 
 | 检查 | 本轮结果 |
 | --- | --- |
@@ -93,6 +93,10 @@ git diff --cached --check
 | 真机运行：Android 16 | Redmi K60 Ultra、Android 16（API 36），同一份混淆 APK 安装版本核验通过，自检 51/51 通过 |
 | 漏洞扫描 | OSV Scanner 2.3.8 扫描 15 个运行时依赖，未报告漏洞 |
 | 远程发布任务图 | `releaseToMavenCentral --dry-run` 通过，仅检查任务图，未执行远程发布 |
+| 远端 CI | 提交 `21a0c64` 的 CI #25 全部通过，覆盖漏洞扫描、Debug / Release 单测、lint、构建及发布产物校验 |
+| Central 部署 | 两个模块完成签名、上传和 Central 校验；部署 `3b792422-2216-4ead-aad4-c6ebcb45c77f` 已提交公开发布，当前仍在等待公开仓库同步 |
+
+Central 在本轮返回组织月度 `Release Count` 超限警告，提示额度于 **2026-12-01** 重置。公开发布请求已受理，但检查时状态仍为 `PUBLISHING`，公开仓库尚不能解析两个模块；不能据此认定发布成功。后续应先检查现有部署与公开仓库状态，再决定是否需要恢复操作，避免重复上传。
 
 本轮 Demo Release APK 的 SHA-256：
 
@@ -100,4 +104,4 @@ git diff --cached --check
 0826d6f8b13839ecd4ca8205450df6a2bc8e3e33e99dc0c9cb5a1e8c4dfe3c30
 ```
 
-仍待完成：将候选改动提交并通过对应提交的远端 CI，按发布清单完成公开发布与 Maven Central 独立解析验证，随后切换公开安装示例。实机覆盖上述 Android 13 与 Android 16 设备，不能视为其他机型或 Android 版本也已实测。Release JVM 单测和 `assembleRelease` 不能替代实际运行；本地校验通过也不代表已经公开发布。
+仍待完成：确认 Central 最终发布状态并完成 Maven Central 独立解析验证，随后切换公开安装示例。实机覆盖上述 Android 13 与 Android 16 设备，不能视为其他机型或 Android 版本也已实测。Release JVM 单测和 `assembleRelease` 不能替代实际运行；签名、上传和校验通过也不代表公开依赖已经可用。

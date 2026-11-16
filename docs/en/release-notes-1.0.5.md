@@ -80,7 +80,7 @@ An independent Android consumer must point `dependencyResolutionManagement.repos
 
 ## Verification Record And Pending Work
 
-On November 16, 2026, the local `1.0.5` candidate workspace passed the following checks. It is based on commit `6008490` with uncommitted stability fixes and version preparation; these results do not belong to the older remote commit.
+The following checks were completed on November 16, 2026. Stability fixes and version preparation were committed as `d438cd4`; after correcting CI SDK package installation, commit `21a0c64` passed remote CI #25. Local verification covers the same runtime code; device results correspond to the APK digest below.
 
 | Check | Result from this round |
 | --- | --- |
@@ -93,6 +93,10 @@ On November 16, 2026, the local `1.0.5` candidate workspace passed the following
 | Device execution: Android 16 | Redmi K60 Ultra, Android 16 (API 36); the same minified APK passed installed-version verification and 51/51 self-checks |
 | Vulnerability scan | OSV Scanner 2.3.8 scanned 15 runtime dependencies and reported no vulnerabilities |
 | Remote publication task graph | `releaseToMavenCentral --dry-run` passed; only the task graph was checked, with no remote publication |
+| Remote CI | CI #25 for commit `21a0c64` passed all dependency scanning, Debug / Release tests, lint, builds, and publication artifact checks |
+| Central deployment | Both modules passed signing, upload, and Central validation; deployment `3b792422-2216-4ead-aad4-c6ebcb45c77f` was submitted for public release and is awaiting public repository synchronization |
+
+Central returned a warning that the organization's monthly `Release Count` limit was exceeded, with a reset date of **2026-12-01**. The public-release request was accepted, but the observed state remained `PUBLISHING` and neither module could be resolved from the public repository. This does not establish a successful release. Check the existing deployment and public repository before attempting recovery to avoid duplicate uploads.
 
 SHA-256 of this round's Demo Release APK:
 
@@ -100,4 +104,4 @@ SHA-256 of this round's Demo Release APK:
 0826d6f8b13839ecd4ca8205450df6a2bc8e3e33e99dc0c9cb5a1e8c4dfe3c30
 ```
 
-Still pending: commit the candidate changes and pass remote CI for that commit, complete public publication and independent Maven Central resolution checks, then switch public installation examples. Device testing covered the Android 13 and Android 16 devices above, not other models or Android versions. Release JVM tests and `assembleRelease` do not replace actual execution; passing local verification does not constitute a public release.
+Still pending: confirm the final Central publication state and independently resolve the artifacts from Maven Central, then switch public installation examples. Device testing covered the Android 13 and Android 16 devices above, not other models or Android versions. Release JVM tests and `assembleRelease` do not replace actual execution; successful signing, upload, and validation do not establish public artifact availability.
