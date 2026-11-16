@@ -6,9 +6,53 @@ GsonSafeParser configuration has a simple goal: handle fields that can be safely
 
 This document covers config fields, constructor policy, presets, events, contract reports, and annotations. For the full unexpected-shape scope, see the [Mismatch Capability Matrix](mismatch-capability-matrix.md).
 
+## Start Here
+
+**You do not need to copy the full configuration.** First run [Getting Started](getting-started.md) with `GsonSafeParser.create()`, then change only options your application needs.
+
+| Your situation | Choose | Behavior change |
+| --- | --- | --- |
+| An object field receives `[]`; keep its model default | Keep the defaults | Recover that field and continue reading the others. |
+| An `Int` field receives `"bad"`; a local default is acceptable | Set `primitiveParsingPolicy` to `PrimitiveParsingPolicy.Safe` | Enable primitive recovery; this is off by default. |
+| Explicit JSON `null` should also keep the field default | Set `nullValuePolicy` to `NullValuePolicy.KeepDefaults` | Do not overwrite nullable field defaults with explicit null. |
+| An object field receives an array; taking only its first item is acceptable | Annotate that field with `@SafeParseShapeCoercion` | Remaining items are discarded, not merged. |
+| Find out which field was recovered | Read `events` from `parseSafe<T>()` | Raw response capture is not required. |
+| An empty Retrofit model response should create a default object | Set `emptyResponsePolicy` to `EmptyResponsePolicy.DefaultValue` | Only affects responses reaching this converter; see [empty responses](troubleshooting.md#1-empty-retrofit-responses). |
+
+This page describes the current `1.0.5` candidate source. Fixes such as per-item array recovery and nested Map path redaction are documented in the [candidate notes](release-notes-1.0.5.md) and remain unpublished; do not assume the Maven `1.0.4` artifacts include them.
+
+### Example: Enable Only Primitive Recovery
+
+After adding the core or retrofit dependency, paste this entire block into a Kotlin file and call `safeNumbersExample()` from a unit test or debug entry point:
+
+```kotlin
+import io.github.logan.gsonsafeparser.GsonSafeParser
+import io.github.logan.gsonsafeparser.PrimitiveParsingPolicy
+import io.github.logan.gsonsafeparser.SafeParserConfig
+import io.github.logan.gsonsafeparser.parseSafe
+
+data class Profile(val age: Int = 18)
+
+fun safeNumbersExample() {
+    val config = SafeParserConfig(
+        primitiveParsingPolicy = PrimitiveParsingPolicy.Safe
+    )
+    val result = GsonSafeParser.parseSafe<Profile>("""{"age":"bad"}""", config)
+
+    check(result.value?.age == 18)
+    check(result.events.size == 1)
+    println(result.value) // Profile(age=18)
+}
+```
+
+This means the client used a fallback value, **not that the backend data was valid**. Do not use it to hide invalid amounts or permissions when fallback values are unacceptable. `parseSafe` can still throw: syntax errors, cancellation, and transport failures are outside field recovery.
+
 ## 1. Base Config
 
-The example below is copyable and keeps every field visible. The table after it explains what each option controls and when to change it.
+This is a reference for the defaults, not a required setup step. Types in the following fragments come from `io.github.logan.gsonsafeparser`.
+
+<details>
+<summary>Expand the complete default configuration</summary>
 
 ```kotlin
 val config = SafeParserConfig(
@@ -25,6 +69,8 @@ val config = SafeParserConfig(
     maxRawJsonCaptureBytes = 1024 * 1024
 )
 ```
+
+</details>
 
 The default config is low-interference: field-level problems fall back locally, and anything unsafe or uncertain goes back to Gson.
 
@@ -46,6 +92,12 @@ The default config is low-interference: field-level problems fall back locally, 
 
 When validating config, cover real List, Set, and Map shape mismatches, empty bodies, transport failures, missing fields, explicit `null`, unknown enums, and invalid primitives. If raw JSON or Map keys are enabled, inspect logs and reports for identifier leaks.
 
+`mapItemKeyPolicy` covers `mapItemKey`, nested Map segments in `path`, and `fieldName` values inferred from keys. `Omit` replaces those path segments with `[map-key]`; `Hash` uses stable SHA-256 values. Ordinary model field names remain intact. Explicitly captured `rawJson` is still raw input and is not redacted by this policy.
+
+Collections and arrays isolate recoverable errors per item. With safe primitives enabled, numeric arrays read `[1,"bad",2]` as `[1,2]`; primitive arrays skip `null`, while object arrays retain explicit `null`. Items rejected by containers such as Queue or SortedSet affect only that item and emit `LIST_ITEM`. Malformed escapes and truncated JSON fail immediately instead of using item recovery.
+
+Explicit caller adapters receive JSON `null`, including `@JsonAdapter(nullSafe = false)`. Non-null results are assigned normally; null results still follow the field's `nullValuePolicy` and nullability. Fields without custom adapters retain their existing policy.
+
 Do not add business model package prefixes here; otherwise field-level fallback can be skipped for your own models.
 
 ### Optional Capability Switches
@@ -58,9 +110,16 @@ Do not use JSON shape coercion for signed payloads, payment amounts, auth data, 
 
 ### Raw JSON Capture Rules
 
-1. Plain Gson parsing truncates safely by UTF-8 byte count.
+1. `GsonSafeParser.fromJson`, `parseSafe`, and Parser entries truncate safely by UTF-8 byte count; direct `gson.fromJson` does not capture raw input automatically.
 2. Retrofit known-length bodies use `contentLength`.
 3. gzip, chunked, or unknown-length bodies use bounded probing for unknown-length gzip or chunked bodies and capture only when the body stays within the limit.
+4. Capture only affects observation. The official Retrofit Gson converter still reads the original response with the same Gson strictness, trailing-content checks, charset, and BOM handling. Probe and conversion failures also close the response body.
+
+### Safe Number Limits
+
+Safe integer, `BigDecimal`, `BigInteger`, and numeric Boolean conversions, plus the default `GsonSafeAutoNumberStrategy`, enforce Gson 2.13.2's resource limits: at most 10,000 characters per number and an absolute `BigDecimal.scale()` below 10,000. Checking before integer expansion prevents excessive allocation from compact exponent values. Isolated field failures retain defaults and emit events; unisolatable dynamic `Any/Object` failures propagate.
+
+Blank numeric field strings keep their existing fallback behavior. Blank numeric Map keys skip the current entry and emit `MAP_ITEM` rather than creating `0` or `null` keys. The default primitive `DelegateToGson` policy remains unchanged.
 
 `instanceCreators`, `reflectionAccessFilters`, and `skippedPlatformTypePrefixes` are snapshotted when `SafeParserConfig` is created.
 
@@ -91,7 +150,9 @@ Recommended usage:
 | --- | --- |
 | Adopt safely without changing existing Gson behavior | Keep the default config. |
 | Keep compatibility with an existing Unsafe construction dependency | Use `GsonCompatible + useJdkUnsafe = true`, and add real JSON regression tests. |
-| Expose missing fields, `null`, wrong shapes, or unknown enum values early | Use `Strict + useJdkUnsafe = false`. |
+| Require valid non-null Kotlin primary-constructor parameters without defaults | Use `Strict + useJdkUnsafe = false`. Missing, null, unrecoverable mismatched, or unknown enum values fail required-parameter validation. |
+
+`Strict` is not a universal field-validation switch: nullable parameters and parameters with defaults still follow their read policies. Validate amount ranges, permissions, and cross-field constraints in application code.
 
 Unsafe bypasses constructors and `init` code.
 
@@ -212,6 +273,8 @@ val config = SafeParserConfig(
 4. `onObserverFailure` observes exceptions thrown by business logging or analytics callbacks.
 
 Ordinary exceptions thrown by callbacks do not interrupt parsing. GsonSafeParser isolates observer failures so logging-system issues do not affect API parsing.
+
+When a callback parses JSON or synchronously calls another Retrofit service, the inner parse does not inherit the outer raw JSON, Map path, or event collector. The outer `parseSafe.events` contains only its own parsing events. Use a separate Parser configuration and `parseSafe` when the inner parse needs raw capture or its own event snapshot.
 
 Unsafe-to-isolate failures such as `Error`, `ThreadDeath`, `LinkageError`, and `CancellationException` are still thrown.
 

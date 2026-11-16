@@ -368,8 +368,7 @@ class SafeParserExceptionBoundaryTest {
         }
 
         override fun read(reader: JsonReader): IllegalArgumentArrayValue {
-            reader.nextString()
-            throw IllegalArgumentException("array item adapter failure")
+            throw IllegalArgumentException("array item adapter failure: ${reader.nextString()}")
         }
     }
 

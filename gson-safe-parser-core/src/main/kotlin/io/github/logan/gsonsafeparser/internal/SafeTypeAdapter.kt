@@ -11,6 +11,7 @@ import io.github.logan.gsonsafeparser.TypeMismatchEvent
 import io.github.logan.gsonsafeparser.dispatchTypeMismatch
 import io.github.logan.gsonsafeparser.internal.adapter.SafeRuntimeTypeAdapter
 import io.github.logan.gsonsafeparser.internal.adapter.leafFieldNameFromPath
+import io.github.logan.gsonsafeparser.internal.adapter.skipUnreadValueIfPossible
 import io.github.logan.gsonsafeparser.internal.throwIfFatal
 import java.io.IOException
 import java.lang.reflect.Type
@@ -91,7 +92,7 @@ internal class SafeTypeAdapter<T>(
             reason = error.message ?: error.javaClass.name,
             path = pathBeforeRead
         )
-        runRecovering { reader.skipValue() }
+        reader.skipUnreadValueIfPossible(pathBeforeRead)
         return FallbackValues.value(type, rawType, config.fallbackPolicy)
     }
 

@@ -4,6 +4,7 @@ import com.google.gson.ToNumberPolicy
 import com.google.gson.reflect.TypeToken
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertInstanceOf
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 import java.math.BigDecimal
 import java.math.BigInteger
@@ -180,5 +181,19 @@ class SafeParserObjectNumberStrategyTest {
         assertEquals(BigDecimal(hugeDecimal), result.decimal)
         assertInstanceOf(BigDecimal::class.java, result.values["huge"])
         assertEquals(BigDecimal(hugeDecimal), result.values["huge"])
+    }
+
+    @Test
+    fun `dynamic numbers reject scales outside Gson resource limits`() {
+        val gson = GsonSafeParser.create()
+
+        for (number in listOf("1e10000", "1e-10000", "1e2147483647", "0e-2147483647")) {
+            assertThrows(RuntimeException::class.java) {
+                gson.fromJson(number, Any::class.java)
+            }
+        }
+
+        val value = gson.fromJson("1e9999", Any::class.java)
+        assertEquals(BigDecimal("1e9999").toBigIntegerExact(), value)
     }
 }

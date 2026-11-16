@@ -532,12 +532,12 @@ class GsonSafeParserJsonConversionExampleTest {
         assertFalse(nestedListFromObject.value?.values?.containsKey("bad") == true)
         assertTrue(mapValueFromArray.events.any {
             it is SafeParserEvent.ShapeCoercion &&
-                it.detail.path == "$.values.lead" &&
+                it.detail.path == "$.values.[map-key]" &&
                 it.detail.action == ShapeCoercionAction.ObjectFromFirstArrayItem
         })
         assertTrue(nestedListFromObject.events.any {
             it is SafeParserEvent.ShapeCoercion &&
-                it.detail.path == "$.values.team" &&
+                it.detail.path == "$.values.[map-key]" &&
                 it.detail.action == ShapeCoercionAction.CollectionFromSingleObject
         })
     }
@@ -582,17 +582,17 @@ class GsonSafeParserJsonConversionExampleTest {
         assertFalse(arrayEntryForm.value?.values?.containsKey("bad") == true)
         assertTrue(objectForm.events.any {
             it is SafeParserEvent.ShapeCoercion &&
-                it.detail.path == "$.values.good" &&
+                it.detail.path == "$.values.[map-key]" &&
                 it.detail.action == ShapeCoercionAction.ObjectFromFirstArrayItem
         })
         assertTrue(objectForm.events.any {
             it is SafeParserEvent.ShapeCoercion &&
-                it.detail.path == "$.values.empty" &&
+                it.detail.path == "$.values.[map-key]" &&
                 it.detail.action == ShapeCoercionAction.EmptyArrayForObjectSkipped
         })
         assertTrue(objectForm.events.any {
             it is SafeParserEvent.ShapeCoercion &&
-                it.detail.path == "$.values.bad" &&
+                it.detail.path == "$.values.[map-key]" &&
                 it.detail.action == ShapeCoercionAction.CoercionFailed
         })
         assertTrue(arrayEntryForm.events.any {
@@ -638,7 +638,7 @@ class GsonSafeParserJsonConversionExampleTest {
         assertEquals(FullPayload(25L, "entry-plain"), arrayEntryForm.value?.values?.get(5))
         assertTrue(objectForm.events.any {
             it is SafeParserEvent.ShapeCoercion &&
-                it.detail.path == "$.values.1" &&
+                it.detail.path == "$.values.[map-key]" &&
                 it.detail.action == ShapeCoercionAction.ObjectFromFirstArrayItem
         })
         assertTrue(arrayEntryForm.events.any {

@@ -1,6 +1,8 @@
 package io.github.logan.gsonsafeparser
 
 import com.google.gson.TypeAdapter
+import com.google.gson.ExclusionStrategy
+import com.google.gson.FieldAttributes
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.GsonBuilder
 import com.google.gson.annotations.JsonAdapter
@@ -20,6 +22,7 @@ import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonToken
 import com.google.gson.stream.JsonWriter
 import java.lang.reflect.Type
+import java.lang.reflect.Modifier
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -120,11 +123,62 @@ class SafeParserReflectiveTest {
         val future: String = "local-future"
     )
 
+    data class TransientResponse(
+        @Transient val cached: String = "local",
+        val visible: String = "local-visible"
+    )
+
     /** 测试模型：声明类型带 JsonAdapter，但运行时值是子类，用于验证写出优先级。 */
     data class RuntimeAdapterHolder(
         @JsonAdapter(DeclaredBaseAdapter::class)
         val value: DeclaredBase = DeclaredChild("remote")
     )
+
+    data class ScalarFieldAdapterHolder(
+        @JsonAdapter(MaskingAnyAdapter::class)
+        val value: Any = "private-value"
+    )
+
+    data class ScalarFieldSerializerHolder(
+        @JsonAdapter(MaskingAnySerializer::class)
+        val value: Any = "private-value"
+    )
+
+    data class DeserializerRuntimeHolder(
+        @JsonAdapter(DeclaredBaseDeserializer::class)
+        val value: DeclaredBase = DeclaredChild("remote")
+    )
+
+    data class DecliningFieldAdapterHolder(
+        @JsonAdapter(DecliningFieldAdapterFactory::class)
+        val value: DeclaredBase = DeclaredChild("remote")
+    )
+
+    class MaskingAnyAdapter : TypeAdapter<Any>() {
+        override fun write(out: JsonWriter, value: Any?) {
+            out.value("masked")
+        }
+
+        override fun read(reader: JsonReader): Any = reader.nextString()
+    }
+
+    class MaskingAnySerializer : JsonSerializer<Any> {
+        override fun serialize(src: Any, typeOfSrc: Type, context: JsonSerializationContext): JsonElement {
+            return JsonPrimitive("masked")
+        }
+    }
+
+    class DeclaredBaseDeserializer : JsonDeserializer<DeclaredBase> {
+        override fun deserialize(json: JsonElement, typeOfT: Type, context: JsonDeserializationContext): DeclaredBase {
+            return DeclaredBase(json.asString)
+        }
+    }
+
+    class DecliningFieldAdapterFactory : TypeAdapterFactory {
+        override fun <T> create(gson: com.google.gson.Gson, type: com.google.gson.reflect.TypeToken<T>): TypeAdapter<T>? {
+            return null
+        }
+    }
 
     /** 测试基类：字段声明类型，带自定义 Adapter。 */
     open class DeclaredBase(val name: String = "base")
@@ -441,6 +495,53 @@ class SafeParserReflectiveTest {
         assertEquals("""{"supported":"remote-supported"}""", json)
     }
 
+    @Test
+    fun `transient fields remain excluded by default`() {
+        val gson = GsonSafeParser.create()
+        val result = gson.fromJson(
+            """{"cached":"remote","visible":"remote-visible"}""",
+            TransientResponse::class.java
+        )
+
+        assertEquals("local", result.cached)
+        assertEquals("""{"visible":"remote-visible"}""", gson.toJson(result))
+    }
+
+    @Test
+    fun `explicit modifier configuration allows transient fields`() {
+        val builder = GsonBuilder().excludeFieldsWithModifiers(Modifier.STATIC)
+        val nativeGson = builder.create()
+        val safeGson = builder.enableSafeParser().create()
+        val input = """{"cached":"remote","visible":"remote-visible"}"""
+        val nativeResult = nativeGson.fromJson(input, TransientResponse::class.java)
+        val safeResult = safeGson.fromJson(input, TransientResponse::class.java)
+
+        assertEquals("remote", safeResult.cached)
+        assertEquals(nativeResult, safeResult)
+        assertEquals(nativeGson.toJson(nativeResult), safeGson.toJson(safeResult))
+    }
+
+    @Test
+    fun `serialization exclusion still applies when transient fields are enabled`() {
+        val builder = GsonBuilder()
+            .excludeFieldsWithModifiers(Modifier.STATIC)
+            .addSerializationExclusionStrategy(object : ExclusionStrategy {
+                override fun shouldSkipField(field: FieldAttributes): Boolean = field.name == "cached"
+
+                override fun shouldSkipClass(clazz: Class<*>): Boolean = false
+            })
+        val nativeGson = builder.create()
+        val safeGson = builder.enableSafeParser().create()
+        val result = safeGson.fromJson(
+            """{"cached":"remote","visible":"remote-visible"}""",
+            TransientResponse::class.java
+        )
+
+        assertEquals("remote", result.cached)
+        assertEquals("""{"visible":"remote-visible"}""", safeGson.toJson(result))
+        assertEquals(nativeGson.toJson(result), safeGson.toJson(result))
+    }
+
     /**
      * 测试方法说明：验证“field json adapter keeps declared adapter when serializing runtime subtype”这个具体行为。
      * 阅读时可以按准备数据、执行解析、断言结果的顺序跟下来。
@@ -453,6 +554,56 @@ class SafeParserReflectiveTest {
         val json = gson.toJson(RuntimeAdapterHolder(DeclaredChild("remote")))
 
         assertEquals("""{"value":"declared:remote"}""", json)
+    }
+
+    @Test
+    fun `field json adapter masks scalar values declared as Any`() {
+        val value = ScalarFieldAdapterHolder()
+        val json = GsonSafeParser.create().toJson(value)
+
+        assertEquals("""{"value":"masked"}""", json)
+        assertEquals(GsonBuilder().create().toJson(value), json)
+    }
+
+    @Test
+    fun `field json serializer masks scalar values declared as Any`() {
+        val value = ScalarFieldSerializerHolder()
+        val json = GsonSafeParser.create().toJson(value)
+
+        assertEquals("""{"value":"masked"}""", json)
+        assertEquals(GsonBuilder().create().toJson(value), json)
+    }
+
+    @Test
+    fun `field json adapter takes priority over registered runtime subtype adapter`() {
+        val builder = GsonBuilder().registerTypeAdapter(
+            DeclaredChild::class.java,
+            JsonSerializer<DeclaredChild> { _, _, _ -> JsonPrimitive("runtime-adapter") }
+        )
+        val value = RuntimeAdapterHolder()
+        val nativeJson = builder.create().toJson(value)
+        val safeJson = builder.enableSafeParser().create().toJson(value)
+
+        assertEquals("""{"value":"declared:remote"}""", safeJson)
+        assertEquals(nativeJson, safeJson)
+    }
+
+    @Test
+    fun `deserializer-only field annotation keeps Gson declared-type serialization`() {
+        val value = DeserializerRuntimeHolder()
+        val json = GsonSafeParser.create().toJson(value)
+
+        assertEquals("""{"value":{"name":"remote"}}""", json)
+        assertEquals(GsonBuilder().create().toJson(value), json)
+    }
+
+    @Test
+    fun `declining field adapter factory keeps runtime subtype serialization`() {
+        val value = DecliningFieldAdapterHolder()
+        val json = GsonSafeParser.create().toJson(value)
+
+        assertTrue(json.contains("childOnly"))
+        assertEquals(GsonBuilder().create().toJson(value), json)
     }
 
     /**

@@ -129,7 +129,7 @@ private fun runIntegrationCheck(
     )
 
     // probe 保存探针执行结果；fatal 会继续外抛，普通接入异常留在结果对象里。
-    val probe = runRecovering {
+    val probe = runRecovering(allowMalformedJson = true) {
         GsonSafeParser.parseSafe<IntegrationProbeResponse>(INTEGRATION_PROBE_JSON, probeConfig)
     }
 
@@ -180,7 +180,7 @@ private fun checkModelProbe(
     probe: GsonSafeModelProbe,
     config: SafeParserConfig
 ): List<GsonSafeDiagnosticCheck> {
-    return runRecovering {
+    return runRecovering(allowMalformedJson = true) {
         checkModelProbeUnsafe(probe, config)
     }.getOrElse { error ->
         listOf(modelProbeFailureCheck(probe.safeName(), error))
@@ -192,7 +192,7 @@ private fun checkModelProbeUnsafe(
     config: SafeParserConfig
 ): List<GsonSafeDiagnosticCheck> {
     val probeName = probe.safeName()
-    val parsed = runRecovering {
+    val parsed = runRecovering(allowMalformedJson = true) {
         GsonSafeParser.fromJson<Any?>(
             json = probe.json,
             type = probe.type,

@@ -6,12 +6,10 @@ import com.google.gson.stream.JsonToken
 import io.github.logan.gsonsafeparser.ParseExceptionKind
 import io.github.logan.gsonsafeparser.SafeParserConfig
 import io.github.logan.gsonsafeparser.TypeMismatchEvent
-import io.github.logan.gsonsafeparser.MapItemKeyPolicy
 import io.github.logan.gsonsafeparser.dispatchTypeMismatch
 import io.github.logan.gsonsafeparser.internal.RawJsonContext
 import io.github.logan.gsonsafeparser.internal.runRecovering
 import io.github.logan.gsonsafeparser.internal.toSafeTypeName
-import java.security.MessageDigest
 
 /**
  * Adapter 内部统一发错配事件的入口。
@@ -41,8 +39,8 @@ internal fun notify(
     path: String? = null
 ) {
     val rawJson = RawJsonContext.current()
-    val eventPath = config.eventPath(path ?: reader.path, mapItemKey)
-    // rawJson 从 ThreadLocal 取，只有通过 GsonSafeParser.fromJson/Retrofit 且配置开启时才有值。
+    val eventPath = path ?: reader.path
+    // rawJson 由解析入口按捕获配置建立；观察者运行时暂停上下文，不向其独立解析传递外层原文。
     config.dispatchTypeMismatch(
         TypeMismatchEvent(
             expectedType = type.type.toSafeTypeName(),
@@ -51,87 +49,12 @@ internal fun notify(
             reason = reason,
             kind = kind,
             fieldName = fieldName ?: inferredFieldName(kind, eventPath),
-            mapItemKey = config.eventMapItemKey(mapItemKey),
+            mapItemKey = mapItemKey,
             rawJson = rawJson?.value,
             rawJsonTruncated = rawJson?.truncated == true
         )
     )
 }
-
-internal fun SafeParserConfig.eventPath(path: String, mapItemKey: String? = null): String {
-    val key = mapItemKey?.takeIf { it.isNotBlank() }
-    if (key != null) {
-        val replacement = when (mapItemKeyPolicy) {
-            MapItemKeyPolicy.PlainText -> key
-            MapItemKeyPolicy.Hash -> "sha256:${key.sha256Hex()}"
-            MapItemKeyPolicy.Omit -> if (key.isSensitiveEventPathValue()) MAP_ITEM_KEY_PLACEHOLDER else key
-        }
-        return path.replaceTrailingMapItemKey(key, replacement)
-    }
-    return path.redactSensitivePathSegments(mapItemKeyPolicy)
-}
-
-private fun SafeParserConfig.eventMapItemKey(key: String?): String? {
-    if (key == null) return null
-    return when (mapItemKeyPolicy) {
-        MapItemKeyPolicy.PlainText -> key
-        MapItemKeyPolicy.Hash -> "sha256:${key.sha256Hex()}"
-        MapItemKeyPolicy.Omit -> null
-    }
-}
-
-private fun String.replaceTrailingMapItemKey(originalKey: String, replacementKey: String): String {
-    if (!endsWith(originalKey)) return this
-    return dropLast(originalKey.length) + replacementKey
-}
-
-private fun String.redactSensitivePathSegments(policy: MapItemKeyPolicy): String {
-    return sensitiveEventPathSegmentPatterns.fold(this) { sanitized, pattern ->
-        pattern.replace(sanitized) { match ->
-            match.value.redactedPathMatch(policy)
-        }
-    }
-}
-
-private fun String.redactedPathMatch(policy: MapItemKeyPolicy): String {
-    val atIndex = indexOf('@')
-    val pathPrefixEnd = if (atIndex > 0) {
-        indexOf('.').takeIf { dotIndex -> dotIndex in 1 until atIndex }
-    } else {
-        null
-    }
-    if (pathPrefixEnd != null) {
-        val prefix = substring(0, pathPrefixEnd + 1)
-        val sensitivePart = substring(pathPrefixEnd + 1)
-        return prefix + sensitivePart.redactedSensitiveValue(policy)
-    }
-    return redactedSensitiveValue(policy)
-}
-
-private fun String.isSensitiveEventPathValue(): Boolean {
-    return sensitiveEventPathSegmentPatterns.any { pattern -> pattern.containsMatchIn(this) }
-}
-
-private fun String.redactedSensitiveValue(policy: MapItemKeyPolicy): String {
-    return when (policy) {
-        MapItemKeyPolicy.PlainText -> this
-        MapItemKeyPolicy.Hash -> "sha256:${sha256Hex()}"
-        MapItemKeyPolicy.Omit -> MAP_ITEM_KEY_PLACEHOLDER
-    }
-}
-
-private fun String.sha256Hex(): String {
-    val bytes = MessageDigest.getInstance("SHA-256").digest(toByteArray(Charsets.UTF_8))
-    return bytes.joinToString(separator = "") { byte -> "%02x".format(byte) }
-}
-
-private const val MAP_ITEM_KEY_PLACEHOLDER = "[map-key]"
-
-private val sensitiveEventPathSegmentPatterns = listOf(
-    Regex("\\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}\\b", RegexOption.IGNORE_CASE),
-    Regex("(?i)\\b(?:token|password|passwd|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|session[_-]?id|sid)\\b"),
-    Regex("\\b\\+?\\d[\\d\\s().-]{7,}\\d\\b")
-)
 
 private fun inferredFieldName(kind: ParseExceptionKind, path: String): String? {
     // 普通对象错配取叶子字段；集合和 Map item 错配取顶层字段，方便知道是哪个列表或 Map 出问题。

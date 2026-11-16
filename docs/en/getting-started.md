@@ -2,352 +2,219 @@
 
 [中文](../getting-started.md)
 
-This document is for developers integrating GsonSafeParser for the first time.
+First run a field-mismatch example, then connect your application parsing. The examples below use the available **1.0.4** release. Stability fixes in the current source belong to the [unpublished 1.0.5 candidate](release-notes-1.0.5.md) and are not included in Maven's 1.0.4 artifacts.
 
-It covers 5 things: installation, plain Gson usage, Retrofit usage, Kotlin APIs, and CI self-checks. For API entry-point choices, see the [API Reference](api-reference.md). For the full fallback scope, see the [Mismatch Capability Matrix](mismatch-capability-matrix.md).
+## 1. Add a dependency
 
-## 1. Installation
+This library ships Android AARs. Use JDK 17 or later and `minSdk 23` or later. See [Compatibility](compatibility.md) for the verified versions. A plain JVM project cannot consume an Android AAR in the same way.
 
-The published artifacts are Android AARs compiled with JDK 17. Make sure your project uses JDK 17 or later.
-
-Choose by scenario:
-
-| Scenario | What to do |
-| --- | --- |
-| debug or non-minified builds | You can try zero config first. |
-| release builds with R8 / ProGuard | Keep business model field names and constructors from [Android ProGuard](android-proguard.md). |
-| legacy projects with scattered Beans | Start with broad package-level keep rules for bean, model, entity, response, and dto packages. |
-| only adding `@SerializedName` | It fixes JSON field names only; it does not replace constructor or Kotlin Metadata keep rules. |
-
-Zero config is only for debug or non-minified trials.
-
-`android.enableR8.fullMode=false` is only a short-term legacy compatibility strategy. It does not replace business model keep rules.
-
-Plain Gson usage:
-
-Latest version: [![Maven Central: core](https://img.shields.io/maven-central/v/io.github.logan0817/gson-safe-parser-core?label=core)](https://central.sonatype.com/artifact/io.github.logan0817/gson-safe-parser-core)
+Open the root `settings.gradle.kts` and confirm that your existing dependency repositories include `mavenCentral()`. Keep existing configuration and add it only if missing:
 
 ```kotlin
-implementation("io.github.logan0817:gson-safe-parser-core:1.0.4")
+dependencyResolutionManagement {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
 ```
 
-If the project uses Retrofit, only add:
+Open the **application module** file, `app/build.gradle.kts`. Choose only one dependency below, then run Android Studio's **Sync Project with Gradle Files**.
 
-Latest version: [![Maven Central: retrofit](https://img.shields.io/maven-central/v/io.github.logan0817/gson-safe-parser-retrofit?label=retrofit)](https://central.sonatype.com/artifact/io.github.logan0817/gson-safe-parser-retrofit)
+For manual Gson calls:
 
 ```kotlin
-implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.4")
+dependencies {
+    implementation("io.github.logan0817:gson-safe-parser-core:1.0.4")
+}
 ```
 
-## 2. Plain Gson Integration
+For Retrofit:
 
-Dependency coordinates use `io.github.logan0817`, while code imports use `io.github.logan.gsonsafeparser`. This is the difference between the Maven Central namespace and the public Kotlin package name, and it does not change usage.
+```kotlin
+dependencies {
+    implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.4")
+}
+```
 
-Minimal copyable example:
+The Retrofit module already brings core transitively. Dependency coordinates use `io.github.logan0817`, while code imports use `io.github.logan.gsonsafeparser`.
+
+## 2. Run a complete example
+
+Copy this complete `.kt` file into your Android module's Kotlin source directory. Run `main()` from the IDE, or place its body in an existing debug entry point. Each later example is also a separate standalone file.
 
 ```kotlin
 import io.github.logan.gsonsafeparser.GsonSafeParser
+import io.github.logan.gsonsafeparser.SafeParserEvent
 import io.github.logan.gsonsafeparser.contractReport
 import io.github.logan.gsonsafeparser.parseSafe
 
-data class ApiResponse(
-    val code: Int = 0,
-    val data: User = User()
-)
+data class ApiResponse(val code: Int = 0, val data: User = User())
+data class User(val id: Long = 0L, val name: String = "anonymous")
 
-data class User(
-    val id: Long = 0L,
-    val name: String = "anonymous"
-)
-
-val json = """{"code":200,"data":[]}"""
-val result = GsonSafeParser.parseSafe<ApiResponse>(json)
-
-println(result.value)
-println(result.events)
-println(result.contractReport().toBackendMarkdown())
+fun main() {
+    val json = """{"code":200,"data":[]}"""
+    val result = GsonSafeParser.parseSafe<ApiResponse>(json)
+    val mismatch = result.events.single() as SafeParserEvent.TypeMismatch
+    println(result.value)
+    println(mismatch.detail.path)
+    println(result.contractReport().hasIssues)
+}
 ```
+
+Expected output:
+
+```text
+ApiResponse(code=200, data=User(id=0, name=anonymous))
+$.data
+true
+```
+
+`data` expects an object but receives an array, so its constructed `User()` default is retained. The outer `code` is still 200. `parseSafe<T>()` returns both the value and this call's events. For a backend-facing report, call `result.contractReport().toBackendMarkdown()` inside the function.
+
+If you only need the value, obtain a reusable Gson with `GsonSafeParser.create()` and call `gson.fromJson(json, ApiResponse::class.java)` as usual.
+
+## 3. Reuse a parser and retain generic types
+
+For repeated calls, create a Parser once as a repository or injected dependency member. Kotlin's `<List<User>>` retains its element type; do not replace it with `List::class.java`.
 
 ```kotlin
-val gson = GsonSafeParser.create()
-val response = gson.fromJson(json, ApiResponse::class.java)
-```
+import io.github.logan.gsonsafeparser.GsonSafeParser
+import io.github.logan.gsonsafeparser.SafeParserConfig
+import io.github.logan.gsonsafeparser.fromJsonSafe
 
-`GsonSafeParser.create()` returns a Gson instance with Safe Adapters registered. Use it when you do not need a custom `GsonBuilder`.
+data class User(val id: Long = 0L, val name: String = "")
 
-The default entry does not read `GsonBuilder` internals, so it is the lower-risk choice when you do not need a custom GsonBuilder.
-
-If you already own a `GsonBuilder`:
-
-```kotlin
-val gson = GsonBuilder()
-    .serializeNulls()
-    .enableSafeParser()
-    .create()
-```
-
-This keeps your existing Gson options and registers field-level safe parsing on the same Builder.
-
-`enableSafeParser()` registers safe parsing on the current `GsonBuilder` while preserving the Gson options you already configured.
-
-The builder-first entry reads `GsonBuilder` internals only to inherit `InstanceCreator`, `ReflectionAccessFilter`, object number strategy, complex Map keys, and the Unsafe switch. If that inheritance cannot be inspected, `GsonSafeParser.diagnostics()` reports the exact field.
-
-Repeated calls on the same `GsonBuilder` do not register duplicate Safe Adapters. Create a new `GsonBuilder` if a different config is needed.
-
-## 3. Kotlin Convenience APIs
-
-```kotlin
-val value = GsonSafeParser.fromJsonSafe<ApiResponse>(json)
-val result = GsonSafeParser.parseSafe<ApiResponse>(json)
-```
-
-`fromJsonSafe<T>()` is for cases that only need the parsed value. `parseSafe<T>()` also returns parse events for logging, monitoring, and API contract review.
-
-Entry choice:
-
-| Need | Recommended entry and first check |
-| --- | --- |
-| Field-level fallback only | Use `GsonSafeParser.create()` or `GsonBuilder.enableSafeParser()` for object, collection, and Map field mismatches. |
-| Parsed value plus event snapshot | Use `GsonSafeParser.parseSafe<T>()`. This fits logs, monitoring, and contract reports; first check whether the code actually calls `parseSafe`. |
-| Reuse the same config | Use `GsonSafeParser.parser(config)`. This fits repositories, data sources, and batch parsing; first check repeated Parser creation and production config drift. |
-| Existing external Gson | Enable SafeParser on the Builder before creating Gson, then use `parserWithExternalGson(gson, config)`. |
-
-When an entry does not behave as expected, first check model obfuscation, `@SafeParseDelegateToGson`, custom adapters, whether the code really calls `parseSafe`, and whether `GsonSafeParser.diagnostics(gson)` reports Safe Adapter registration.
-
-Exception boundary:
-
-| Problem | Default handling |
-| --- | --- |
-| Field-level unexpected JSON shape | Falls back for the current field, keeps the outer object parsing, and emits an event. |
-| JSON syntax error | Still thrown. |
-| Root-level parse failure | Still follows Gson boundaries. |
-| Unsafe-to-isolate failure | `Error`, `ThreadDeath`, `LinkageError`, and `CancellationException` are still thrown. |
-
-SafeParser built-in adapters emit events and keep the outer object parsing when a field-level mismatch can be isolated. Types explicitly handled by `registerTypeAdapter(...)`, `registerTypeAdapterFactory(...)`, `registerTypeHierarchyAdapter(...)`, or `@JsonAdapter` keep the native Gson path first; exceptions thrown by those custom adapters are thrown outward instead of being disguised as field fallback.
-
-Direct `gson.fromJson(...)` calls keep Gson's native top-level exception wrapping. This preserves native Gson entry semantics.
-
-```kotlin
-val result = GsonSafeParser.parseSafe<ApiResponse>("""{"code":200,"data":[]}""")
-
-println(result.value)
-println(result.events)
-println(result.contractReport().toMarkdown())
-println(result.contractReport().toBackendMarkdown())
-```
-
-These outputs show the parsed value, parse events, general Markdown report, and backend-facing contract report.
-
-## 4. JSON Shape Coercion
-
-Objects and arrays are not converted by default. This feature is enabled only through `withShapeCoercionPolicy(...)` or field annotations.
-
-```kotlin
-val config = SafeParserConfig()
-    .withShapeCoercionPolicy(ShapeCoercionPolicy.ObjectAndCollection)
-
-val gson = GsonSafeParser.create(config)
-```
-
-Field-level opt-in is usually better for production integration:
-
-```kotlin
-data class ApiResponse(
-    @field:SafeParseShapeCoercion(ShapeCoercionPolicy.ObjectFromFirstArrayItem)
-    val data: User? = null
-)
-```
-
-Supported scope:
-
-| Field type | Backend JSON | Behavior after enabling |
-| --- | --- | --- |
-| `data: User` | `"data":[{"id":1}]` | Reads the first object from the array. |
-| `users: List<User>` | `"users":{"id":1}` | Wraps it as a one-item List. |
-| `users: Array<User>` | `"users":{"id":1}` | Wraps it as a length-1 array. |
-
-Root objects, root collections, root object arrays, maps, string re-parsing, numbers, and booleans are not coerced. Coercion failures emit `ShapeCoercion` events and return to the original fallback behavior.
-
-## 5. Java Usage And Non-Reified APIs
-
-Kotlin reified APIs are Kotlin-only. Java, reflected `Type`, and explicit type passing should use the `Class` or `Type` entries:
-
-Java usage needs explicit type passing, and non-reified APIs are the right choice when you are not calling from Kotlin.
-
-```java
-SafeParserConfig config = new SafeParserConfig();
-ApiResponse value = GsonSafeParser.INSTANCE.fromJson(json, ApiResponse.class, config);
-
-GsonSafeParser.Parser parser = GsonSafeParser.INSTANCE.parser(config);
-SafeParseResult<ApiResponse> result = parser.parseSafe(json, ApiResponse.class);
-```
-
-Use Gson `TypeToken` for generic types:
-
-```java
-Type listType = new TypeToken<List<ApiResponse>>() {}.getType();
-SafeParseResult<List<ApiResponse>> result = parser.parseSafe(json, listType);
-```
-
-Java calls, reflected `Type`, and generic parsing must pass explicit types. Kotlin reified entries are Kotlin-only conveniences.
-
-## 6. Reusable Parser
-
-The convenience entry `GsonSafeParser.fromJson(json, type, config)` is useful for quick checks and low-frequency calls.
-
-In repositories, data sources, or batch jobs that repeatedly parse with the same config, create a parser once and reuse it.
-
-```kotlin
-val config = SafeParserConfig.production()
-val parser = GsonSafeParser.parser(config)
-
-val first = parser.fromJson(json, ApiResponse::class.java)
-val second = parser.fromJsonSafe<ApiResponse>(json)
-val result = parser.parseSafe<ApiResponse>(json)
-```
-
-If the project already maintains a shared Gson instance, enable SafeParser on the Builder first and then wrap the Gson as a Parser:
-
-```kotlin
-val gson = GsonBuilder()
-    .serializeNulls()
-    .enableSafeParser(config)
-    .create()
-
-val parser = GsonSafeParser.parserWithExternalGson(gson, config)
-```
-
-`parserWithExternalGson(gson, config)` wraps an existing Gson only; it does not recreate, replace, or auto-register it.
-
-Parser and Gson instances can be reused as singletons, DI objects, or repository members.
-
-External Gson rules: `parserWithExternalGson(gson, config)` does not automatically register Safe Adapter on an external Gson.
-
-| Scenario | Correct usage and verification |
-| --- | --- |
-| External Gson needs field-level fallback | Call `.enableSafeParser(config)` on the same `GsonBuilder` before creating that Gson. |
-| You only need `parseSafe` snapshots around an existing Gson | Wrap it with `parserWithExternalGson(gson, config)`; field-level fallback still depends on how that Gson was created. |
-| What the config passed to `parserWithExternalGson(gson, config)` controls | It controls raw JSON capture, root primitive fallback, and the `parseSafe` event snapshot. |
-| Multiple threads share one Parser or Gson | Caller-owned lists, log buffers, or metric collectors written by callbacks must be thread-safe. Use a thread-safe queue or metrics object in concurrency tests. |
-
-For external Gson, verify with `GsonSafeParser.diagnostics(gson)` and a real field-mismatch JSON such as `{"data":[]}`. Field-level Adapter event callbacks are owned by the config passed to `.enableSafeParser(...)` when the Gson was created.
-
-## 7. Retrofit Integration
-
-```kotlin
-val retrofit = Retrofit.Builder()
-    .baseUrl("https://example.com/")
-    .addConverterFactory(GsonSafeConverterFactory.create())
-    .build()
-```
-
-Custom config:
-
-```kotlin
-val config = SafeParserConfig.production(
-    observerPolicy = SafeObserverPolicy(
-        onEvent = { event -> println(event) }
+fun main() {
+    val config = SafeParserConfig.production()
+    val parser = GsonSafeParser.parser(config)
+    val users = parser.fromJsonSafe<List<User>>(
+        """[{"id":1,"name":"remote"}]"""
     )
-)
-
-val retrofit = Retrofit.Builder()
-    .baseUrl("https://example.com/")
-    .addConverterFactory(GsonSafeConverterFactory.create(config))
-    .build()
+    println(users)
+}
 ```
 
-`onEvent` receives the unified parse event stream and is typically connected to logs, metrics, or contract reports.
+Expected output: `[User(id=1, name=remote)]`. For events, use `parser.parseSafe<ApiResponse>(json)` with the model from section 2.
 
-If the project already maintains a shared GsonBuilder, prefer the builder-first entry so the factory registers Safe Adapter before `.create()`:
+## 4. Integrate an existing GsonBuilder or Gson
+
+If you own a `GsonBuilder`, prefer `GsonSafeParser.parser(builder, config)`, which registers Safe Adapters before creating Gson. If the application already shares a Gson instance, add `.enableSafeParser(config)` where that instance is created, then pass it to `GsonSafeParser.parserWithExternalGson(gson, config)`:
 
 ```kotlin
-val config = SafeParserConfig.debug()
-val retrofit = Retrofit.Builder()
-    .baseUrl("https://example.com/")
-    .addConverterFactory(GsonSafeConverterFactory.create(GsonBuilder().serializeNulls(), config))
-    .build()
+import com.google.gson.GsonBuilder
+import io.github.logan.gsonsafeparser.GsonSafeParser
+import io.github.logan.gsonsafeparser.SafeParserConfig
+import io.github.logan.gsonsafeparser.enableSafeParser
+import io.github.logan.gsonsafeparser.parseSafe
+
+data class ApiResponse(val tags: List<String> = listOf("local"))
+
+fun main() {
+    val config = SafeParserConfig.production()
+    val gson = GsonBuilder()
+        .serializeNulls()
+        .enableSafeParser(config)
+        .create()
+    val parser = GsonSafeParser.parserWithExternalGson(gson, config)
+    val result = parser.parseSafe<ApiResponse>("""{"tags":{}}""")
+    println(result.value)
+}
 ```
 
-If the project already maintains a created shared Gson instance and still needs Retrofit-level empty-response, raw JSON, and event policies:
+Expected output: `ApiResponse(tags=[local])`. The wrapper does not automatically register Safe Adapter on an external Gson; passing a config after Gson creation cannot add registration. Field-level Adapter event callbacks belong to the config used to create Gson. Parser and Gson can be shared across threads. Callbacks run synchronously on the parsing thread, and shared callback containers must be thread safe.
+
+## 5. Retrofit: replace the existing Gson converter
+
+Replace an existing `.addConverterFactory(GsonConverterFactory.create(...))` line with the Safe factory below. **Do not register both Gson factories on the same Retrofit**: the first one can claim JSON conversion before the second runs.
+
+This complete example creates Retrofit and an interface proxy without sending a request. Replace `baseUrl` with your service URL when integrating it.
 
 ```kotlin
-val config = SafeParserConfig.debug()
-val gson = GsonBuilder()
-    .serializeNulls()
-    .enableSafeParser(config)
-    .create()
+import io.github.logan.gsonsafeparser.retrofit.GsonSafeConverterFactory
+import retrofit2.Call
+import retrofit2.Retrofit
+import retrofit2.http.GET
 
-val retrofit = Retrofit.Builder()
-    .baseUrl("https://example.com/")
-    .addConverterFactory(GsonSafeConverterFactory.create(gson, config))
-    .build()
-```
+data class ApiResponse(val code: Int = 0)
 
-This form reuses the existing Gson and keeps Retrofit-level empty response, raw JSON, and event policies.
-
-Choose the entry by what you currently have:
-
-| Current state | Recommended usage and reason |
-| --- | --- |
-| You still have a `GsonBuilder` | Use `GsonSafeConverterFactory.create(builder, config)`. The factory registers Safe Adapters before `builder.create()`. |
-| You already own a shared `Gson` | Enable SafeParser on the Builder that creates it, then pass the final Gson to `create(gson, config)`. The library will not mutate a created Gson. |
-| You only call `create(gson, config)` | This reuses that Gson and applies Retrofit-level empty response, raw JSON, and event config. It does not automatically register Safe Adapter on the external Gson. |
-
-## 8. CI Self-Check
-
-```kotlin
-val diagnostics = GsonSafeParser.diagnostics(SafeParserConfig.production())
-val externalGsonDiagnostics = GsonSafeParser.diagnostics(gson)
-val integrationCheck = GsonSafeParser.integrationCheck(SafeParserConfig.production())
-
-integrationCheck.checks.forEach { item ->
-    println("${item.severity}: ${item.name} - ${item.message}")
+interface ApiService {
+    @GET("profile")
+    fun profile(): Call<ApiResponse>
 }
 
-check(integrationCheck.hasErrors.not())
+fun main() {
+    val retrofit = Retrofit.Builder()
+        .baseUrl("https://example.com/")
+        .addConverterFactory(GsonSafeConverterFactory.create())
+        .build()
+    val service = retrofit.create(ApiService::class.java)
+    println(service is ApiService)
+}
 ```
 
-`diagnostics()` checks the environment and external Gson state; `integrationCheck()` runs built-in probes; the final `check(...)` turns blocking issues into test or CI failures.
+Expected output: `true`. The example calls neither `execute()` nor `enqueue()`.
 
-`diagnostics()` checks Gson reflection compatibility and configuration risks, which is useful after forcing a different Gson version. It reports `GsonBuilder` internal compatibility per field: failed `critical` fields block builder-first safe registration, while failed `optional` fields only degrade inherited configuration.
+Choose the factory based on what you already own:
 
-`integrationCheck()` also runs built-in probes. It does not access the network, does not require an Android device, and does not parse business beans.
+| Existing object | Factory |
+| --- | --- |
+| No custom Gson | `GsonSafeConverterFactory.create()` |
+| A `GsonBuilder` still being configured | `GsonSafeConverterFactory.create(builder, config)` |
+| A Gson created with `.enableSafeParser(config)` | `GsonSafeConverterFactory.create(gson, config)` |
 
-It is suitable for JVM unit tests that confirm Safe Adapter creation, event flow, and contract reports can work.
+The last overload does not register Safe Adapters on a plain external Gson. See [Troubleshooting](troubleshooting.md) for Retrofit Unit/Void, HTTP 204/205, and empty model responses.
 
-To put legacy release obfuscation risk into CI, pass a few key business model probes. Probe failures are converted into `checks`; they do not throw obfuscation-related exceptions out of the self-check call:
+## 6. Change fallback behavior only when needed
+
+Start with defaults and actual application models, then choose a policy for a specific requirement:
+
+| Requirement | Change |
+| --- | --- |
+| Invalid Int, Boolean, or String values may receive safe defaults | Explicitly enable `PrimitiveParsingPolicy.Safe` and review critical fields such as money and status. |
+| A malformed whole collection should mean “no data” | Evaluate `FallbackPolicy.Default`; the default is `NullOnly`. |
+| A specific backend field alternates between object and array | Enable field-level `@SafeParseShapeCoercion`; coercion is off by default. |
+| Local troubleshooting needs the original JSON | Temporarily use `SafeParserConfig.debug()`; use `production()` for normal operation, with capture disabled. |
+| Preserve existing Gson scalar behavior | Keep defaults, or read about `SafeParserConfig.lowInterference()`. |
+
+With capture enabled, use `parseSafe`, Parser parsing methods, or the Retrofit factory to establish a per-call raw JSON context. Enabling capture on Gson's config and calling `gson.fromJson(...)` directly does not attach the original JSON. Capture also has a size limit; see [Troubleshooting](troubleshooting.md).
+
+SafeParser built-in adapters recover isolated field mismatches and emit events. Primitives delegate to Gson by default. JSON syntax errors, truncated documents, caller-adapter exceptions, and unrecoverable failures propagate. Root-level behavior depends on type and policy; do not assume every failure produces a complete default object. See the [Mismatch Capability Matrix](mismatch-capability-matrix.md) and [Configuration](configuration.md).
+
+## 7. Check integration and release obfuscation
+
+The default self-check runs built-in probes without parsing application Beans. It needs neither network access nor an Android device:
 
 ```kotlin
-val modelProbe = GsonSafeModelProbe(
-    name = "coreApiResponse",
-    json = """{"code":200}""",
-    type = ApiResponse::class.java,
-    expectedFields = mapOf("code" to 200)
-)
+import io.github.logan.gsonsafeparser.GsonSafeParser
+import io.github.logan.gsonsafeparser.SafeParserConfig
+import io.github.logan.gsonsafeparser.integrationCheck
 
-val releaseCheck = GsonSafeParser.integrationCheck(
-    config = SafeParserConfig.production(),
-    modelProbes = listOf(modelProbe)
-)
-
-check(releaseCheck.hasErrors.not())
+fun main() {
+    val config = SafeParserConfig.production()
+    val diagnostics = GsonSafeParser.diagnostics(config)
+    check(diagnostics.hasErrors.not()) {
+        diagnostics.checks.joinToString("\n")
+    }
+    val integrationCheck = GsonSafeParser.integrationCheck(config)
+    check(integrationCheck.hasErrors.not()) {
+        integrationCheck.checks.joinToString("\n")
+    }
+    println("Self-check passed")
+}
 ```
 
-`modelProbes` should cover only key response models. They detect whether release obfuscation still preserves field names and construction paths needed by real JSON.
+A successful run prints `Self-check passed`. For an existing Gson, also use `GsonSafeParser.diagnostics(gson)` to confirm Safe Adapter registration. Supplying `modelProbes` also parses the application models named by those probes and checks expected fields; see the [API Reference](api-reference.md).
 
-Use 4 integration layers:
+Zero config is only for debug or non-minified trials. For an R8 / ProGuard release, follow [Android ProGuard](android-proguard.md) to retain model fields, constructors, and necessary Kotlin Metadata. `@SerializedName` alone is not enough. `testReleaseUnitTest` does not run R8 on test models and is not an obfuscation check. Compare key application JSON in debug and an actual minified APK, and run model probes in that minified environment before release.
 
-| Layer | What it checks |
-| --- | --- |
-| Layer 1 | `diagnostics()` checks library and Gson version compatibility. |
-| Layer 2 | `integrationCheck()` checks built-in probes. |
-| Layer 3 | `modelProbes` checks key business model release field names and constructors. |
-| Layer 4 | The same real JSON is compared in debug and release builds. |
+<details>
+<summary>Custom adapters, Java usage, and internal compatibility</summary>
 
-## 9. Suggested Integration Order
+Types handled by `registerTypeAdapter(...)`, `registerTypeAdapterFactory(...)`, `registerTypeHierarchyAdapter(...)`, or `@JsonAdapter` retain caller-owned parsing rules, and exceptions from those adapters propagate. Direct `gson.fromJson(...)` calls retain Gson's outer exception wrapping.
 
-1. Start with `SafeParserConfig.debug()` in a test environment and inspect the event stream and contract reports.
-2. For legacy Android projects, apply broad package-level keep rules from [Android ProGuard](android-proguard.md) first so release field names are stable.
-3. Run business JSON regression tests for core APIs and confirm plain field-name models, `@SerializedName` models, defaults, and callback events match business expectations.
-4. Switch to `SafeParserConfig.production()` before release to avoid long-term large raw JSON logging.
-5. If the project is especially sensitive to behavior changes, start with `SafeParserConfig.lowInterference()` and observe real mismatches first.
+The default entry does not read `GsonBuilder` internals. The builder-first entry reads `GsonBuilder` internals to inherit existing settings. After overriding the Gson version, inspect `diagnostics()`; see [Compatibility](compatibility.md) for details.
+
+Java usage, reflective Type values, and non-reified APIs use an explicit `Class` or Gson `TypeToken`; see the [API Reference](api-reference.md).
+
+</details>

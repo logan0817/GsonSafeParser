@@ -19,6 +19,7 @@ import io.github.logan.gsonsafeparser.internal.TokenRules
 import io.github.logan.gsonsafeparser.internal.adapter.SafeReflectiveAdapterFactory
 import io.github.logan.gsonsafeparser.internal.runRecovering
 import io.github.logan.gsonsafeparser.internal.throwIfFatal
+import io.github.logan.gsonsafeparser.internal.MapItemPathContext
 import io.github.logan.gsonsafeparser.internal.toSafeTypeName
 import java.io.StringReader
 import java.lang.reflect.Type
@@ -290,7 +291,7 @@ object GsonSafeParser {
             rawType.getAnnotation(com.google.gson.annotations.JsonAdapter::class.java) != null -> SafeTypeHandling.DelegateToGson
             GsonBuiltInTypes.contains(rawType) -> SafeTypeHandling.DelegateToGson
             rawType == org.json.JSONObject::class.java || rawType == org.json.JSONArray::class.java -> SafeTypeHandling.SafeOrgJson
-            rawType.isArray && !rawType.componentType.isPrimitive -> SafeTypeHandling.SafeTypeWrapper
+            rawType.isArray -> SafeTypeHandling.SafeTypeWrapper
             java.util.Collection::class.java.isAssignableFrom(rawType) -> SafeTypeHandling.SafeCollection
             java.util.Map::class.java.isAssignableFrom(rawType) -> SafeTypeHandling.SafeMap
             rawType.isInterface || java.lang.reflect.Modifier.isAbstract(rawType.modifiers) -> SafeTypeHandling.DelegateToGson
@@ -394,6 +395,23 @@ object GsonSafeParser {
     }
 
     /**
+     * 为第三方转换器临时绑定有大小限制的 raw JSON 观察上下文。
+     *
+     * 此方法只传递回调上下文，不解析 JSON，也不改变转换器的严格性或异常边界。
+     * 退出时恢复外层上下文，支持嵌套调用；捕获开关与 UTF-8 字节上限沿用 config。
+     */
+    @GsonSafeParserLowLevelApi
+    fun <T> withRawJsonContext(
+        json: String,
+        config: SafeParserConfig,
+        block: () -> T
+    ): T {
+        return MapItemPathContext.withoutEntries {
+            RawJsonContext.withRawJson(RawJsonContext.snapshot(json, config), block)
+        }
+    }
+
+    /**
      * 使用调用方传入的 Gson 解析 JSON。
      *
      * @param gson 已经创建好的 Gson。它通常已经通过 `enableSafeParser()` 注册过 Safe Adapter。
@@ -410,22 +428,24 @@ object GsonSafeParser {
     ): T? {
         // rawJson 通过 ThreadLocal 透传给错配事件，只在本次解析期间可见，避免污染后续解析。
         val rawJson = RawJsonContext.snapshot(json, config)
-        return RawJsonContext.withRawJson(rawJson) {
-            try {
-                gson.fromJson<T>(json, type)
-            } catch (error: RuntimeException) {
-                val recoverableRootToken = recoverableRootPrimitiveTokenOrNull(type, config, json, gson, error)
-                if (recoverableRootToken != null) {
-                    dispatchRootPrimitiveFailure(
-                        type = type,
-                        actualToken = recoverableRootToken,
-                        error = error,
-                        config = config,
-                        rawJson = rawJson
-                    )
-                    fallbackValue(type, config)
-                } else {
-                    throw error
+        return MapItemPathContext.withoutEntries {
+            RawJsonContext.withRawJson(rawJson) {
+                try {
+                    gson.fromJson<T>(json, type)
+                } catch (error: RuntimeException) {
+                    val recoverableRootToken = recoverableRootPrimitiveTokenOrNull(type, config, json, gson, error)
+                    if (recoverableRootToken != null) {
+                        dispatchRootPrimitiveFailure(
+                            type = type,
+                            actualToken = recoverableRootToken,
+                            error = error,
+                            config = config,
+                            rawJson = rawJson
+                        )
+                        fallbackValue(type, config)
+                    } else {
+                        throw error
+                    }
                 }
             }
         }

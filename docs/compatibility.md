@@ -12,12 +12,14 @@
 4. Retrofit 网络或传输读流异常不属于 JSON 错形，也不属于空响应；不要用 `emptyResponsePolicy` 隐藏这类异常。
 5. 低版本项目不要直接上线，先按下面表格做兼容验证。
 
+Safe Reflective 遵循调用方的字段排除规则，包含显式允许的 `transient` 字段；`static` 字段仍固定排除。需要读写静态字段的类型应使用自定义 Adapter 或 `@SafeParseDelegateToGson`。
+
 ## 1. 版本矩阵
 
 | 内容 | 当前验证版本与含义 |
 | --- | --- |
 | 发布产物 | Android AAR。纯 JVM 项目不能按普通 JVM jar 消费，Android 项目可直接接入。 |
-| 库版本 | `1.0.4` 是当前稳定发布版本；`1.0.0` 是首个公开兼容基线。 |
+| 库版本 | `1.0.4` 是当前稳定发布版本；当前源码为待发布的 `1.0.5` 候选版；`1.0.0` 是首个公开兼容基线。 |
 | Android `minSdk` | `minSdk 23` 是硬边界。低于 23 时，AAR 合并或运行验证可能失败。 |
 | Android `compileSdk` | `compileSdk 36` 是构建边界。低于 36 必须跑完整验证。 |
 | JDK | `JDK 17` 是硬边界。JDK 8 / 11 构建链消费 Java 17 产物风险高。 |

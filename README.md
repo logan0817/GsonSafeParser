@@ -7,452 +7,189 @@
 [![CI](https://github.com/logan0817/GsonSafeParser/actions/workflows/ci.yml/badge.svg)](https://github.com/logan0817/GsonSafeParser/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-GsonSafeParser 是一个 Kotlin 优先的 Android Gson 扩展库，发布形式是 Android AAR。
+**Android 的 Gson 扩展：后端把某个对象字段返回成数组时，保留这个字段的默认值，让其他字段继续解析。**
 
-它解决的主要问题是：后端某个字段的 JSON 形状不稳定时，原生 Gson 可能让整棵 Bean 解析失败。
+例如，代码需要 `"data":{"id":1}`，接口偶尔却返回 `"data":[]`。原生 Gson 可能让整次解析失败；GsonSafeParser 会尽量隔离到 `data`，并提供事件告诉你哪里出了问题。
 
-GsonSafeParser 会尽量把问题隔离在当前字段，让外层对象继续解析。
+**现在安装：使用下面的 1.0.4。** 当前源码已准备为 [1.0.5 候选版](docs/release-notes-1.0.5.md)，但尚未发布到 Maven Central；新修复不包含在 1.0.4 中。
 
-它不会把错误数据悄悄吞掉。库会记录字段 path、期望形状、实际形状和兜底动作。
+## 1. 添加依赖，只选一种
 
-这些信息可以用来反馈后端，也可以用来在线上持续观察接口漂移。
+需要 Android 项目、`minSdk 23` 及以上、JDK 17。发布物是 Android AAR；纯 JVM 项目暂不能按普通 JAR 接入。更多版本要求见[兼容性说明](docs/compatibility.md)。
 
-## 30 秒接入
+打开实际使用此库的模块文件，例如 **`app/build.gradle.kts`**，把下面两种写法中的一种放进 `dependencies`。
 
-如果你只想先验证字段级兜底，先加 core 依赖：
-
-```kotlin
-implementation("io.github.logan0817:gson-safe-parser-core:1.0.4")
-```
-
-然后在业务代码里创建 Gson：
+**自己调用 Gson 解析 JSON，选 core：**
 
 ```kotlin
-val gson = GsonSafeParser.create()
-val response = gson.fromJson(json, ApiResponse::class.java)
+dependencies {
+    implementation("io.github.logan0817:gson-safe-parser-core:1.0.4")
+}
 ```
 
-如果要同时拿到本次兜底事件：
+**使用 Retrofit 解析接口响应，选 retrofit：**
+
+```kotlin
+dependencies {
+    implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.4")
+}
+```
+
+retrofit 模块已经包含 core，不需要再加一遍 core。它也会传递 Retrofit 和 Gson 依赖；已有网络栈的项目先核对[依赖兼容性](docs/compatibility.md#3-retrofit-版本说明)。
+
+项目仓库源需要包含 Maven Central，通常已在根目录的 `settings.gradle.kts` 配置：
+
+```kotlin
+dependencyResolutionManagement {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+```
+
+已有这段配置时无需重复添加。保存后执行 Android Studio 的 **Sync Project with Gradle Files**。
+
+## 2. 先看一个完整例子
+
+依赖同步后，可以将下面代码放进 Android 模块的 Kotlin 文件。它包含完整导入、模型和 `main`；也可以把 `main` 的函数体放进已有测试或业务入口。
+
+Android 不会自动执行这个 `main`。请从已有单元测试或调试入口调用它；`check` 全部通过且输出与下方一致，就说明这个接入样例正常。
 
 ```kotlin
 import io.github.logan.gsonsafeparser.GsonSafeParser
-import io.github.logan.gsonsafeparser.contractReport
 import io.github.logan.gsonsafeparser.parseSafe
-
-val result = GsonSafeParser.parseSafe<ApiResponse>(json)
-println(result.value)
-println(result.contractReport().toBackendMarkdown())
-```
-
-如果项目使用 Retrofit：
-
-```kotlin
-implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.4")
-```
-
-```kotlin
-val retrofit = Retrofit.Builder()
-    .baseUrl("https://example.com/")
-    .addConverterFactory(GsonSafeConverterFactory.create())
-    .build()
-```
-
-第一次接入建议按这个顺序读：1. [快速开始](docs/getting-started.md) 2. [API 参考](docs/api-reference.md) 3. [错形能力矩阵](docs/mismatch-capability-matrix.md) 4. [Android 混淆](docs/android-proguard.md)。
-
-## 一句话判断是否适合你
-
-| 你的场景 | 是否适合 | 建议入口 |
-| --- | --- | --- |
-| Android 项目里 Gson 解析因为字段错形崩溃 | 适合 | `GsonSafeParser.create()` 或 `GsonBuilder.enableSafeParser()` |
-| Retrofit 响应偶发字段错形或空 body | 适合 | `GsonSafeConverterFactory.create()` |
-| 想保留 Gson 原有配置，只补字段级安全解析 | 适合 | 对同一个 `GsonBuilder` 调用 `.enableSafeParser(config)` |
-| 纯 JVM 项目，不消费 Android AAR | 暂不适合 | 当前发布物是 Android AAR |
-| 想把 JSON 语法错误、断网、取消请求都变成默认值 | 不适合 | 这类问题会继续交回 Gson、Retrofit 或 OkHttp |
-
-## 核心能力
-
-1. 字段级安全兜底：对象、集合、Map 出现 JSON 形状不一致时，只兜底当前字段，尽量保住外层 Bean；基础类型默认交回 Gson，显式配置 `PrimitiveParsingPolicy.Safe` 后才启用安全基础值。
-2. 默认交回 Gson 原生 Adapter：Safe Adapter 创建失败、配置不完整或遇到无法确认的类型时，不由 SafeParser 改写读取行为。
-3. Kotlin 友好：支持 Kotlin data class 默认值、reified API、`parseSafe<T>()` 和 `fromJsonSafe<T>()`。
-4. Retrofit 接入：提供 `GsonSafeConverterFactory`，支持空响应策略和 raw JSON 捕获上限。
-5. 显式形态转换：可选择把对象字段收到的数组取第 1 个对象，或把集合/数组字段收到的对象包装成单元素容器。
-6. 契约证据：输出字段 path、期望形状、实际形状和兜底动作；也可以生成给后端看的 Markdown 报告。
-7. Demo App：内置 Android 示例应用，可粘贴业务 JSON，在真机上对比 GsonSafeParser 和原生 Gson 解析结果。
-
-## 默认行为
-
-默认配置适合直接接入已有 Gson 项目。接入前先记住 4 条：1. 字段级对象、集合、Map 形状不一致时，库只处理当前字段，字段有构造默认值时，会优先保留默认值 2. 基础类型和 `String` 默认交回 Gson，显式改成 `PrimitiveParsingPolicy.Safe` 后才启用安全基础值 3. 顶层 `Object`、JSON 语法错误、自定义 Adapter 自己抛出的异常会向外抛出 4. Retrofit 断网、取消、连接重置和 TLS 失败属于网络层，不会被空响应策略隐藏。
-
-### 默认配置速查
-
-| 配置 | 默认值与使用建议 |
-| --- | --- |
-| `fallbackPolicy` | 默认 `FallbackPolicy.NullOnly`。集合或 Map 整体错形时不主动伪造成空容器，业务确认空集合或空 Map 就是“无数据”时再改 `FallbackPolicy.Default`。 |
-| `primitiveParsingPolicy` | 默认 `PrimitiveParsingPolicy.DelegateToGson`。基础值继续交回 Gson；业务接受非法基础值兜底时才改 `PrimitiveParsingPolicy.Safe`。 |
-| `emptyResponsePolicy` | 默认 `EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly`。Retrofit 空 body 只为 `Unit`、`Void` 走默认值，业务模型空响应要返回默认对象或 `null` 时再改。 |
-| `useJdkUnsafe` | 默认 `false`。SafeParser 自己不使用 Unsafe 构造对象；只有项目明确依赖原生 Gson Unsafe 构造行为，并且有 release 回归时才打开。 |
-| `requiredConstructorParameterPolicy` | 默认 `RequiredConstructorParameterPolicy.GsonCompatible`。老项目保持 Gson 兼容；新接口要把缺字段、`null`、未知枚举当契约错误时再改 `Strict`。 |
-| `mapItemKeyPolicy` | 默认 `MapItemKeyPolicy.Omit`。线上默认不输出 Map item key；需要聚合排障时用 `Hash`，联调明文只能临时使用。 |
-
-改动配置前，至少用字段错形、空 body、缺字段或显式 `null` 这 3 类样例跑一遍真实模型。涉及 Map key 或 raw JSON 时，还要确认日志、监控和契约报告不会泄露用户标识。
-
-JSON 形态转换默认是 `ShapeCoercionPolicy.Disabled`。只有后端确实存在 object/array 漂移，并且业务接受明确恢复规则时，才开启 `ShapeCoercionPolicy.ObjectAndCollection` 或字段级 `@SafeParseShapeCoercion`。完整配置见 [配置说明](docs/configuration.md)。
-
-### 固定边界
-
-| 场景 | 默认处理与建议 |
-| --- | --- |
-| `Object` 字段收到 `[]`、`""`、`1` | 当前字段返回 `null` 或保留构造默认值，外层对象继续解析。字段级错形可以安全隔离；用 `parseSafe<T>()` 看事件 path，再反馈后端。 |
-| 顶层 `Object` 收到 `[]`、`""`、`1` | 根级解析失败继续遵循 Gson 边界，通常不会伪装成完整默认对象。调用层应区分空响应、语法错误和接口契约错误。 |
-| 基础类型 / `String` 字段收到 `{}`、`[]`、非法字符串 | 默认交回 Gson 原生 Adapter，失败时外抛。金额、状态、分页等字段确认后再启用 `PrimitiveParsingPolicy.Safe`。 |
-| 调用方自定义 Adapter 抛异常 | 自定义 Adapter 自己抛出的异常会向外抛出，不伪装成字段兜底。可恢复错误应在自定义 Adapter 内部处理，或交回 Gson 原生链路。 |
-
-## 使用安装
-
-发布产物是 Android AAR，使用 JDK 17 编译。业务工程请使用 JDK 17 或更高版本。
-
-正式接入前先看 [兼容性说明](docs/compatibility.md)。
-
-当前验证矩阵：`minSdk 23`、`compileSdk 36`、`JDK 17`、`Kotlin 2.0.21`、`kotlin-reflect 2.0.21`、`Gson 2.13.2`。Retrofit 模块验证版本是 `Retrofit 2.8.1`。
-
-版本号以徽章为准。普通 Gson 或手动持有 Gson 实例时，只依赖 core：
-
-最新版本：[![Maven Central: core](https://img.shields.io/maven-central/v/io.github.logan0817/gson-safe-parser-core?label=core)](https://central.sonatype.com/artifact/io.github.logan0817/gson-safe-parser-core)
-
-```kotlin
-implementation("io.github.logan0817:gson-safe-parser-core:1.0.4")
-```
-
-如果项目使用 Retrofit，只依赖 retrofit 模块即可；它会传递带上 core：
-
-最新版本：[![Maven Central: retrofit](https://img.shields.io/maven-central/v/io.github.logan0817/gson-safe-parser-retrofit?label=retrofit)](https://central.sonatype.com/artifact/io.github.logan0817/gson-safe-parser-retrofit)
-
-```kotlin
-implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.4")
-```
-
-Retrofit 模块仍保持 `Retrofit 2.8.1` API 兼容，同时会以运行时依赖提供 `OkHttp 4.12.0` 和 `Okio 3.6.0` 安全基线，避免 Retrofit 2.8.1 的旧传递依赖落回 OkHttp 3.14.x / Okio 1.x。接入已有网络栈时，先用 `./gradlew dependencyInsight --dependency okhttp` 和 `./gradlew dependencyInsight --dependency okio` 确认依赖解析结果，再跑断网、取消、连接重置、TLS 失败和 raw JSON 捕获回归。
-
-Android release 额外要求：
-
-| 场景 | 需要做什么 |
-| --- | --- |
-| debug 或未开启 minify | 可以先零配置试用。 |
-| release 开启 R8 / ProGuard | 业务模型仍要按 [Android 混淆](docs/android-proguard.md) 配置 keep 规则。 |
-| 老项目模型分散 | 先用宽范围包级 keep 保住字段名、构造方法和 Kotlin 默认值，稳定后再收窄。 |
-| 只加了 `@SerializedName` | 只能固定 JSON 字段名，不能替代 Kotlin Metadata 和构造方法 keep。 |
-
-## 快速开始
-
-```kotlin
-import io.github.logan.gsonsafeparser.GsonSafeParser
 
 data class ApiResponse(
     val code: Int = 0,
-    val data: User? = null
+    val data: User = User()
 )
 
 data class User(
     val id: Long = 0L,
-    val name: String = ""
+    val name: String = "anonymous"
 )
 
-val json = """{"code":200,"data":[]}"""
+fun main() {
+    // data 应该是对象，这次后端却返回了数组。
+    val json = """{"code":200,"data":[]}"""
+    val result = GsonSafeParser.parseSafe<ApiResponse>(json)
+    val response = requireNotNull(result.value)
+
+    check(response.code == 200)
+    check(response.data == User())
+    check(result.events.size == 1)
+
+    println(response)
+    println("Recovered fields: ${result.events.size}")
+}
+```
+
+预期输出：
+
+```text
+ApiResponse(code=200, data=User(id=0, name=anonymous))
+Recovered fields: 1
+```
+
+`code` 仍然读到 `200`，`data` 保留模型里的默认值。`result.events` 记录这次字段问题，方便定位接口返回哪里不符合预期。
+
+只要对象、不需要事件快照时，使用 `GsonSafeParser.create()` 创建 Gson：
+
+```kotlin
+import io.github.logan.gsonsafeparser.GsonSafeParser
+
 val gson = GsonSafeParser.create()
-val response = gson.fromJson(json, ApiResponse::class.java)
+val response = gson.fromJson("""{"code":200,"data":[]}""", ApiResponse::class.java)
 ```
 
-原生 Gson 遇到 `data` 期望对象却收到 `[]` 时会抛异常；GsonSafeParser 会兜底 `data` 字段，并继续解析外层 `code`。
+上面继续使用前一个例子的 `ApiResponse` 模型。实际项目通常创建并复用一个 Gson，无需每次解析都重新创建。
 
-兜底边界先看这张表：
+## 3. Retrofit 项目这样接
 
-| 问题类型 | 默认处理 |
-| --- | --- |
-| 字段级 JSON 形状不一致 | 只兜底当前字段，外层对象继续解析。 |
-| JSON 语法错误 | 继续抛出，不伪装成默认值。 |
-| 根级解析失败 | 继续遵循 Gson 边界，不能保证字段级隔离。 |
-| Retrofit 网络或传输读流失败 | 交回 Retrofit / OkHttp 错误处理，不记录成字段错形或空响应，也不能用 `emptyResponsePolicy` 隐藏。 |
-| 不可安全隔离异常 | `Error`、`ThreadDeath`、`LinkageError`、`CancellationException` 继续外抛。 |
-
-SafeParser 内建 Adapter 读取到可隔离的字段错形时，会产生事件并保留外层对象解析。调用方通过 `registerTypeAdapter(...)`、`registerTypeAdapterFactory(...)`、`registerTypeHierarchyAdapter(...)` 或 `@JsonAdapter` 显式接管的类型，会优先走原生 Gson 链路；这些自定义 Adapter 自己抛出的异常会向外抛出，不会被伪装成字段兜底。
-
-入口选择也要分清：
-
-| 你想要什么 | 推荐入口 |
-| --- | --- |
-| 只要字段级安全解析 | `GsonSafeParser.create()` 或 `GsonBuilder.enableSafeParser()`。 |
-| 要解析结果加事件快照 | `GsonSafeParser.parseSafe<T>()` 或 `parser.parseSafe<T>()`。 |
-| 要高频复用同一配置 | `GsonSafeParser.parser(config)`。 |
-| 已有外部 Gson | 先对同一个 `GsonBuilder` 调用 `.enableSafeParser(config)`，再用 `parserWithExternalGson(gson, config)`。 |
-| Retrofit 响应转换 | `GsonSafeConverterFactory.create(...)`。 |
-
-默认 `GsonSafeParser.create(config)` 不读取 `GsonBuilder` 内部字段。只有 builder-first 入口需要读取这些内部字段，用来继承调用方已经放进 Builder 的 `InstanceCreator`、`ReflectionAccessFilter`、Object 数字策略、复杂 Map key 和 Unsafe 开关。强制覆盖 Gson 版本后，先跑 `GsonSafeParser.diagnostics()`，它会按字段报告 critical / optional 兼容性。
-
-直接调用 `gson.fromJson(...)` 时，最外层仍保持 Gson 原生异常包装行为。
-
-这样做是为了不替换 Gson 本体，也避免扩展层改变调用方已经依赖的 Gson 语义。
-
-Kotlin 便捷 API：
+将原来的 `.addConverterFactory(GsonConverterFactory.create(...))` **替换成**下面的工厂。不要同时注册两个 Gson 转换工厂；前面的工厂可能先接走响应，让安全解析没有机会生效。
 
 ```kotlin
-val response = GsonSafeParser.fromJsonSafe<ApiResponse>(json)
-val result = GsonSafeParser.parseSafe<ApiResponse>(json)
+import io.github.logan.gsonsafeparser.retrofit.GsonSafeConverterFactory
+import retrofit2.Retrofit
 
-println(result.value)
-println(result.events)
-println(result.contractReport().toMarkdown())
-println(result.contractReport().toBackendMarkdown())
-println(result.contractReport().summary.warningCount)
-println(result.contractReport().toStructuredRows().firstOrNull()?.stableKey)
-```
-
-`fromJsonSafe<T>()` 直接返回业务对象，`parseSafe<T>()` 会同时返回解析事件，适合日志、监控和契约报告。
-
-如果你要高频重复解析同一套接口，先创建一次可复用 Parser 更合适：
-
-```kotlin
-val parser = GsonSafeParser.parser(config)
-val value = parser.fromJsonSafe<ApiResponse>(json)
-val result = parser.parseSafe<ApiResponse>(json)
-```
-
-`parser(config)` 只创建一次安全 Parser，后续会复用同一个 Gson，适合 Repository、数据源和批量解析场景。
-
-## JSON 形态转换
-
-默认情况下，GsonSafeParser 不会把对象和数组互相转换。JSON 形态转换的默认状态是 `ShapeCoercionPolicy.Disabled`，所以 1.0.4 不会改变旧版本的默认解析结果。
-
-这个能力只适合后端字段形态不稳定、但业务上可以接受恢复规则的场景：
-
-| 代码字段 | 后端实际 JSON | 开启后处理 |
-| --- | --- | --- |
-| `data: User` | `"data":[{"id":1}]` | 读取数组第 1 个对象赋给 `data`。 |
-| `users: List<User>` | `"users":{"id":1}` | 包装成只有 1 个元素的 List。 |
-| `users: Array<User>` | `"users":{"id":1}` | 包装成长度为 1 的数组。 |
-
-全局开启：
-
-```kotlin
-val config = SafeParserConfig()
-    .withShapeCoercionPolicy(ShapeCoercionPolicy.ObjectAndCollection)
-
-val gson = GsonSafeParser.create(config)
-```
-
-只给某个字段开启：
-
-```kotlin
-data class ApiResponse(
-    @field:SafeParseShapeCoercion(ShapeCoercionPolicy.ObjectFromFirstArrayItem)
-    val data: User? = null
-)
-```
-
-全局开启后，也可以禁止某个强契约字段转换：
-
-```kotlin
-data class StrictEnvelope(
-    @field:SafeParseDisableShapeCoercion
-    val signedPayload: SignedPayload = SignedPayload()
-)
-```
-
-如果 `errors: List<ApiError>` 本身就是后端 object/array 混合字段，不要禁用它；应使用 `CollectionFromSingleObject` 或 `ObjectAndCollection`。
-
-边界很明确：根级对象、根级集合、根级对象数组、Map、字符串二次解析、数字和布尔值不会参与转换。空数组、数组首项不是对象、转换时 Adapter 失败都会记录 `ShapeCoercion` 事件并回到原兜底行为。`Error`、`ThreadDeath`、`LinkageError`、`CancellationException` 和真实传输 I/O 仍然外抛。
-
-## Retrofit 接入
-
-```kotlin
 val retrofit = Retrofit.Builder()
     .baseUrl("https://example.com/")
     .addConverterFactory(GsonSafeConverterFactory.create())
     .build()
 ```
 
-如果需要自定义空响应或观测策略：
+把 `baseUrl` 换成你的接口地址，原有 Retrofit 接口和请求调用方式保持不变。
+
+已有统一的 GsonBuilder 配置时，把 Builder 传给工厂：
 
 ```kotlin
-val config = SafeParserConfig.production(
-    observerPolicy = SafeObserverPolicy(
-        onEvent = { event -> println(event) }
+import com.google.gson.GsonBuilder
+import io.github.logan.gsonsafeparser.retrofit.GsonSafeConverterFactory
+import retrofit2.Retrofit
+
+val retrofit = Retrofit.Builder()
+    .baseUrl("https://example.com/")
+    .addConverterFactory(
+        GsonSafeConverterFactory.create(GsonBuilder().serializeNulls())
     )
-)
-
-val retrofit = Retrofit.Builder()
-    .baseUrl("https://example.com/")
-    .addConverterFactory(GsonSafeConverterFactory.create(config))
     .build()
 ```
 
-`onEvent` 会接收统一解析事件，适合接入日志、监控或契约报告链路。
+已经创建好的普通 Gson 不会因为传进工厂就自动获得安全解析。如何复用它、处理空响应和观察事件，见[快速开始](docs/getting-started.md)的 Retrofit 部分和 [API 参考](docs/api-reference.md)。
 
-如果项目里已经统一维护了 GsonBuilder，推荐使用 builder-first 入口：
+## 4. 已有 Gson 配置怎么保留
 
-```kotlin
-val config = SafeParserConfig.debug()
-
-val retrofit = Retrofit.Builder()
-    .baseUrl("https://example.com/")
-    .addConverterFactory(GsonSafeConverterFactory.create(GsonBuilder().serializeNulls(), config))
-    .build()
-```
-
-如果项目里已经统一维护的是创建好的 Gson，同时还想保留 Retrofit 层的空响应、rawJson 和事件策略，可以使用：
+如果项目自己创建 Gson，把 `.enableSafeParser()` 加到**同一个 Builder**，放在 `.create()` 前面：
 
 ```kotlin
-val config = SafeParserConfig.debug()
+import com.google.gson.GsonBuilder
+import io.github.logan.gsonsafeparser.enableSafeParser
+
 val gson = GsonBuilder()
     .serializeNulls()
-    .enableSafeParser(config)
+    .enableSafeParser()
     .create()
-
-val retrofit = Retrofit.Builder()
-    .baseUrl("https://example.com/")
-    .addConverterFactory(GsonSafeConverterFactory.create(gson, config))
-    .build()
 ```
 
-这段写法同时复用已有 Gson，并让 Retrofit 层继续使用同一份空响应、raw JSON 和事件策略。
+保留项目原有的命名规则、Adapter 等配置，继续使用这个 `gson.fromJson(...)`。完整入口选择、高频解析复用和 Java 调用方式见 [API 参考](docs/api-reference.md)。
 
-这里容易误解，按当前情况选入口就行：
+## 5. 接入前记住这 5 条
 
-| 当前情况 | 推荐写法 | 原因 |
-| --- | --- | --- |
-| 还在配置 `GsonBuilder` | `GsonSafeConverterFactory.create(builder, config)` | 工厂会在 `builder.create()` 前注册 Safe Adapter。 |
-| 已经有统一维护的 `Gson` | 先在创建它的 `GsonBuilder` 上调用 `.enableSafeParser(config)`，再传给 `create(gson, config)` | `Gson` 创建后配置已经固定，库不会偷偷改这个实例。 |
-| 只写 `create(gson, config)` | 只复用这份 `Gson`，并使用 Retrofit 层的空响应、raw JSON 和事件配置 | 这不会自动给外部 Gson 注册 Safe Adapter。 |
-
-如果不确定外部 `Gson` 是否已经启用字段级安全解析，可以用 `GsonSafeParser.diagnostics(gson)` 检查。
-
-这里的默认 Retrofit `create(config)` 也会走低风险默认入口；只有 `create(builder, config)` 和 `.enableSafeParser(config)` 需要读取 Builder 内部字段来继承调用方配置。
-
-## 常用配置
-
-下面代码块只展示可复制写法。每个配置项的含义和修改场景见后面的表格。
-
-```kotlin
-val config = SafeParserConfig(
-    fallbackPolicy = FallbackPolicy.NullOnly,
-    emptyResponsePolicy = EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly,
-    primitiveParsingPolicy = PrimitiveParsingPolicy.DelegateToGson,
-    skippedPlatformTypePrefixes = setOf("android."),
-    nullValuePolicy = NullValuePolicy.WriteExplicitNulls,
-    requiredConstructorParameterPolicy = RequiredConstructorParameterPolicy.GsonCompatible,
-    mapItemKeyPolicy = MapItemKeyPolicy.Omit,
-    captureRawJsonInCallbacks = false,
-    maxRawJsonCaptureBytes = 1024 * 1024,
-    onEvent = { event -> println(event) },
-    onTypeMismatch = { event ->
-        println("${event.path}: ${event.actualToken} -> ${event.expectedType}")
-    }
-)
-```
-
-预设配置：
-
-```kotlin
-val production = SafeParserConfig.production()
-val debug = SafeParserConfig.debug()
-val lowInterference = SafeParserConfig.lowInterference()
-```
-
-| 预设 | 说明 |
+| 情况 | 默认行为 |
 | --- | --- |
-| `production()` | 正式上线默认配置。开启事件观测，默认不输出 Map item key，也不携带整段 raw JSON。 |
-| `debug()` | 联调、测试和接口排障使用。读策略和线上一致，但会在上限内携带 raw JSON，不建议长期用于线上。 |
-| `lowInterference()` | 灰度接入或低干预优先时使用。字段、集合、Map 整体错形优先返回 `null`，基础类型交回 Gson 原生 Adapter。 |
+| 对象、集合或 Map 字段的结构与模型不符 | 尽量只处理当前字段；字段有构造默认值时优先保留，无法安全恢复时仍可能失败。 |
+| `Int`、`Boolean`、`String` 等基础值不合法 | 默认交回 Gson，仍可能抛异常。需要容错时先看[配置说明](docs/configuration.md)，再决定是否开启安全基础值解析。 |
+| 顶层需要对象却收到数组或数字 | 通常返回 `null`，不会凭空生成完整业务对象。调用方仍要处理空值。 |
+| JSON 损坏、自定义 Adapter 抛错、请求失败或取消 | 属于应当暴露的错误；库不承诺把它们转成默认值。1.0.4 的已知修复见下方版本说明。 |
+| Retrofit 收到空响应体 | 默认普通业务模型返回 `null`；`Unit` / `Void` 由 Retrofit 内置转换器处理。具体边界见[排障指南](docs/troubleshooting.md#1-retrofit-空响应)。 |
 
-## 注解
+对象和数组也不会默认相互转换。确实需要“数组取第一个对象”或“对象包装成单元素集合”时，再看[形态转换配置](docs/configuration.md)和[支持范围](docs/mismatch-capability-matrix.md)。
 
-```kotlin
-@SafeParseDelegateToGson
-class StrictModel
+**准备上线前：**如果 release 开启了 R8 / ProGuard，必须按 [Android 混淆说明](docs/android-proguard.md)保留业务模型。debug 能解析成功，不代表混淆后的版本也能保留字段名和 Kotlin 默认值。
 
-data class PageState(
-    @field:SafeParseSkip
-    val runtimeCache: Any? = null
-)
+## 接下来按需要阅读
 
-data class FlexibleResponse(
-    @field:SafeParseShapeCoercion(ShapeCoercionPolicy.ObjectFromFirstArrayItem)
-    val data: User? = null,
-
-    @field:SafeParseDisableShapeCoercion
-    val signedPayload: SignedPayload = SignedPayload()
-)
-```
-
-1. `@SafeParseDelegateToGson` 标在类上，表示该类型直接交给 Gson 原生 Adapter。
-2. `@SafeParseSkip` 标在字段上，表示 Safe Reflective 不读写该字段，适合运行时状态、缓存字段或平台对象。
-3. `@SafeParseShapeCoercion` 标在字段上，表示这个字段允许按指定策略做对象和数组形态转换。
-4. `@SafeParseDisableShapeCoercion` 标在字段上，表示即使全局开启形态转换，这个字段也保持原错形兜底行为。
-
-## Demo App
-
-仓库内置 `demo-app`，用于真机验证库能力：
-
-```bash
-./gradlew :demo-app:assembleDebug
-./gradlew :demo-app:installDebug
-adb shell am start -n io.github.logan.gsonsafeparser.demo/.MainActivity
-```
-
-这 3 个命令分别用于构建 debug 版 Demo、安装到已连接设备、启动 Demo 首页。
-
-Demo App 支持内置用例和用户自定义 JSON。你可以把接口返回直接粘贴进去，对比 GsonSafeParser 和原生 Gson 的解析结果、事件流和接入建议。
-
-## 文档
-
-建议按场景阅读，不用从头读完整仓库文档。
-
-| 场景 | 先读 | 再读 |
-| --- | --- | --- |
-| 第一次接入 | [快速开始](docs/getting-started.md) | [API 参考](docs/api-reference.md) |
-| 判断兜底范围 | [错形能力矩阵（JSON 形状不一致）](docs/mismatch-capability-matrix.md) | [配置说明](docs/configuration.md) |
-| Android release 上线 | [Android 混淆](docs/android-proguard.md) | [兼容性说明](docs/compatibility.md) |
-| Retrofit 接入 | [快速开始](docs/getting-started.md) 的 Retrofit 部分 | [排障指南](docs/troubleshooting.md) |
-| 真机体验 | [Demo App](docs/demo-app.md) | [examples](examples/README.md) |
-| 贡献代码或反馈问题 | [贡献指南](CONTRIBUTING.md) | [安全策略](SECURITY.md) |
-| 发版维护 | [发布清单](docs/release-checklist.md) | [CHANGELOG](CHANGELOG.md) |
-
-完整文档索引：
-
-| 分类 | 文档 |
+| 你要做什么 | 文档 |
 | --- | --- |
-| 入门 | [快速开始](docs/getting-started.md)、[API 参考](docs/api-reference.md)、[示例索引](examples/README.md) |
-| 参考 | [配置说明](docs/configuration.md)、[错形能力矩阵](docs/mismatch-capability-matrix.md)、[兼容性说明](docs/compatibility.md)、[排障指南](docs/troubleshooting.md) |
-| Android | [Android 混淆](docs/android-proguard.md)、[Demo App](docs/demo-app.md) |
-| 开源协作 | [贡献指南](CONTRIBUTING.md)、[安全策略](SECURITY.md)、[行为准则](CODE_OF_CONDUCT.md) |
-| 发布记录 | 见下方版本说明。 |
+| 接入现有项目、了解完整示例 | [快速开始](docs/getting-started.md) |
+| 查入口、事件、Java 调用和报告 API | [API 参考](docs/api-reference.md) |
+| 调整默认值、基础值、空响应和日志策略 | [配置说明](docs/configuration.md) |
+| 确认某种错误是否能恢复 | [错形能力矩阵](docs/mismatch-capability-matrix.md) |
+| 检查版本、依赖或混淆要求 | [兼容性](docs/compatibility.md)、[Android 混淆](docs/android-proguard.md) |
+| 接入后没生效、找不到字段或出现异常 | [排障指南](docs/troubleshooting.md) |
+| 在 Android 设备上对比解析结果 | [Demo App](docs/demo-app.md)、[示例索引](examples/README.md) |
+| 贡献或维护发布 | [贡献指南](CONTRIBUTING.md)、[发布清单](docs/release-checklist.md) |
 
-发布记录：
+版本与修复记录：
 
-1. [1.0.4 发布说明](docs/release-notes-1.0.4.md)
-2. [1.0.3 发布说明](docs/release-notes-1.0.3.md)
-3. [1.0.2 发布说明](docs/release-notes-1.0.2.md)
-4. [1.0.1 发布说明](docs/release-notes-1.0.1.md)
-5. [1.0.0 发布说明](docs/release-notes-1.0.0.md)
+- [1.0.4 发布说明](docs/release-notes-1.0.4.md)：上面依赖示例对应的版本。
+- [1.0.5 候选版说明](docs/release-notes-1.0.5.md)：本地候选产物、修复内容和升级注意事项，尚未公开发布。
+- [CHANGELOG](CHANGELOG.md)：包含历史版本与尚未发布的 `Unreleased` 修复。
+- 当前源码的语法边界、容器逐项恢复、Adapter 优先级及 Retrofit 可靠性修复属于待发布的 1.0.5。使用 1.0.4 的项目应先用真实响应验证，发布后再按版本说明升级。
 
-## 风险边界
+## 致谢与许可
 
-GsonSafeParser 是 Gson 的增强层，不是新的 JSON 协议解释器。
+项目在设计和问题场景梳理时参考了 [getActivity/GsonFactory](https://github.com/getActivity/GsonFactory)。来源及版权说明见 [NOTICE](NOTICE)。
 
-它可以降低解析崩溃概率，并告诉你哪个字段出现了 JSON 形状不一致，但不会证明后端契约是正确的。
-
-处理边界：
-
-1. 能隔离到字段的 JSON 形状不一致，由库兜底并记录事件。
-2. 不能安全隔离的问题，交回 Gson 原生 Adapter 或向外抛出。
-3. Gson 版本差异、混淆信息缺失、配置不完整、Safe Adapter 创建失败时，库不应成为新的崩溃来源。
-4. JSON 语法错误、根级解析失败和不可安全隔离异常不会被 `parseSafe` 静默吞掉。
-
-## 致谢与来源说明
-
-GsonSafeParser 是独立维护的 Kotlin 开源项目。
-
-项目在设计、问题场景梳理、README 审阅和 issue 自查阶段参考过公开项目 [getActivity/GsonFactory](https://github.com/getActivity/GsonFactory)，相关许可证和原版权声明见 [NOTICE](NOTICE)。
-
-## License
-
-Apache License 2.0
+采用 [Apache License 2.0](LICENSE)。安全问题反馈方式见 [SECURITY.md](SECURITY.md)。

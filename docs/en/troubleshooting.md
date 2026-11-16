@@ -4,6 +4,21 @@
 
 This document covers common integration issues in GsonSafeParser and the recommended handling.
 
+## Find Your Symptom First
+
+| What you see | First action |
+| --- | --- |
+| Unresolved `parseSafe` / `enableSafeParser` | These extension functions need imports. Copy the complete [Getting Started](getting-started.md) example; Maven coordinates and code packages differ. |
+| Retrofit still reports native Gson errors | Replace the existing `GsonConverterFactory` instead of keeping both Gson converters; confirm external Gson instances already enable SafeParser. |
+| An `Int` receiving `"bad"` still fails | Primitives delegate to Gson by default. If fallback is acceptable, see [primitive configuration](#5-primitive-types-need-safeparser-lenient-parsing). |
+| Parsing returns a value but no logs appear | Default callbacks do not print logs. Read `parseSafe<T>().events` or configure `onEvent`; recovery does not mean the backend data was valid. |
+| `rawJson` is null | Capture is off by default, and plain `gson.fromJson` does not establish raw JSON context; see [raw capture](#2-raw-json-is-missing-from-callbacks). |
+| A null result is unexpected | Distinguish JSON `null`, root shape mismatch, and an empty HTTP response. Read [empty response rules](#1-empty-retrofit-responses) before using `!!`. |
+| Debug works but release loses fields or defaults | Check [model keep rules](#11-release-and-debug-behave-differently), then compare with the same JSON. |
+| Truncated input, malformed escapes, or a disconnected network | Use caller error handling; these failures are not converted into normal model objects. |
+
+This page describes current source; pending fixes are listed under [Unreleased](../../CHANGELOG.md#unreleased).
+
 ## 1. Empty Retrofit Responses
 
 An empty response means the body is actually empty. It does not include offline state, request cancellation, connection reset, or TLS failure.
@@ -17,12 +32,16 @@ SafeParserConfig(emptyResponsePolicy = EmptyResponsePolicy.Null)
 SafeParserConfig(emptyResponsePolicy = EmptyResponsePolicy.DelegateToGson)
 ```
 
-| Policy | Empty model body | Empty `Unit` / `Void` body |
+| Policy | Empty model body | `Unit` / `Void` in actual Retrofit services |
 | --- | --- | --- |
 | `DefaultValueForUnitOrVoidOnly` | Returns `null`. | Returns `Unit` / `null`. |
 | `DefaultValue` | Returns a default object. | Returns `Unit` / `null`. |
-| `Null` | Returns `null`. | Returns `null`. |
+| `Null` | Returns `null`. | Returns `Unit` / `null`. |
 | `DelegateToGson` | Delegates to Gson and usually throws `EOFException`. | Returns `Unit` / `null`. |
+
+Retrofit's built-in converters handle `Unit` / `Void` before GsonSafeParser and do not emit its `EmptyResponse` events.
+HTTP 204/205 responses return `null` before conversion, including for model types. The model policies above apply to empty responses that reach the converter, such as HTTP 200.
+Tests calling this library's `responseBodyConverter()` directly do not establish these service-level behaviors.
 
 Network failures do not use `emptyResponsePolicy`:
 
@@ -36,6 +55,8 @@ Network failures do not use `emptyResponsePolicy`:
 
 Raw JSON capture is disabled by default to avoid extra memory cost for large responses. Enable it temporarily while troubleshooting:
 
+Place this fragment inside a function; its types come from `io.github.logan.gsonsafeparser`. Pass the config to `GsonSafeParser.parseSafe<T>(json, config)`, `GsonSafeParser.fromJson(..., config)`, a Parser, or the Retrofit factory. **Creating a config or only calling `GsonSafeParser.create(config).fromJson(...)` does not establish raw capture context.** Raw JSON may contain sensitive data; do not routinely log complete responses in production.
+
 ```kotlin
 SafeParserConfig(
     captureRawJsonInCallbacks = true,
@@ -48,12 +69,13 @@ SafeParserConfig(
 ```
 
 `rawJson` contains the captured raw response for the current parse, and `rawJsonTruncated` tells whether it was cut by the size limit.
+Nested Retrofit calls isolate each response context: disabled or skipped capture yields `null` and never inherits the outer response text.
 
 Raw JSON capture depends on the scenario:
 
 | Scenario | Result |
 | --- | --- |
-| Plain Gson parsing | Safely truncates by UTF-8 byte count without cutting Chinese text, emoji, or other multibyte characters. |
+| `GsonSafeParser.fromJson` / `parseSafe` / Parser entries | Safely truncate by UTF-8 byte count without cutting Chinese text, emoji, or other multibyte characters. |
 | Retrofit known-length body | Skips capture when `contentLength` exceeds the limit and records `skipReason=ContentLengthExceedsLimit`. |
 | gzip, chunked, or missing `Content-Length` | Runs bounded probing first; captures when under the limit, otherwise records `skipReason=UnknownLengthExceedsLimit`. |
 
@@ -161,9 +183,10 @@ If the same field is an object on success but a string or array on failure, Gson
 
 Fields not declared by the Bean are not injected automatically. Recommended options:
 
-1. Keep a `JsonObject raw` on the shared response wrapper.
-2. Log raw responses through an OkHttp interceptor.
-3. Explicitly declare fields that need to be passed through in the business model.
+1. Parse the complete response into a `JsonObject` / `JsonElement`, retain that tree, then convert it to your model as needed.
+2. Alternatively, declare the fields you need in the model.
+
+Adding a `raw` property alone does not collect undeclared sibling fields; it only maps to an actual JSON property named `raw`. Use a custom `TypeAdapter` if automatic extra-field collection is required. Logging raw network responses is a diagnostic aid, not model storage.
 
 ## 10. Gson version compatibility
 
@@ -213,3 +236,5 @@ Use this order:
 5. If the project chooses `android.enableR8.fullMode=false`, still keep business model rules. This switch cannot restore fields or constructors after they are obfuscated or shrunk.
 
 See [Android ProGuard](android-proguard.md) for detailed configuration.
+
+`testReleaseUnitTest` runs local JVM tests for the release variant; it does not execute the final R8-processed APK. To verify obfuscation, run the actual release APK on a device or emulator, execute model probes, and compare it with debug using the same JSON.

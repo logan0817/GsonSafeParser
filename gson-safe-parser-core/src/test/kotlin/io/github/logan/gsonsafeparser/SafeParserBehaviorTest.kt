@@ -75,6 +75,11 @@ class SafeParserBehaviorTest {
     }
     /** 测试模型：复杂 Map key，开启复杂 key 写出时会变成数组 entry。 */
     data class ComplexKey(val name: String)
+    data class NumericComplexKey(val id: Int = 7, val next: String = "local")
+    data class NumericComplexKeyMap(
+        val values: Map<NumericComplexKey, String> = emptyMap(),
+        val sibling: NumericComplexKey = NumericComplexKey()
+    )
     /** 测试模型：toString 正常的 key，用来验证 keyAdapter 失败时还能退回字符串表示。 */
     data class ThrowingKey(val name: String) {
         override fun toString(): String = name
@@ -349,6 +354,57 @@ class SafeParserBehaviorTest {
 
         assertEquals(mapOf(true to "yes", false to "no"), result.values)
         assertEquals(emptyList<SafeParserEvent>(), events)
+    }
+
+    /**
+     * 空白数字 key 不能被安全基础类型兜底成 0；否则会污染真实的 0 key。
+     * 对象形式和复杂 key 数组形式都必须跳过当前 entry，并继续读取后续 entry。
+     */
+    @Test
+    fun `blank numeric map keys are skipped in both map encodings`() {
+        val config = SafeParserConfig(
+            fallbackPolicy = FallbackPolicy.Default,
+            primitiveParsingPolicy = PrimitiveParsingPolicy.Safe
+        )
+        val objectEvents = mutableListOf<SafeParserEvent>()
+        val objectValue = GsonSafeParser.create(config.copy(onEvent = objectEvents::add)).fromJson<IntKeyMap>(
+            """{"values":{"":"blank","0":"zero","1":"one"}}""",
+            IntKeyMap::class.java
+        )
+
+        assertEquals(mapOf(0 to "zero", 1 to "one"), objectValue.values)
+        assertEquals(1, objectEvents.count { it is SafeParserEvent.TypeMismatch })
+
+        val arrayEvents = mutableListOf<SafeParserEvent>()
+        val arrayValue = GsonSafeParser.create(
+            config.copy(
+                complexMapKeySerialization = true,
+                onEvent = arrayEvents::add
+            )
+        ).fromJson<IntKeyMap>(
+            """{"values":[["","blank"],[0,"zero"],[1,"one"]]}""",
+            IntKeyMap::class.java
+        )
+
+        assertEquals(mapOf(0 to "zero", 1 to "one"), arrayValue.values)
+        assertEquals(1, arrayEvents.count { it is SafeParserEvent.TypeMismatch })
+    }
+
+    @Test
+    fun `numeric fields inside complex map keys retain normal blank string fallback`() {
+        val config = SafeParserConfig(
+            fallbackPolicy = FallbackPolicy.Default,
+            primitiveParsingPolicy = PrimitiveParsingPolicy.Safe
+        )
+        val result = GsonSafeParser.parseSafe<NumericComplexKeyMap>(
+            """{"values":[[{"id":"","next":"remote"},"value"]],"sibling":{"id":"","next":"remote"}}""",
+            config
+        )
+
+        val expectedKey = NumericComplexKey(id = 0, next = "remote")
+        assertEquals(mapOf(expectedKey to "value"), result.value?.values)
+        assertEquals(expectedKey, result.value?.sibling)
+        assertTrue(result.events.isEmpty())
     }
 
     /**

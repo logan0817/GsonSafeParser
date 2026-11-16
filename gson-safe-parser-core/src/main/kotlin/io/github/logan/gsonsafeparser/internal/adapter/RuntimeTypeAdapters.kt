@@ -2,6 +2,7 @@ package io.github.logan.gsonsafeparser.internal.adapter
 
 import com.google.gson.Gson
 import com.google.gson.TypeAdapter
+import com.google.gson.internal.bind.SerializationDelegatingTypeAdapter
 import com.google.gson.reflect.TypeToken
 import com.google.gson.stream.JsonWriter
 import io.github.logan.gsonsafeparser.PrimitiveParsingPolicy
@@ -49,7 +50,7 @@ internal fun TypeAdapter<Any?>.writeRuntime(
         val runtimeAdapter = gson.getAdapter(TypeToken.get(runtimeType)) as TypeAdapter<Any?>
         when {
             !runtimeAdapter.isReflectiveAdapter() -> runtimeAdapter
-            !isReflectiveAdapter() -> this
+            !usesReflectiveSerialization() -> this
             else -> runtimeAdapter
         }
     } else {
@@ -66,6 +67,17 @@ internal fun TypeAdapter<Any?>.writeRuntime(
 private fun TypeAdapter<*>.isReflectiveAdapter(): Boolean {
     if (this is ReflectiveRuntimeTypeAdapter) return true
     return javaClass.name.contains("ReflectiveTypeAdapterFactory")
+}
+
+/** 仅注册反序列化器不代表接管写出；与 Gson 一样沿序列化委托链判断。 */
+private fun TypeAdapter<*>.usesReflectiveSerialization(): Boolean {
+    var adapter = this
+    while (adapter is SerializationDelegatingTypeAdapter<*>) {
+        val delegate = adapter.serializationDelegate
+        if (delegate === adapter) break
+        adapter = delegate
+    }
+    return adapter.isReflectiveAdapter()
 }
 
 /**

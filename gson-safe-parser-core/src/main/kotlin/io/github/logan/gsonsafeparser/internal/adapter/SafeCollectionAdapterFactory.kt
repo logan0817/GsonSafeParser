@@ -107,7 +107,7 @@ internal object SafeCollectionAdapterFactory {
                 }
 
                 // values 暂存已经成功解析的元素。失败元素不会进入这里。
-                val values = mutableListOf<Any?>()
+                val values = mutableListOf<CollectionItem>()
                 reader.beginArray()
                 while (reader.hasNext()) {
                     // itemToken 是当前元素的 JSON 形状，先判断形状可以避免错误元素破坏整个列表读取。
@@ -126,7 +126,7 @@ internal object SafeCollectionAdapterFactory {
                     }
                     val pathBeforeRead = reader.path
                     runRecovering { elementAdapter.read(reader) }
-                        .onSuccess { values += it }
+                        .onSuccess { values += CollectionItem(it, itemToken, pathBeforeRead) }
                         .onFailure {
                             if (elementHandlesOwnShape) {
                                 throw it.asCallerAdapterReadException()
@@ -221,10 +221,10 @@ internal object SafeCollectionAdapterFactory {
                 type: TypeToken<T>,
                 rawType: Class<*>,
                 pathBeforeRead: String,
-                values: List<Any?>
+                values: List<CollectionItem>
             ): T {
-                return runRecovering {
-                    collectionFor(type.type, rawType, config, values) as T
+                val collection = runRecovering {
+                    collectionFor(type.type, rawType, config, emptyList()) as MutableCollection<Any?>
                 }.getOrElse { error ->
                     notify(
                         config = config,
@@ -234,11 +234,28 @@ internal object SafeCollectionAdapterFactory {
                         reason = error.message ?: error.javaClass.name,
                         path = pathBeforeRead
                     )
-                    fallbackCollection(type, rawType) as T
+                    return fallbackCollection(type, rawType) as T
                 }
+                values.forEach { item ->
+                    runRecovering { collection.add(item.value) }
+                        .onFailure { error ->
+                            notify(
+                                config = config,
+                                type = elementTypeToken,
+                                reader = reader,
+                                token = item.token,
+                                reason = error.message ?: error.javaClass.name,
+                                kind = ParseExceptionKind.LIST_ITEM,
+                                path = item.path
+                            )
+                        }
+                }
+                return collection as T
             }
         }
     }
+
+    private data class CollectionItem(val value: Any?, val token: JsonToken, val path: String)
 
     /**
      * 解析集合元素类型。

@@ -6,9 +6,53 @@ GsonSafeParser 的配置目标很直接：能安全兜底的字段由库处理�
 
 本文档说明配置项、构造策略、预设、事件、契约报告和注解。完整 JSON 形状不一致范围见 [错形能力矩阵（JSON 形状不一致）](mismatch-capability-matrix.md)。
 
+## 第一次接入，先看这里
+
+**没有明确需求时，不需要复制完整配置表。** 先用 `GsonSafeParser.create()` 跑通[快速开始](getting-started.md)，只修改业务确认需要改变的选项。
+
+| 你遇到的情况 | 怎么选 | 改变了什么 |
+| --- | --- | --- |
+| 对象字段收到 `[]`，想保留模型默认值 | 保持默认配置 | 当前字段恢复，其他字段继续解析。 |
+| `Int` 字段收到 `"bad"`，业务允许保留本地默认值 | `primitiveParsingPolicy` 设为 `PrimitiveParsingPolicy.Safe` | 基础类型也参与恢复；默认没有开启。 |
+| 后端明确返回 `null`，也想保留字段默认值 | `nullValuePolicy` 设为 `NullValuePolicy.KeepDefaults` | 不再用显式 `null` 覆盖可空字段默认值。 |
+| 对象字段收到对象数组，业务接受只取第一个 | 只给该字段加 `@SafeParseShapeCoercion` | 不是合并数组；其余元素会丢弃。 |
+| 想知道哪个字段被恢复 | 用 `parseSafe<T>()` 查看 `events` | 不必开启原始响应记录。 |
+| Retrofit 的空模型响应要创建默认对象 | `emptyResponsePolicy` 设为 `EmptyResponsePolicy.DefaultValue` | 仅影响进入本库转换器的空响应；见[空响应说明](troubleshooting.md#1-retrofit-空响应)。 |
+
+本页按当前 `1.0.5` 候选源码说明。数组逐项恢复、嵌套 Map 路径脱敏等新修复见[候选版说明](release-notes-1.0.5.md)，尚未发布，不能据此认为 Maven 上的 `1.0.4` 已包含这些修改。
+
+### 示例：只开启基础类型恢复
+
+已添加 core 或 retrofit 依赖后，将下面整段放进一个 Kotlin 文件；在单元测试或调试入口调用 `safeNumbersExample()`：
+
+```kotlin
+import io.github.logan.gsonsafeparser.GsonSafeParser
+import io.github.logan.gsonsafeparser.PrimitiveParsingPolicy
+import io.github.logan.gsonsafeparser.SafeParserConfig
+import io.github.logan.gsonsafeparser.parseSafe
+
+data class Profile(val age: Int = 18)
+
+fun safeNumbersExample() {
+    val config = SafeParserConfig(
+        primitiveParsingPolicy = PrimitiveParsingPolicy.Safe
+    )
+    val result = GsonSafeParser.parseSafe<Profile>("""{"age":"bad"}""", config)
+
+    check(result.value?.age == 18)
+    check(result.events.size == 1)
+    println(result.value) // Profile(age=18)
+}
+```
+
+这表示客户端使用了备用值，**不表示后端数据正确**。金额、权限等不能接受备用值的字段不要用此策略掩盖错误。`parseSafe` 仍可能抛异常；语法错误、取消和传输失败不属于字段恢复。
+
 ## 1. 基础配置
 
-下面示例保留完整字段，便于复制。每个配置项的含义和修改时机见后面的表格。
+下面是默认值对照，供排查和团队统一封装时查阅，不是接入必填项。后续片段中的类型均来自 `io.github.logan.gsonsafeparser`。
+
+<details>
+<summary>展开查看完整默认配置</summary>
 
 ```kotlin
 val config = SafeParserConfig(
@@ -25,6 +69,8 @@ val config = SafeParserConfig(
     maxRawJsonCaptureBytes = 1024 * 1024
 )
 ```
+
+</details>
 
 默认配置偏向低干预：字段级问题优先局部兜底，不能确认安全的问题交回 Gson。
 
@@ -48,6 +94,12 @@ val config = SafeParserConfig(
 
 验证配置时，用真实模型覆盖 List、Set、Map 字段错形、空 body、传输失败、缺字段、显式 `null`、未知枚举和基础类型非法值。打开 raw JSON 或 Map key 输出时，还要检查日志和契约报告的脱敏结果。
 
+`mapItemKeyPolicy` 同时作用于 `mapItemKey`、嵌套 Map 的 `path` 和从 key 推导出的 `fieldName`：`Omit` 用 `[map-key]` 替换路径中的 key，`Hash` 用稳定 SHA-256 值替换；普通模型字段名保留。显式开启的 `rawJson` 仍是原文，不受此策略脱敏。
+
+集合及数组按元素隔离可恢复错误。启用 Safe 基础类型后，`[1,"bad",2]` 解析为数字数组时保留 `[1,2]`；原始类型数组跳过 `null`，对象数组保留显式 `null`。Queue、SortedSet 等容器拒绝的元素仅影响当前项，并记录 `LIST_ITEM`。损坏的转义或截断 JSON 会立即失败，不属于元素容错。
+
+显式自定义 Adapter 优先处理 JSON `null`（包括 `@JsonAdapter(nullSafe = false)`）。其返回非空值时正常赋值；其返回 `null` 时，字段仍按 `nullValuePolicy` 和可空性处理。未注册自定义 Adapter 的字段保持原策略。
+
 ### 可选能力开关
 
 | 能力 | 说明 |
@@ -58,9 +110,16 @@ val config = SafeParserConfig(
 
 ### raw JSON 捕获规则
 
-1. 普通 Gson 解析会按 UTF-8 字节数安全截断，不会切断中文或 emoji。
+1. `GsonSafeParser.fromJson`、`parseSafe` 或 Parser 入口会按 UTF-8 字节数安全截断，不会切断中文或 emoji；直接 `gson.fromJson` 不自动捕获原文。
 2. Retrofit 已知长度响应会先看 `contentLength`。
 3. gzip、chunked 这类未知长度响应会做有界探测，未超限才捕获，超限就跳过。
+4. 开关只影响观察内容。开启捕获后仍由 Retrofit 官方 Gson converter 读取原响应，保留 Gson 严格性、尾随内容检查以及字符集和 BOM 解码；探测或转换失败时也会关闭响应体。
+
+### 安全数值边界
+
+`PrimitiveParsingPolicy.Safe` 的整数、`BigDecimal`、`BigInteger` 和数字布尔转换，以及默认 `GsonSafeAutoNumberStrategy`，沿用 Gson 2.13.2 的资源限制：数字文本最多 10,000 个字符，`BigDecimal.scale()` 的绝对值必须小于 10,000。该限制在整数展开前检查，防止短小的异常指数造成大量内存分配。可隔离的字段失败仍保留默认值并记录事件；动态 `Any/Object` 无法隔离时会外抛。
+
+Safe 数字字段的空白字符串保留原有兜底规则；数字 Map key 的空白字符串会跳过当前 entry，并记录 `MAP_ITEM`，避免制造 `0` 或 `null` key。默认 `DelegateToGson` 基础类型策略不变。
 
 `instanceCreators`、`reflectionAccessFilters` 和 `skippedPlatformTypePrefixes` 会在创建 `SafeParserConfig` 时保存快照。
 
@@ -91,7 +150,9 @@ val config = SafeParserConfig(
 | --- | --- |
 | 先稳定接入，不改变现有 Gson 习惯 | 保持默认配置。 |
 | 兼容已有 Unsafe 构造依赖 | 使用 `GsonCompatible + useJdkUnsafe = true`，并补真实 JSON 回归。 |
-| 尽早暴露缺字段、`null`、错形或未知枚举值 | 使用 `Strict + useJdkUnsafe = false`。 |
+| 要求无默认值的非空 Kotlin 主构造参数必须有效 | 使用 `Strict + useJdkUnsafe = false`。缺失、`null`、无法恢复的错形或未知枚举会使必填参数校验失败。 |
+
+`Strict` 不是所有字段的统一校验开关：可空参数、带默认值的参数仍按各自读取策略处理，金额范围、权限或字段间约束仍由业务验证。
 
 Unsafe 会绕过构造函数和 `init` 代码。
 
@@ -213,6 +274,8 @@ val config = SafeParserConfig(
 
 回调自身抛出的普通异常不会中断解析。GsonSafeParser 会隔离观察者失败，避免日志系统问题影响接口解析。
 
+回调里再次解析 JSON 或同步调用另一个 Retrofit 接口时，内层解析不会继承外层的原文、Map 路径或事件收集器；外层 `parseSafe.events` 只记录外层解析。内层需要原文或独立事件快照时，使用自己的 Parser 配置及 `parseSafe`。
+
 `Error`、`ThreadDeath`、`LinkageError`、`CancellationException` 这类不可安全隔离问题仍然外抛。
 
 事件回调会在实际解析调用线程同步触发。如果多个线程共享同一个 Parser 或 Gson，回调里写入的外部集合、日志缓冲或指标容器需要由调用方保证线程安全。
@@ -308,6 +371,7 @@ data class FlexibleResponse(
 | 类型 | 默认行为 |
 | --- | --- |
 | 对象、集合、Map 字段整体形状不一致 | 兜底当前字段，外层对象继续解析；`NullOnly` 下优先返回 `null` 或保留构造默认值。 |
+| 顶层对象错形 | 通常返回 `null`；不可恢复的 Gson 异常继续外抛。 |
 | Kotlin 非空必填构造参数缺失 | 默认保持 Gson 兼容；引用字段为 `null`，primitive 保持 JVM 默认值。 |
 | 基础类型形状不一致 | 默认交回 Gson 原生 Adapter；只有 `PrimitiveParsingPolicy.Safe` 才使用安全基础值。 |
 | 调用方自定义 Adapter 命中 | 优先保留原生 Gson Adapter；自定义 Adapter 自己抛出的异常外抛，不伪装成字段兜底，也不会被字段级形态转换覆盖。 |

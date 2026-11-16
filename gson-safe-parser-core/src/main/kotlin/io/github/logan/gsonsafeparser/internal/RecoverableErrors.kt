@@ -2,7 +2,9 @@ package io.github.logan.gsonsafeparser.internal
 
 import com.google.gson.JsonParseException
 import com.google.gson.JsonSyntaxException
+import com.google.gson.stream.MalformedJsonException
 import io.github.logan.gsonsafeparser.GsonSafeParserLowLevelApi
+import java.io.EOFException
 import java.io.IOException
 import java.io.InterruptedIOException
 import java.lang.reflect.InvocationTargetException
@@ -14,12 +16,17 @@ import java.util.concurrent.CancellationException
  *
  * Kotlin 标准库的 `runCatching` 会捕获所有 `Throwable`。解析库不能吞掉 VM、类加载、
  * 线程终止、断言失败、取消信号和明确的 I/O 中断，否则会把不可恢复问题伪装成字段错形。
+ *
+ * @param allowMalformedJson 仅供诊断结果封装及观察回调使用；解析恢复链必须拒绝损坏文档。
  */
-internal inline fun <T> runRecovering(block: () -> T): Result<T> {
+internal inline fun <T> runRecovering(
+    allowMalformedJson: Boolean = false,
+    block: () -> T
+): Result<T> {
     return try {
         Result.success(block())
     } catch (error: Throwable) {
-        error.throwIfFatal()
+        error.throwIfFatal(allowMalformedJson)
         Result.failure(error)
     }
 }
@@ -41,15 +48,16 @@ internal fun Throwable.asCallerAdapterReadException(): CallerAdapterReadExceptio
  * 反射调用会把构造器或方法里的异常包进 `InvocationTargetException`，所以这里会检查
  * target exception 和 cause 链，避免不可恢复异常被包装后误判为普通反射失败。
  */
-internal fun Throwable.throwIfFatal() {
-    unrecoverableCauseOrNull()?.let { unrecoverable ->
+internal fun Throwable.throwIfFatal(allowMalformedJson: Boolean = false) {
+    unrecoverableCauseOrNull(allowMalformedJson)?.let { unrecoverable ->
         throw unrecoverable
     }
 }
 
-private fun Throwable.unrecoverableCauseOrNull(): Throwable? {
+private fun Throwable.unrecoverableCauseOrNull(allowMalformedJson: Boolean): Throwable? {
     val visited = Collections.newSetFromMap(java.util.IdentityHashMap<Throwable, Boolean>())
     val pending = ArrayDeque<Throwable>()
+    var malformedDocument = false
     pending += this
 
     while (pending.isNotEmpty()) {
@@ -60,13 +68,16 @@ private fun Throwable.unrecoverableCauseOrNull(): Throwable? {
             return current
         }
         if (current is Error || current is CancellationException) return current
+        // 损坏或截断的文档没有可继续读取的可靠边界，重试 skipValue 可能一直停在同一位置。
+        // 保留已存在的 Gson 包装异常，避免公开入口的异常类型随 catch 层级改变。
+        if (current is MalformedJsonException || current is EOFException) malformedDocument = true
         if (current is IOException && current.isUnrecoverableTransportIo()) return current
         if (current is InvocationTargetException) {
             current.targetException?.let { pending += it }
         }
         current.cause?.let { pending += it }
     }
-    return null
+    return if (malformedDocument && !allowMalformedJson) this else null
 }
 
 @OptIn(GsonSafeParserLowLevelApi::class)

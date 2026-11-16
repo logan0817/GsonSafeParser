@@ -498,6 +498,30 @@ class SafeParserReleaseRiskTest {
         assertNull(events.single().rawJson)
     }
 
+    @OptIn(GsonSafeParserLowLevelApi::class)
+    @Test
+    fun `converter raw context restores outer snapshot after nested failure`() {
+        val events = mutableListOf<TypeMismatchEvent>()
+        val gson = GsonSafeParser.create(SafeParserConfig(onTypeMismatch = events::add))
+        val config = SafeParserConfig(captureRawJsonInCallbacks = true, maxRawJsonCaptureBytes = 4)
+        val json = """{"child":[]}"""
+
+        GsonSafeParser.withRawJsonContext("中文😀", config) {
+            assertEquals(RawJsonResponse(), gson.fromJson(json, RawJsonResponse::class.java))
+            assertThrows(IllegalStateException::class.java) {
+                GsonSafeParser.withRawJsonContext("inner", config) {
+                    assertEquals(RawJsonResponse(), gson.fromJson(json, RawJsonResponse::class.java))
+                    throw IllegalStateException("nested converter failure")
+                }
+            }
+            assertEquals(RawJsonResponse(), gson.fromJson(json, RawJsonResponse::class.java))
+        }
+        assertEquals(RawJsonResponse(), gson.fromJson(json, RawJsonResponse::class.java))
+
+        assertEquals(listOf("中", "inne", "中", null), events.map { it.rawJson })
+        assertEquals(listOf(true, true, true, false), events.map { it.rawJsonTruncated })
+    }
+
     @Test
     fun `plain external gson is not upgraded by wrapper config shape coercion`() {
         val parser = GsonSafeParser.parserWithExternalGson(

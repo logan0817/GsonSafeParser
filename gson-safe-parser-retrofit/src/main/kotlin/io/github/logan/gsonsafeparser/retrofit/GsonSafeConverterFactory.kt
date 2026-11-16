@@ -15,6 +15,7 @@ import io.github.logan.gsonsafeparser.enableSafeParser
 import io.github.logan.gsonsafeparser.internal.TransportIoContext
 import okhttp3.RequestBody
 import okhttp3.ResponseBody
+import okhttp3.ResponseBody.Companion.toResponseBody
 import okio.Buffer
 import okio.BufferedSource
 import okio.ForwardingSource
@@ -117,6 +118,7 @@ private class GsonSafeRetrofitConverterFactory(
 ) : Converter.Factory() {
     // delegate 是 Retrofit 官方 Gson converter。除空响应和 rawJson 观测外，其他工作都交给它。
     private val delegate = GsonConverterFactory.create(gson)
+    private val uncapturedRawJsonConfig = config.copy(captureRawJsonInCallbacks = false)
 
     /**
      * 创建响应体 converter。
@@ -134,8 +136,10 @@ private class GsonSafeRetrofitConverterFactory(
     ): Converter<ResponseBody, *>? {
         unitOrVoidResponseBodyConverter(type)?.let { converter ->
             return Converter<ResponseBody, Any?> { originalBody ->
-                TransportIoContext.withTransportIoMarkers {
-                    converter.convert(originalBody.markTransportIoFailures())
+                originalBody.use {
+                    withResponseContext {
+                        converter.convert(originalBody.markTransportIoFailures())
+                    }
                 }
             }
         }
@@ -143,39 +147,56 @@ private class GsonSafeRetrofitConverterFactory(
         val converter = delegate.responseBodyConverter(type, annotations, retrofit)
             ?: return null
         return Converter<ResponseBody, Any?> { originalBody ->
-            TransportIoContext.withTransportIoMarkers {
-                val body = originalBody.markTransportIoFailures()
-                if (body.isEmpty()) {
-                    emptyResponseValue(type, body, converter)
-                } else if (config.captureRawJsonInCallbacks) {
-                    if (body.canCaptureRawJson()) {
-                        // Retrofit 的 ResponseBody 只能读取一次，所以需要先读成字符串，再交给 GsonSafeParser 带上下文解析。
-                        val rawJson = body.string()
-                        GsonSafeParser.fromJson<Any?>(gson, rawJson, type, config)
-                    } else {
-                        // 响应体太大或长度未知时不强行读入内存，只发观测事件，然后回到原 converter。
-                        val contentLength = body.contentLength()
-                        config.dispatchEvent(
-                            SafeParserEvent.RawJsonCaptureSkipped(
-                                RawJsonCaptureSkippedEvent(
-                                    typeName = type.toSafeTypeName(),
-                                    contentLength = contentLength,
-                                    maxBytes = config.maxRawJsonCaptureBytes,
-                                    reason = rawJsonCaptureSkippedReason(contentLength).message
+            originalBody.use {
+                withResponseContext {
+                    val body = originalBody.markTransportIoFailures()
+                    if (body.isEmpty()) {
+                        emptyResponseValue(type, body, converter)
+                    } else if (config.captureRawJsonInCallbacks) {
+                        if (body.canCaptureRawJson()) {
+                            // 只通过 peek 读取观测快照，实际解析仍走同一个 converter，保留严格度、编码和完整消费校验。
+                            val rawJson = body.source().peek().use { peek ->
+                                peek.readByteString().toResponseBody(body.contentType()).string()
+                            }
+                            GsonSafeParser.withRawJsonContext(rawJson, config) {
+                                converter.convert(body)
+                            }
+                        } else {
+                            // 响应体太大时不强行读入内存，只发观测事件，然后回到原 converter。
+                            val contentLength = body.contentLength()
+                            config.dispatchEvent(
+                                SafeParserEvent.RawJsonCaptureSkipped(
+                                    RawJsonCaptureSkippedEvent(
+                                        typeName = type.toSafeTypeName(),
+                                        contentLength = contentLength,
+                                        maxBytes = config.maxRawJsonCaptureBytes,
+                                        reason = rawJsonCaptureSkippedReason(contentLength).message
+                                    )
                                 )
                             )
-                        )
+                            converter.convert(body)
+                        }
+                    } else {
                         converter.convert(body)
                     }
-                } else {
-                    converter.convert(body)
                 }
             }
         }
     }
 
+    @OptIn(GsonSafeParserLowLevelApi::class)
+    private fun <T> withResponseContext(block: () -> T): T {
+        return TransportIoContext.withTransportIoMarkers {
+            // 每个响应独立绑定上下文，关闭捕获或超限时也不能继承外层解析的原文。
+            GsonSafeParser.withRawJsonContext("", uncapturedRawJsonConfig, block)
+        }
+    }
+
     /**
      * Unit 和 Void 的响应体 converter。
+     *
+     * 这里只服务于直接向本工厂请求 converter 的调用；正常 Retrofit 服务会优先使用内置的
+     * Unit/Void converter，因此不会进入此分支或派发这里的空响应事件。
      *
      * Gson 本身不会给 `void` 创建 Adapter，如果这里先向 GsonConverterFactory 要 delegate，
      * 空响应还没来得及进入兜底逻辑就会抛异常。Unit/Void 本身不需要 JSON 字段解析，
@@ -258,7 +279,6 @@ private class GsonSafeRetrofitConverterFactory(
         )
         return when (config.emptyResponsePolicy) {
             EmptyResponsePolicy.DefaultValue -> {
-                body.close()
                 when (type) {
                     Unit::class.java -> Unit
                     Void.TYPE, Void::class.java -> null
@@ -267,17 +287,14 @@ private class GsonSafeRetrofitConverterFactory(
                 }
             }
             EmptyResponsePolicy.DefaultValueForUnitOrVoidOnly -> {
-                body.close()
                 emptyValueForUnitOrVoid(type)
             }
             EmptyResponsePolicy.Null -> {
-                body.close()
                 null
             }
             EmptyResponsePolicy.DelegateToGson -> {
                 // Unit/Void 没有 Gson delegate。这里返回 Retrofit 语义下的空值，避免为了“委托”制造新崩溃。
                 converter?.convert(body) ?: run {
-                    body.close()
                     emptyValueForUnitOrVoid(type)
                 }
             }
@@ -300,8 +317,7 @@ private class GsonSafeRetrofitConverterFactory(
      * @return 没有任何字节可读时返回 true。
      */
     private fun ResponseBody.isEmpty(): Boolean {
-        // request(1) 只探测是否至少有一个字节，不会把完整 body 读进内存。
-        if (contentLength() == 0L) return true
+        // 拦截器可能重写 body 却保留旧长度；只探测实际字节，不凭声明长度丢弃数据。
         return runRecovering { !source().request(1) }.getOrDefault(false)
     }
 

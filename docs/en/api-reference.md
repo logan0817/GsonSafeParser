@@ -4,6 +4,18 @@
 
 This page helps adopters choose the right GsonSafeParser entry point and understand what falls back, what delegates to Gson, and what is rethrown.
 
+For your first integration, start with [Getting Started](getting-started.md): it includes imports, models, calls, and expected results. Use this page to look up methods as needed.
+
+| Your task | Start with |
+| --- | --- |
+| Replace an existing `Gson()` | `GsonSafeParser.create()`, then keep using `gson.fromJson(...)` |
+| Read the model and recovery records | `GsonSafeParser.parseSafe<T>(json)`, then inspect `value` and `events` |
+| Integrate Retrofit | `GsonSafeConverterFactory.create()`, replacing the regular Gson converter |
+
+Short fragments below demonstrate APIs. Put call statements inside a function; `json` and `ApiResponse` refer to section 2. Import Kotlin extensions explicitly: `parseSafe`, `fromJsonSafe`, `enableSafeParser`, and `contractReport` come from `io.github.logan.gsonsafeparser`.
+
+Low-level APIs such as `withRawJsonContext` / `dispatchEvent` serve framework bridges and are unnecessary for ordinary integrations. See [Unreleased](../../CHANGELOG.md#unreleased) for pending APIs and fixes.
+
 ## 1. Entry Points
 
 Choose by what you already own: from scratch, use `GsonSafeParser.create(config)`; with an existing `GsonBuilder`, use `GsonBuilder.enableSafeParser(config)` or `GsonSafeParser.parser(builder, config)`; with an already-created `Gson`, first confirm Safe Adapter registration and then use `parserWithExternalGson(gson, config)`; for Retrofit, use `GsonSafeConverterFactory.create(...)`.
@@ -164,6 +176,42 @@ val retrofit = Retrofit.Builder()
 | `parser.fromJsonSafe<T>(json)` | `T?` | Reusable Parser, value only |
 | `parser.parseSafe<T>(json)` | `SafeParseResult<T>` | Reusable Parser, value plus event snapshot |
 
+### 4.6 Java Usage With Explicit Types
+
+This is a complete `JavaExample.java` using the same dependency as Kotlin. Calling `main` should print `200` and `1`. Android does not run it automatically; call it from an existing unit test.
+
+```java
+import io.github.logan.gsonsafeparser.GsonSafeParser;
+import io.github.logan.gsonsafeparser.SafeParseResult;
+import io.github.logan.gsonsafeparser.SafeParserConfig;
+
+public class JavaExample {
+    public static class User {
+        public long id = 0;
+    }
+
+    public static class ApiResponse {
+        public int code = 0;
+        public User data = new User();
+    }
+
+    public static void main(String[] args) {
+        GsonSafeParser.Parser parser = GsonSafeParser.INSTANCE.parser(new SafeParserConfig());
+        SafeParseResult<ApiResponse> result = parser.parseSafe(
+            "{\"code\":200,\"data\":[]}", ApiResponse.class
+        );
+        ApiResponse response = result.getValue();
+        if (response == null || response.code != 200 || response.data == null) {
+            throw new AssertionError("Unexpected parse result");
+        }
+        System.out.println(response.code);
+        System.out.println(result.getEvents().size());
+    }
+}
+```
+
+For Java generics such as `List<User>`, pass `new com.google.gson.reflect.TypeToken<java.util.List<User>>() {}.getType()` to `parser.parseSafe(json, type)`, rather than passing only `List.class`.
+
 ## 5. Common Configuration
 
 | Config | Default | Purpose |
@@ -188,6 +236,42 @@ val retrofit = Retrofit.Builder()
 | Contract report | `result.contractReport()` | Structured report for client, backend, or CI review |
 | Environment diagnostics | `GsonSafeParser.diagnostics()` | Checks GsonBuilder internals, kotlin-reflect, and config risks |
 | Integration self-check | `GsonSafeParser.integrationCheck()` | Verifies Safe Adapter, event, and report paths in CI |
+| Converter raw JSON context | `GsonSafeParser.withRawJsonContext(...)` | Low-level bridge for Retrofit-like converters to attach bounded raw JSON observation without changing native parsing strictness |
+
+`withRawJsonContext(json, config, block)` requires `@OptIn(GsonSafeParserLowLevelApi::class)`. It binds observation data only while `block` runs on the current thread, respects the capture switch and UTF-8 byte limit, and restores the previous context after nesting or failure. It does not parse JSON, register adapters, or swallow exceptions; third-party converters still own reading and closing the original response.
+
+<details>
+<summary>Expand: Check Your Own Models</summary>
+
+By default, `integrationCheck()` only checks built-in examples. This complete example adds a model probe and prints `Model probe passed` on success. Replace the model, JSON, and expected fields with key responses from your app:
+
+```kotlin
+import io.github.logan.gsonsafeparser.GsonSafeModelProbe
+import io.github.logan.gsonsafeparser.GsonSafeParser
+import io.github.logan.gsonsafeparser.SafeParserConfig
+import io.github.logan.gsonsafeparser.integrationCheck
+
+data class ReleaseResponse(val code: Int = 0)
+
+fun main() {
+    val probe = GsonSafeModelProbe(
+        name = "releaseResponse",
+        json = """{"code":200}""",
+        type = ReleaseResponse::class.java,
+        expectedFields = mapOf("code" to 200)
+    )
+    val result = GsonSafeParser.integrationCheck(
+        config = SafeParserConfig.production(),
+        modelProbes = listOf(probe)
+    )
+    check(result.hasErrors.not()) { result.checks.joinToString("\n") }
+    println("Model probe passed")
+}
+```
+
+To verify R8, keep the real models as documented and call this check from a debug entry point in the actual release APK. Running it only in JVM tests does not verify the minified artifact.
+
+</details>
 
 ## 7. Recommended Adoption Flow
 

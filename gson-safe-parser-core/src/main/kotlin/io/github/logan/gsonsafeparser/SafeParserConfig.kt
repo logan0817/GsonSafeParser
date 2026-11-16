@@ -6,6 +6,9 @@ import com.google.gson.ToNumberStrategy
 import com.google.gson.stream.JsonToken
 import com.google.gson.stream.JsonReader
 import io.github.logan.gsonsafeparser.internal.SafeParseEventContext
+import io.github.logan.gsonsafeparser.internal.GsonSafeNumberLimits
+import io.github.logan.gsonsafeparser.internal.MapItemPathContext
+import io.github.logan.gsonsafeparser.internal.RawJsonContext
 import io.github.logan.gsonsafeparser.internal.runRecovering
 import java.lang.reflect.Type
 import java.math.BigDecimal
@@ -357,7 +360,7 @@ data class SafeWritePolicy(
 /**
  * 观察策略。
  *
- * 所有回调都只做通知。即使回调自己抛异常，也会被隔离到 `onObserverFailure`，不会打断解析。
+ * 所有回调都只做通知。普通回调异常会交给 `onObserverFailure`，取消和致命异常仍会中断解析。
  *
  * @property captureRawJsonInCallbacks 是否在错配事件里附带原始 JSON。
  * @property maxRawJsonCaptureBytes rawJson 最大捕获长度。普通 Gson 按 UTF-8 字节安全截断；
@@ -796,7 +799,7 @@ private fun SafeParserConfig.dispatchEvent(
     event: SafeParserEvent,
     collectForParseSafe: Boolean
 ) {
-    val safeEvent = event.withSafeReasons()
+    val safeEvent = MapItemPathContext.redact(event, mapItemKeyPolicy).withSafeReasons()
     if (collectForParseSafe) {
         // 只收集解析链路产生的真实事件；外部手动注入事件不进入 parseSafe 快照。
         SafeParseEventContext.emit(safeEvent)
@@ -832,7 +835,7 @@ private fun SafeParserConfig.notifyObserver(
     callback: () -> Unit
 ) {
     // callbackName 用来告诉用户到底是哪一个回调失败，不让他们在日志里猜。
-    runRecovering(callback).onFailure { error ->
+    runRecovering(allowMalformedJson = true) { withoutParserObservationContext(callback) }.onFailure { error ->
         notifyObserverFailure(
             ObserverFailureEvent(
                 callbackName = callbackName,
@@ -848,12 +851,21 @@ private fun SafeParserConfig.notifyObserver(
 /**
  * 通知观察者回调自身失败。
  *
- * @param event 观察者失败详情。这里再次出现异常时会被吞掉，避免回调失败递归放大。
+ * @param event 观察者失败详情。这里再次出现普通异常时会被隔离，取消和致命异常继续外抛。
  */
 private fun SafeParserConfig.notifyObserverFailure(event: ObserverFailureEvent) {
-    // 观察者失败报告本身也可能接日志系统；这里吞掉异常，避免形成递归失败。
-    runRecovering {
-        onObserverFailure(event)
+    // 观察者失败报告本身也可能接日志系统；隔离普通异常，避免形成递归失败。
+    runRecovering(allowMalformedJson = true) {
+        withoutParserObservationContext { onObserverFailure(event) }
+    }
+}
+
+/** 用户回调可独立解析其他内容；暂停外层上下文，但回调收到的原事件保持完整。 */
+private fun <T> withoutParserObservationContext(block: () -> T): T {
+    return MapItemPathContext.withoutEntries {
+        RawJsonContext.withRawJson(null) {
+            SafeParseEventContext.withoutCollector(block)
+        }
     }
 }
 
@@ -932,7 +944,7 @@ object GsonSafeAutoNumberStrategy : ToNumberStrategy {
      */
     override fun readNumber(reader: JsonReader): Number {
         // value 先用 BigDecimal 保存，避免一开始就转 Double 丢精度。
-        val value = BigDecimal(reader.nextString())
+        val value = GsonSafeNumberLimits.parseBigDecimal(reader.nextString())
         if (value.scale() > 0) {
             val doubleValue = value.toDouble()
             return if (doubleValue.isFinite()) doubleValue else value

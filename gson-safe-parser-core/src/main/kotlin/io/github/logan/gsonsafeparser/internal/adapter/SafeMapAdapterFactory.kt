@@ -18,9 +18,11 @@ import io.github.logan.gsonsafeparser.ParseExceptionKind
 import io.github.logan.gsonsafeparser.SafeParserConfig
 import io.github.logan.gsonsafeparser.ShapeCoercionAction
 import io.github.logan.gsonsafeparser.internal.TokenRules
+import io.github.logan.gsonsafeparser.internal.MapItemPathContext
 import io.github.logan.gsonsafeparser.internal.asCallerAdapterReadException
 import io.github.logan.gsonsafeparser.internal.objectcreation.SafeObjectConstructor
 import io.github.logan.gsonsafeparser.internal.runRecovering
+import io.github.logan.gsonsafeparser.internal.toSafeTypeName
 import java.lang.reflect.Type
 import java.util.Collection
 
@@ -133,79 +135,92 @@ internal object SafeMapAdapterFactory {
                     reader.beginObject()
                     while (reader.hasNext()) {
                         val keyName = reader.nextName()
-                        val key = parseKey(keyName, keyValueTypes.first, keyAdapter, keyHandlesOwnShape)
-                        if (key is ParsedMapKey.Failure) {
-                            // key 解析失败时跳过整个 entry，不能把错误的字符串 key 塞进强类型 Map。
-                            notify(
-                                config = config,
-                                type = keyTypeToken,
-                                reader = reader,
-                                token = reader.peekSafe(),
-                                reason = key.reason,
-                                kind = ParseExceptionKind.MAP_ITEM,
-                                mapItemKey = keyName
-                            )
-                            reader.skipValue()
-                            continue
-                        }
-                        val valueToken = reader.peek()
-                        val pathBeforeRead = reader.path
-                        if (
-                            !valueHandlesOwnShape &&
-                            !TokenRules.accepts(keyValueTypes.second, valueRawType, valueToken) &&
-                            !canCoerceMapValue(valueRawType, valueToken, config)
-                        ) {
-                            // value 错形只影响当前 entry，Map 里的其他 key 仍然可以继续解析。
-                            notify(
-                                config = config,
-                                type = valueTypeToken,
-                                reader = reader,
-                                token = valueToken,
-                                kind = ParseExceptionKind.MAP_ITEM,
-                                mapItemKey = keyName
-                            )
-                            reader.skipValue()
-                            continue
-                        }
-                        runRecovering {
-                            when (
-                                val value = readMapValue(
+                        MapItemPathContext.withEntry(reader, keyName) {
+                            val key = parseKey(keyName, keyValueTypes.first, keyAdapter, keyHandlesOwnShape)
+                            if (key is ParsedMapKey.Failure) {
+                                // key 解析失败时跳过整个 entry，不能把错误的字符串 key 塞进强类型 Map。
+                                notify(
+                                    config = config,
+                                    type = keyTypeToken,
                                     reader = reader,
-                                    valueType = valueTypeToken,
-                                    valueAdapter = valueAdapter,
-                                    valueToken = valueToken,
-                                    valueRawType = valueRawType,
-                                    valueHandlesOwnShape = valueHandlesOwnShape,
-                                    pathBeforeRead = pathBeforeRead,
-                                    config = config
+                                    token = reader.peekSafe(),
+                                    reason = key.reason,
+                                    kind = ParseExceptionKind.MAP_ITEM,
+                                    mapItemKey = keyName
                                 )
-                            ) {
-                                is ParsedMapValue.Success -> putMapValue(
-                                    values = values,
-                                    key = (key as ParsedMapKey.Success).value,
-                                    value = value.value
-                                )
-                                ParsedMapValue.Skipped -> Unit
+                                reader.skipValue()
+                                return@withEntry
                             }
-                        }
-                            .onFailure {
-                                it.throwIfDuplicateMapKey()
-                                if (valueHandlesOwnShape) {
-                                    throw it.asCallerAdapterReadException()
-                                }
-                                // valueAdapter 可能已经消费了一半对象，先把 reader 修正到当前 entry 后面。
-                                reader.skipUnreadValueIfPossible(pathBeforeRead)
+                            val valueToken = reader.peek()
+                            val pathBeforeRead = reader.path
+                            if (
+                                !valueHandlesOwnShape &&
+                                !TokenRules.accepts(keyValueTypes.second, valueRawType, valueToken) &&
+                                !canCoerceMapValue(valueRawType, valueToken, config)
+                            ) {
+                                // value 错形只影响当前 entry，Map 里的其他 key 仍然可以继续解析。
                                 notify(
                                     config = config,
                                     type = valueTypeToken,
                                     reader = reader,
                                     token = valueToken,
-                                    reason = it.message ?: it.javaClass.name,
                                     kind = ParseExceptionKind.MAP_ITEM,
-                                    mapItemKey = keyName,
-                                    path = pathBeforeRead
+                                    mapItemKey = keyName
                                 )
+                                reader.skipValue()
+                                return@withEntry
                             }
+                            runRecovering {
+                                when (
+                                    val value = readMapValue(
+                                        reader = reader,
+                                        valueType = valueTypeToken,
+                                        valueAdapter = valueAdapter,
+                                        valueToken = valueToken,
+                                        valueRawType = valueRawType,
+                                        valueHandlesOwnShape = valueHandlesOwnShape,
+                                        pathBeforeRead = pathBeforeRead,
+                                        config = config
+                                    )
+                                ) {
+                                    is ParsedMapValue.Success -> putMapValue(
+                                        values = values,
+                                        key = (key as ParsedMapKey.Success).value,
+                                        value = value.value
+                                    ).onFailure { error ->
+                                        notify(
+                                            config = config,
+                                            type = valueTypeToken,
+                                            reader = reader,
+                                            token = valueToken,
+                                            reason = error.message ?: error.javaClass.name,
+                                            kind = ParseExceptionKind.MAP_ITEM,
+                                            mapItemKey = keyName,
+                                            path = pathBeforeRead
+                                        )
+                                    }
+                                    ParsedMapValue.Skipped -> Unit
+                                }
+                            }
+                                .onFailure {
+                                    it.throwIfDuplicateMapKey()
+                                    if (valueHandlesOwnShape) {
+                                        throw it.asCallerAdapterReadException()
+                                    }
+                                    // valueAdapter 可能已经消费了一半对象，先把 reader 修正到当前 entry 后面。
+                                    reader.skipUnreadValueIfPossible(pathBeforeRead)
+                                    notify(
+                                        config = config,
+                                        type = valueTypeToken,
+                                        reader = reader,
+                                        token = valueToken,
+                                        reason = it.message ?: it.javaClass.name,
+                                        kind = ParseExceptionKind.MAP_ITEM,
+                                        mapItemKey = keyName,
+                                        path = pathBeforeRead
+                                    )
+                                }
+                        }
                     }
                     reader.endObject()
                 } else {
@@ -230,7 +245,34 @@ internal object SafeMapAdapterFactory {
                         // pathBeforeRead 记录读取 value 之前的位置，失败时用它恢复 reader。
                         var pathBeforeRead = reader.path
                         var failureToken = reader.peekSafe()
-                        val keyResult = runRecovering { keyAdapter.read(reader) }
+                        if (
+                            !keyHandlesOwnShape &&
+                            !TokenRules.accepts(keyValueTypes.first, keyRawType, failureToken)
+                        ) {
+                            // 错形键不能经 Safe Adapter 兜底成 null，再作为真实 key 写入 Map。
+                            notify(
+                                config = config,
+                                type = keyTypeToken,
+                                reader = reader,
+                                token = failureToken,
+                                kind = ParseExceptionKind.MAP_ITEM,
+                                path = pathBeforeRead
+                            )
+                            while (reader.hasNext()) {
+                                reader.skipValue()
+                            }
+                            reader.endArray()
+                            continue
+                        }
+                        val keyResult = runRecovering {
+                            if (TokenRules.isNumber(keyTypeToken.rawType) && !keyHandlesOwnShape) {
+                                SafePrimitiveAdapters.withoutRootFallback {
+                                    keyAdapter.read(reader)
+                                }
+                            } else {
+                                keyAdapter.read(reader)
+                            }
+                        }
                         if (keyResult.isFailure) {
                             val error = keyResult.exceptionOrNull()
                                 ?: IllegalStateException("Map entry key parsing failed")
@@ -300,7 +342,18 @@ internal object SafeMapAdapterFactory {
                                         values = values,
                                         key = key,
                                         value = value.value
-                                    )
+                                    ).onFailure { error ->
+                                        notify(
+                                            config = config,
+                                            type = type,
+                                            reader = reader,
+                                            token = failureToken,
+                                            reason = error.message ?: error.javaClass.name,
+                                            kind = ParseExceptionKind.MAP_ITEM,
+                                            mapItemKey = key?.toString() ?: "null",
+                                            path = pathBeforeRead
+                                        )
+                                    }
                                     ParsedMapValue.Skipped -> Unit
                                 }
                             }
@@ -380,7 +433,7 @@ internal object SafeMapAdapterFactory {
             if (keyHandlesOwnShape) {
                 throw it.asCallerAdapterReadException()
             }
-            ParsedMapKey.Failure(it.message ?: it.javaClass.name)
+            ParsedMapKey.Failure("Map key cannot be parsed as ${keyType.toSafeTypeName()}")
         }
     }
 
@@ -521,10 +574,13 @@ internal object SafeMapAdapterFactory {
         return ParsedMapValue.Success(value)
     }
 
-    private fun putMapValue(values: MutableMap<Any?, Any?>, key: Any?, value: Any?) {
-        val replaced = values.put(key, value)
-        if (replaced != null) {
-            throw JsonSyntaxException("duplicate key: $key")
+    private fun putMapValue(values: MutableMap<Any?, Any?>, key: Any?, value: Any?): Result<Unit> {
+        // 容器拒绝与 value Adapter 读取失败分别处理；写入时已消费完 value，不能再跳 reader。
+        return runRecovering {
+            val replaced = values.put(key, value)
+            if (replaced != null) {
+                throw JsonSyntaxException("duplicate key: $key")
+            }
         }
     }
 

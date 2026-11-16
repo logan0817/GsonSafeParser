@@ -1,10 +1,18 @@
 import groovy.json.JsonSlurper
 import org.gradle.api.Project
 import org.gradle.api.artifacts.component.ProjectComponentIdentifier
+import org.gradle.api.publish.PublishingExtension
+import org.gradle.api.publish.maven.MavenPublication
 import java.nio.charset.StandardCharsets
 import java.util.zip.ZipFile
 import javax.xml.parsers.DocumentBuilderFactory
 import org.w3c.dom.Element
+
+// 复用 Gradle 对 maven.repo.local / settings.xml 的解析，只取路径，不增加依赖仓库。
+val mavenLocalDirectory = buildscript.repositories.mavenLocal().let { repository ->
+    buildscript.repositories.remove(repository)
+    file(repository.url)
+}
 
 tasks.register("writeOsvReleaseRuntimeLockfile") {
     group = "verification"
@@ -12,6 +20,8 @@ tasks.register("writeOsvReleaseRuntimeLockfile") {
 
     val outputFile = layout.buildDirectory.file("osv/release-runtime/gradle.lockfile")
     outputs.file(outputFile)
+    // 依赖图在执行期解析；每次重新生成，避免仅按输出文件判定最新而扫描旧版本。
+    outputs.upToDateWhen { false }
 
     doLast {
         val releaseRuntimeConfigurationName = "releaseRuntimeClasspath"
@@ -57,22 +67,37 @@ tasks.register("verifyMavenLocalPublicationArtifacts") {
     )
 
     doLast {
-        val versionValue = project(":gson-safe-parser-core").version.toString()
-        val artifactIds = listOf("gson-safe-parser-core", "gson-safe-parser-retrofit")
-        artifactIds.forEach { artifactId ->
-            val base = mavenLocalArtifactBase(artifactId, versionValue)
+        val corePublication = project(":gson-safe-parser-core").mavenPublication()
+        val retrofitPublication = project(":gson-safe-parser-retrofit").mavenPublication()
+        listOf(corePublication, retrofitPublication).forEach { publication ->
+            val base = mavenLocalArtifactBase(mavenLocalDirectory, publication)
             val aar = base.resolveSibling("${base.name}.aar")
             val jar = base.resolveSibling("${base.name}.jar")
             val sourcesJar = base.resolveSibling("${base.name}-sources.jar")
             val javadocJar = base.resolveSibling("${base.name}-javadoc.jar")
             val pom = base.resolveSibling("${base.name}.pom")
+            val module = base.resolveSibling("${base.name}.module")
 
             requireFile(aar)
             require(!jar.exists()) { "Unexpected plain jar artifact exists: ${jar.absolutePath}" }
             requireFile(sourcesJar)
             requireFile(javadocJar)
             requireFile(pom)
+            val pomRoot = parsePom(pom).documentElement
+            require(pomRoot.childText("groupId") == publication.groupId &&
+                pomRoot.childText("artifactId") == publication.artifactId &&
+                pomRoot.childText("version") == publication.version) {
+                "POM coordinates do not match the current publication: ${pom.absolutePath}"
+            }
             require(pomPackaging(pom) == "aar") { "POM packaging must be aar: ${pom.absolutePath}" }
+            requireFile(module)
+            val component = (JsonSlurper().parse(module) as Map<*, *>)["component"] as? Map<*, *>
+            require(component != null &&
+                component["group"] == publication.groupId &&
+                component["module"] == publication.artifactId &&
+                component["version"] == publication.version) {
+                "Module metadata coordinates do not match the current publication: ${module.absolutePath}"
+            }
 
             requireZipEntries(
                 aar,
@@ -101,13 +126,12 @@ tasks.register("verifyMavenLocalPublicationArtifacts") {
             requireZipEntries(javadocJar, listOf("index.html"))
         }
 
-        val retrofitPom = mavenLocalArtifactBase("gson-safe-parser-retrofit", versionValue)
-            .resolveSibling("gson-safe-parser-retrofit-$versionValue.pom")
-        val retrofitModule = mavenLocalArtifactBase("gson-safe-parser-retrofit", versionValue)
-            .resolveSibling("gson-safe-parser-retrofit-$versionValue.module")
-        requireFile(retrofitModule)
-        require(pomDependencyVersion(retrofitPom, "gson-safe-parser-core") == versionValue) {
-            "Retrofit POM must depend on gson-safe-parser-core $versionValue"
+        val retrofitBase = mavenLocalArtifactBase(mavenLocalDirectory, retrofitPublication)
+        val retrofitPom = retrofitBase.resolveSibling("${retrofitBase.name}.pom")
+        val retrofitModule = retrofitBase.resolveSibling("${retrofitBase.name}.module")
+        require(pomDependencyChildText(retrofitPom, corePublication.artifactId, "groupId") == corePublication.groupId &&
+            pomDependencyVersion(retrofitPom, corePublication.artifactId) == corePublication.version) {
+            "Retrofit POM must depend on ${corePublication.groupId}:${corePublication.artifactId}:${corePublication.version}"
         }
         require(pomDependencyVersion(retrofitPom, "okhttp") == "4.12.0") {
             "Retrofit POM must depend on okhttp 4.12.0"
@@ -159,8 +183,15 @@ tasks.register("verifyMavenLocalPublicationArtifacts") {
     }
 }
 
-fun Project.mavenLocalArtifactBase(artifactId: String, versionValue: String) =
-    file("${System.getProperty("user.home")}/.m2/repository/io/github/logan0817/$artifactId/$versionValue/$artifactId-$versionValue")
+fun Project.mavenPublication(): MavenPublication =
+    extensions.getByType(PublishingExtension::class.java).publications
+        .getByName("mavenJava") as MavenPublication
+
+fun mavenLocalArtifactBase(repository: java.io.File, publication: MavenPublication): java.io.File =
+    repository.resolve(
+        "${publication.groupId.replace('.', '/')}/${publication.artifactId}/${publication.version}/" +
+            "${publication.artifactId}-${publication.version}"
+    )
 
 fun requireFile(file: java.io.File) {
     require(file.isFile) { "Missing file: ${file.absolutePath}" }

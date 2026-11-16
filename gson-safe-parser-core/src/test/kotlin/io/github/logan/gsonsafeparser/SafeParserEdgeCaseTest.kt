@@ -215,7 +215,7 @@ class SafeParserEdgeCaseTest {
     }
 
     /**
-     * 测试方法说明：验证 SortedSet 元素不可比较时回到字段兜底，而不是让 TreeSet.add 抛出整次解析异常。
+     * 测试方法说明：验证 SortedSet 元素不可比较时只跳过当前元素，不让 TreeSet.add 中断解析。
      */
     @Test
     fun `sorted set with non comparable items falls back without crashing response`() {
@@ -228,9 +228,9 @@ class SafeParserEdgeCaseTest {
         )
 
         assertEquals(emptyList<NonComparableItem>(), result.values.toList())
-        val event = events.single()
-        assertEquals(ParseExceptionKind.OBJECT, event.kind)
-        assertEquals("$.values", event.path)
+        assertEquals(2, events.size)
+        assertTrue(events.all { it.kind == ParseExceptionKind.LIST_ITEM })
+        assertEquals(listOf("$.values[0]", "$.values[1]"), events.map { it.path })
     }
 
     /**
@@ -251,9 +251,9 @@ class SafeParserEdgeCaseTest {
         )
 
         assertEquals(emptyList<NonComparableItem>(), result?.toList())
-        val event = events.single()
-        assertEquals(ParseExceptionKind.OBJECT, event.kind)
-        assertEquals("$", event.path)
+        assertEquals(2, events.size)
+        assertTrue(events.all { it.kind == ParseExceptionKind.LIST_ITEM })
+        assertEquals(listOf("$[0]", "$[1]"), events.map { it.path })
     }
 
     /**

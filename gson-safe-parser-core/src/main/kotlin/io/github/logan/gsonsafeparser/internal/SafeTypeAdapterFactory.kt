@@ -60,7 +60,7 @@ internal class SafeTypeAdapterFactory(
         }
 
         // 集合、数组、Map、普通对象都可能在创建 Adapter 时遇到反射限制或字段冲突，所以统一走 createSafely。
-        if (rawType.isArray && !rawType.componentType.isPrimitive) {
+        if (rawType.isArray) {
             if (hasKnownNativeFactoryAdapter(type)) {
                 return null
             }
@@ -68,8 +68,7 @@ internal class SafeTypeAdapterFactory(
                 SafeArrayAdapterFactory.create(
                     gson = gson,
                     type = type,
-                    config = config,
-                    delegate = gson.getDelegateAdapter(this, type)
+                    config = config
                 )
             }
         }
@@ -126,7 +125,7 @@ internal class SafeTypeAdapterFactory(
         type: TypeToken<T>,
         block: () -> TypeAdapter<T>
     ): TypeAdapter<T>? {
-        return runRecovering(block).getOrElse { error ->
+        return runRecovering(block = block).getOrElse { error ->
             // 创建期失败默认只发事件并返回 null，让 Gson 继续用自己的 Adapter，避免本库成为新的崩溃来源。
             config.dispatchAdapterCreationFailure(
                 AdapterCreationFailureEvent(

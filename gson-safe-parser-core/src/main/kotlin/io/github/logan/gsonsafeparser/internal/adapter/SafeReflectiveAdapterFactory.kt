@@ -98,7 +98,11 @@ internal object SafeReflectiveAdapterFactory {
                     // 自引用字段直接跳过，避免序列化时无限递归。
                     if (fieldValue === value) return@forEach
                     out.name(binding.primaryName)
-                    binding.adapter.writeRuntime(gson, binding.fieldType, out, fieldValue)
+                    if (binding.hasFieldJsonAdapter) {
+                        binding.adapter.write(out, fieldValue)
+                    } else {
+                        binding.adapter.writeRuntime(gson, binding.fieldType, out, fieldValue)
+                    }
                 }
                 out.endObject()
             }
@@ -161,7 +165,7 @@ internal object SafeReflectiveAdapterFactory {
                     }
                     val pathBeforeRead = reader.path
                     val valueToken = reader.peek()
-                    if (valueToken == JsonToken.NULL) {
+                    if (valueToken == JsonToken.NULL && !binding.adapterHandlesOwnShape) {
                         reader.nextNull()
                         if (
                             config.nullValuePolicy == NullValuePolicy.WriteExplicitNulls &&
@@ -201,6 +205,12 @@ internal object SafeReflectiveAdapterFactory {
                             if (binding.requiresExplicitNestedConstructorValue) {
                                 assignedRequiredNestedConstructorFields += binding.field
                             }
+                        } else if (
+                            valueToken == JsonToken.NULL &&
+                            config.nullValuePolicy == NullValuePolicy.WriteExplicitNulls &&
+                            binding.acceptsNull
+                        ) {
+                            binding.field.set(instance, null)
                         }
                     }
                         .onFailure {
@@ -275,7 +285,7 @@ internal object SafeReflectiveAdapterFactory {
                 if (pathBeforeRead == "$") {
                     throw error
                 }
-                runRecovering { reader.skipValue() }
+                reader.skipUnreadValueIfPossible(pathBeforeRead)
                 null
             }
     }
@@ -336,7 +346,8 @@ internal object SafeReflectiveAdapterFactory {
                     // fieldType 是解析后的真实字段类型，比如 T 会被替换成当前泛型里的实际类型。
                     val fieldType = GsonTypes.resolve(currentType.type, current, field.genericType)
                     val fieldTypeToken = TypeToken.get(fieldType)
-                    val adapter = fieldAdapter(gson, field, fieldTypeToken, config)
+                    val fieldJsonAdapter = fieldJsonAdapter(gson, field, fieldTypeToken, config)
+                    val adapter = fieldJsonAdapter ?: gson.getAdapter(fieldTypeToken) as TypeAdapter<Any?>
                     val shapeCoercionPolicy = field.shapeCoercionPolicy(config, fieldType)
                     // 同一个字段可能把 @SerializedName 的主名也写进 alternate；这里先按字段自身去重，
                     // 避免误判为字段冲突。不同字段映射到同一个 JSON 名称仍会在下面 fail fast。
@@ -348,6 +359,7 @@ internal object SafeReflectiveAdapterFactory {
                         val binding = FieldBinding(
                             field = field,
                             adapter = adapter,
+                            hasFieldJsonAdapter = fieldJsonAdapter != null,
                             adapterHandlesOwnShape = adapter.handlesOwnInputShape() ||
                                 TypeToken.get(fieldType).rawType.delegatesPrimitiveInputShape(config),
                             fieldType = fieldType,
@@ -447,7 +459,7 @@ internal object SafeReflectiveAdapterFactory {
      */
     @Suppress("DEPRECATION")
     private fun includeField(gson: Gson, field: Field, serialize: Boolean): Boolean {
-        if (field.isSynthetic || Modifier.isStatic(field.modifiers) || Modifier.isTransient(field.modifiers)) {
+        if (field.isSynthetic || Modifier.isStatic(field.modifiers)) {
             return false
         }
         val excluder = runRecovering { gson.excluder() }.getOrDefault(Excluder.DEFAULT)
@@ -668,21 +680,21 @@ internal object SafeReflectiveAdapterFactory {
     }
 
     /**
-     * 获取字段自己的 Adapter。
+     * 获取字段级注解指定的 Adapter。
      *
      * @param gson 当前 Gson。
      * @param field 当前字段。
      * @param type 字段解析后的真实类型。
      * @param config SafeParser 配置。
-     * @return 字段读写 Adapter。
+     * @return 字段级注解创建的 Adapter；未指定或工厂未接管时返回 null。
      */
     @Suppress("UNCHECKED_CAST")
-    private fun fieldAdapter(
+    private fun fieldJsonAdapter(
         gson: Gson,
         field: Field,
         type: TypeToken<*>,
         config: SafeParserConfig
-    ): TypeAdapter<Any?> {
+    ): TypeAdapter<Any?>? {
         val annotation = field.getAnnotation(JsonAdapter::class.java)
         if (annotation != null) {
             // 字段级 @JsonAdapter 优先于普通反射 Adapter，用来尊重业务显式声明的字段绑定行为。
@@ -725,7 +737,7 @@ internal object SafeReflectiveAdapterFactory {
                 return if (annotation.nullSafe) adapter.nullSafe() else adapter
             }
         }
-        return gson.getAdapter(type) as TypeAdapter<Any?>
+        return null
     }
 
     private fun namesFor(gson: Gson, field: Field): List<String> {
@@ -741,6 +753,7 @@ internal object SafeReflectiveAdapterFactory {
     private data class FieldBinding(
         val field: Field,
         val adapter: TypeAdapter<Any?>,
+        val hasFieldJsonAdapter: Boolean,
         val adapterHandlesOwnShape: Boolean,
         val fieldType: java.lang.reflect.Type,
         val primaryName: String,

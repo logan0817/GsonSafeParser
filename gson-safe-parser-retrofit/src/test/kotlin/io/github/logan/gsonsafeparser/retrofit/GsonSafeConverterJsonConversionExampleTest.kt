@@ -334,7 +334,7 @@ class GsonSafeConverterJsonConversionExampleTest {
         }
 
         assertTrue(events.any { it is SafeParserEvent.TypeMismatch && it.detail.path == "$[1]" })
-        assertTrue(events.any { it is SafeParserEvent.TypeMismatch && it.detail.path == "$.bad" })
+        assertTrue(events.any { it is SafeParserEvent.TypeMismatch && it.detail.path == "$.[map-key]" })
         assertTrue(events.any {
             it is SafeParserEvent.ShapeCoercion &&
                 it.detail.path == "$.data" &&

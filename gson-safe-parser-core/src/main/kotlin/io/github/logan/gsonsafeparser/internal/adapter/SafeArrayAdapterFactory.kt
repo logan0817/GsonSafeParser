@@ -1,30 +1,29 @@
 package io.github.logan.gsonsafeparser.internal.adapter
 
-import com.google.gson.JsonIOException
-import com.google.gson.JsonParseException
 import com.google.gson.Gson
 import com.google.gson.TypeAdapter
+import com.google.gson.annotations.JsonAdapter
 import com.google.gson.reflect.TypeToken
 import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonToken
 import com.google.gson.stream.JsonWriter
 import io.github.logan.gsonsafeparser.FallbackPolicy
+import io.github.logan.gsonsafeparser.ParseExceptionKind
 import io.github.logan.gsonsafeparser.SafeParserConfig
 import io.github.logan.gsonsafeparser.ShapeCoercionAction
 import io.github.logan.gsonsafeparser.internal.FallbackValues
 import io.github.logan.gsonsafeparser.internal.TokenRules
 import io.github.logan.gsonsafeparser.internal.asCallerAdapterReadException
 import io.github.logan.gsonsafeparser.internal.runRecovering
-import io.github.logan.gsonsafeparser.internal.throwIfFatal
-import java.io.IOException
 import java.lang.reflect.GenericArrayType
 import java.lang.reflect.Array
 import java.lang.reflect.Type
 
 /**
- * 对象数组的安全 Adapter。
+ * 数组的安全 Adapter。
  *
- * 默认仍按 JSON array 读取。只有字段级 shape coercion 策略允许时，才把单个 JSON object 包装成长度为 1 的数组。
+ * 每个元素独立读取，错形或可恢复值错误只跳过当前元素。原始类型数组不接收 null。
+ * 只有字段级 shape coercion 策略允许时，才把单个 JSON object 包装成长度为 1 的对象数组。
  */
 internal object SafeArrayAdapterFactory {
     /**
@@ -34,27 +33,36 @@ internal object SafeArrayAdapterFactory {
     fun <T> create(
         gson: Gson,
         type: TypeToken<T>,
-        config: SafeParserConfig,
-        delegate: TypeAdapter<T>
+        config: SafeParserConfig
     ): TypeAdapter<T> {
         val rawType = type.rawType
         val componentType = arrayComponentType(type.type, rawType)
         val componentTypeToken = TypeToken.get(componentType)
         val componentRawType = componentTypeToken.rawType
         val componentAdapter = gson.getAdapter(componentTypeToken) as TypeAdapter<Any?>
-        val componentHandlesOwnShape = componentAdapter.handlesOwnInputShape() ||
+        val componentHandlesOwnShape = componentRawType.getAnnotation(JsonAdapter::class.java) != null ||
+            componentAdapter.handlesOwnInputShape() ||
             componentRawType.delegatesPrimitiveInputShape(config)
         val componentAcceptsObject = TokenRules.accepts(componentType, componentRawType, JsonToken.BEGIN_OBJECT)
 
         return object : TypeAdapter<T>(), SafeRuntimeTypeAdapter {
             override fun write(out: JsonWriter, value: T?) {
-                delegate.write(out, value)
+                if (value == null) {
+                    out.nullValue()
+                    return
+                }
+                out.beginArray()
+                for (index in 0 until Array.getLength(value)) {
+                    componentAdapter.writeRuntime(gson, componentType, out, Array.get(value, index))
+                }
+                out.endArray()
             }
 
             override fun read(reader: JsonReader): T? {
                 val token = reader.peek()
                 val pathBeforeRead = reader.path
                 if (
+                    !componentRawType.isPrimitive &&
                     token == JsonToken.BEGIN_OBJECT &&
                     ShapeCoercionReadContext.currentPolicy(config).supportsCollectionFromObject() &&
                     componentAcceptsObject
@@ -68,54 +76,65 @@ internal object SafeArrayAdapterFactory {
                         componentAdapter = componentAdapter
                     )
                 }
+                if (token == JsonToken.NULL) {
+                    reader.nextNull()
+                    return null
+                }
                 if (!TokenRules.accepts(type.type, rawType, token)) {
                     notify(config, type, reader, token, path = pathBeforeRead)
                     reader.skipValue()
                     return FallbackValues.value(type.type, rawType, config.fallbackPolicy)
                 }
-                return try {
-                    delegate.read(reader)
-                } catch (error: IllegalStateException) {
-                    error.throwIfFatal()
-                    if (componentHandlesOwnShape) throw error.asCallerAdapterReadException()
-                    recover(reader, type, rawType, error, token, pathBeforeRead)
-                } catch (error: NumberFormatException) {
-                    error.throwIfFatal()
-                    if (componentHandlesOwnShape) throw error.asCallerAdapterReadException()
-                    recover(reader, type, rawType, error, token, pathBeforeRead)
-                } catch (error: JsonParseException) {
-                    error.throwIfFatal()
-                    if (componentHandlesOwnShape) throw error.asCallerAdapterReadException()
-                    recover(reader, type, rawType, error, token, pathBeforeRead)
-                } catch (error: RuntimeException) {
-                    error.throwIfFatal()
-                    if (componentHandlesOwnShape) throw error.asCallerAdapterReadException()
-                    recover(reader, type, rawType, error, token, pathBeforeRead)
-                } catch (error: IOException) {
-                    error.throwIfFatal()
-                    if (componentHandlesOwnShape) throw error.asCallerAdapterReadException()
-                    throw JsonIOException(error)
+                val values = mutableListOf<Any?>()
+                reader.beginArray()
+                while (reader.hasNext()) {
+                    val itemToken = reader.peek()
+                    val itemPath = reader.path
+                    if (!componentHandlesOwnShape && !TokenRules.accepts(componentType, componentRawType, itemToken)) {
+                        notify(
+                            config = config,
+                            type = componentTypeToken,
+                            reader = reader,
+                            token = itemToken,
+                            kind = ParseExceptionKind.LIST_ITEM,
+                            path = itemPath
+                        )
+                        reader.skipValue()
+                        continue
+                    }
+                    runRecovering { componentAdapter.read(reader) }
+                        .onSuccess { value ->
+                            if (value != null || !componentRawType.isPrimitive) {
+                                values += value
+                            } else if (itemToken == JsonToken.NULL) {
+                                notify(
+                                    config = config,
+                                    type = componentTypeToken,
+                                    reader = reader,
+                                    token = itemToken,
+                                    kind = ParseExceptionKind.LIST_ITEM,
+                                    path = itemPath
+                                )
+                            }
+                        }
+                        .onFailure { error ->
+                            if (componentHandlesOwnShape) {
+                                throw error.asCallerAdapterReadException()
+                            }
+                            reader.skipUnreadValueIfPossible(itemPath)
+                            notify(
+                                config = config,
+                                type = componentTypeToken,
+                                reader = reader,
+                                token = itemToken,
+                                reason = error.message ?: error.javaClass.name,
+                                kind = ParseExceptionKind.LIST_ITEM,
+                                path = itemPath
+                            )
+                        }
                 }
-            }
-
-            private fun recover(
-                reader: JsonReader,
-                type: TypeToken<T>,
-                rawType: Class<*>,
-                error: RuntimeException,
-                token: JsonToken,
-                pathBeforeRead: String
-            ): T? {
-                reader.skipUnreadValueIfPossible(pathBeforeRead)
-                notify(
-                    config = config,
-                    type = type,
-                    reader = reader,
-                    token = token,
-                    reason = error.message ?: error.javaClass.name,
-                    path = pathBeforeRead
-                )
-                return FallbackValues.value(type.type, rawType, config.fallbackPolicy)
+                reader.endArray()
+                return arrayFor(componentRawType, values) as T
             }
 
             private fun readSingleObjectAsArray(
@@ -152,7 +171,7 @@ internal object SafeArrayAdapterFactory {
                     action = ShapeCoercionAction.ArrayFromSingleObject,
                     path = pathBeforeRead
                 )
-                return arrayFor(rawType, componentType, listOf(value)) as T
+                return arrayFor(componentType, listOf(value)) as T
             }
 
             private fun fallbackArray(rawType: Class<*>): T? {
@@ -169,7 +188,7 @@ internal object SafeArrayAdapterFactory {
         }
     }
 
-    private fun arrayFor(rawType: Class<*>, componentType: Class<*>, values: List<Any?>): Any {
+    private fun arrayFor(componentType: Class<*>, values: List<Any?>): Any {
         val array = Array.newInstance(componentType, values.size)
         values.forEachIndexed { index, value ->
             Array.set(array, index, value)

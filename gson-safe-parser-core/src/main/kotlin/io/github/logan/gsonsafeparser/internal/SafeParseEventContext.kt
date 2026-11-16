@@ -37,6 +37,17 @@ internal object SafeParseEventContext {
         }
     }
 
+    /** 观察者中的独立解析不属于当前响应；嵌套 parseSafe 仍可创建自己的收集器。 */
+    fun <T> withoutCollector(block: () -> T): T {
+        val previous = current.get()
+        current.remove()
+        return try {
+            block()
+        } finally {
+            if (previous == null) current.remove() else current.set(previous)
+        }
+    }
+
     /**
      * 在当前线程临时绑定事件收集器。
      *

@@ -9,6 +9,7 @@ import io.github.logan.gsonsafeparser.SafeParserConfig
 import io.github.logan.gsonsafeparser.TypeMismatchEvent
 import io.github.logan.gsonsafeparser.dispatchTypeMismatch
 import io.github.logan.gsonsafeparser.internal.FallbackValues
+import io.github.logan.gsonsafeparser.internal.GsonSafeNumberLimits
 import io.github.logan.gsonsafeparser.internal.RawJsonContext
 import io.github.logan.gsonsafeparser.internal.runRecovering
 import io.github.logan.gsonsafeparser.internal.toSafeTypeName
@@ -110,7 +111,8 @@ internal object SafePrimitiveAdapters {
                         null
                     }
                     // String 允许接收数字和布尔，避免后端把展示文案写成非字符串时直接失败。
-                    JsonToken.STRING, JsonToken.NUMBER, JsonToken.BOOLEAN -> reader.nextString()
+                    JsonToken.STRING, JsonToken.NUMBER -> reader.nextString()
+                    JsonToken.BOOLEAN -> reader.nextBoolean().toString()
                     else -> {
                         notify(config, type, reader, token)
                         reader.skipValue()
@@ -157,7 +159,20 @@ internal object SafePrimitiveAdapters {
                     // 兼容常见的 0/1 布尔表示。
                     JsonToken.NUMBER -> {
                         val isRootValue = reader.path == "$" && rootFallbackEnabled.get() == true
-                        val value = BigDecimal(reader.nextString())
+                        val number = reader.nextString()
+                        val value = runRecovering {
+                            GsonSafeNumberLimits.parseBigDecimal(number)
+                        }.getOrElse {
+                            return rootPrimitiveFallbackOrThrow(
+                                reader = reader,
+                                type = type,
+                                rawType = rawType,
+                                config = config,
+                                actualToken = token,
+                                reason = "Expected boolean number 0 or 1",
+                                cause = it
+                            )
+                        }
                         when {
                             value.compareTo(BigDecimal.ZERO) == 0 -> false
                             value.compareTo(BigDecimal.ONE) == 0 -> true
@@ -177,6 +192,7 @@ internal object SafePrimitiveAdapters {
                                 type = type,
                                 rawType = rawType,
                                 config = config,
+                                actualToken = token,
                                 reason = "Expected boolean-compatible value"
                             )
                         }
@@ -233,8 +249,12 @@ internal object SafePrimitiveAdapters {
                     JsonToken.NUMBER, JsonToken.STRING -> {
                         val value = reader.nextString()
                         if (value.isBlank()) {
-                            // 空数字字符串按默认数字值处理，避免空串拖垮整棵 Bean。
-                            FallbackValues.value(type.type, rawType, config.fallbackPolicy)
+                            // Map key 等内部辅助读取关闭根兜底后，空 key 不能伪造成 0，避免污染真实 key 或写入 null key。
+                            if (rootFallbackEnabled.get() == true) {
+                                FallbackValues.value(type.type, rawType, config.fallbackPolicy)
+                            } else {
+                                throw IllegalArgumentException("Expected numeric value")
+                            }
                         } else {
                             runRecovering { parse(value) }.getOrElse {
                                 rootPrimitiveFallbackOrThrow(
@@ -242,6 +262,7 @@ internal object SafePrimitiveAdapters {
                                     type = type,
                                     rawType = rawType,
                                     config = config,
+                                    actualToken = token,
                                     reason = numericMismatchReason(it),
                                     cause = it
                                 )
@@ -265,7 +286,7 @@ internal object SafePrimitiveAdapters {
      * @return 当前字符串对应的 BigDecimal。
      */
     private fun String.toBigDecimalOrZero(): BigDecimal {
-        return if (isBlank()) BigDecimal.ZERO else BigDecimal(this)
+        return if (isBlank()) BigDecimal.ZERO else GsonSafeNumberLimits.parseBigDecimal(this)
     }
 
     private fun String.toExactInt(): Int {
@@ -365,13 +386,14 @@ internal object SafePrimitiveAdapters {
         type: TypeToken<*>,
         rawType: Class<*>,
         config: SafeParserConfig,
+        actualToken: JsonToken,
         reason: String,
         cause: Throwable? = null
     ): T? {
         if (reader.path != "$" || rootFallbackEnabled.get() != true) {
             throw IllegalArgumentException(reason, cause)
         }
-        notify(config, type, reader, JsonToken.STRING, reason)
+        notify(config, type, reader, actualToken, reason)
         return FallbackValues.value(type.type, rawType, config.fallbackPolicy)
     }
 

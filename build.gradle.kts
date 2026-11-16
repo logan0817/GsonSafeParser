@@ -20,8 +20,8 @@ plugins {
 
 subprojects {
     group = "io.github.logan0817"
-    // 开源发布版本，README 和发布产物保持一致。
-    version = "1.0.4"
+    // 本地发布候选版本；公开安装文档在 Maven Central 发布确认后再切换。
+    version = "1.0.5"
 
     plugins.withId("com.android.library") {
         val licenseResourcesDir = layout.buildDirectory.dir("generated/licenseResources/main")

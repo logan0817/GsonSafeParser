@@ -4,6 +4,21 @@
 
 本文档整理接入 GsonSafeParser 时最常见的问题，以及推荐处理方式。
 
+## 先按现象找答案
+
+| 你看到的现象 | 先做什么 |
+| --- | --- |
+| `parseSafe` / `enableSafeParser` 标红，提示找不到 | 它们是扩展函数，需要对应 `import`；先复制[快速开始](getting-started.md)的完整代码。Maven 坐标与代码包名不同。 |
+| Retrofit 仍使用普通 Gson 报错 | 替换原 `GsonConverterFactory`，不要同时保留两个 Gson 转换器；再确认传入的外部 Gson 已启用 SafeParser。 |
+| `Int` 收到 `"bad"` 仍报错 | 默认基础类型交回 Gson；需要业务明确接受恢复后，再看[基础类型配置](#5-基础类型想使用-safeparser-宽松解析)。 |
+| 结果能用，却看不到日志 | 默认回调不打印日志；用 `parseSafe<T>().events` 读取本次事件，或配置 `onEvent`。恢复不代表后端数据正确。 |
+| 回调中的 `rawJson` 为 `null` | 默认不记录原文；普通 `gson.fromJson` 也不会自动建立原文上下文，见[原文捕获](#2-回调里看不到原始-json)。 |
+| 收到空结果，不知道是不是解析失败 | 区分 JSON `null`、根级错形、HTTP 空响应；先看[空响应规则](#1-retrofit-空响应)，不要直接写 `!!`。 |
+| debug 正常，release 默认值或字段丢失 | 先查[业务模型混淆规则](#11-release-包行为和-debug-不一致)，再用同一份 JSON 对照。 |
+| 输入被截断、转义损坏，或网络断开 | 走调用方错误处理；本库不会把这些问题转换成正常业务对象。 |
+
+本文按当前源码说明；尚未发布的修复见 [Unreleased](../CHANGELOG.md#unreleased)。
+
 ## 1. Retrofit 空响应
 
 空响应指响应体真实为空，不包含断网、取消请求、连接重置或 TLS 失败。
@@ -17,12 +32,16 @@ SafeParserConfig(emptyResponsePolicy = EmptyResponsePolicy.Null)
 SafeParserConfig(emptyResponsePolicy = EmptyResponsePolicy.DelegateToGson)
 ```
 
-| 策略 | 普通业务模型空 body | `Unit` / `Void` 空 body |
+| 策略 | 普通业务模型空 body | 真实 Retrofit 服务的 `Unit` / `Void` |
 | --- | --- | --- |
 | `DefaultValueForUnitOrVoidOnly` | 返回 `null`。 | 返回 `Unit` / `null`。 |
 | `DefaultValue` | 返回默认对象。 | 返回 `Unit` / `null`。 |
-| `Null` | 返回 `null`。 | 返回 `null`。 |
+| `Null` | 返回 `null`。 | 返回 `Unit` / `null`。 |
 | `DelegateToGson` | 交回 Gson，通常抛 `EOFException`。 | 返回 `Unit` / `null`。 |
+
+`Unit` / `Void` 由 Retrofit 内置转换器优先处理，不进入 GsonSafeParser，也不派发其 `EmptyResponse` 事件。
+HTTP 204/205 则在调用转换器前返回 `null`，对普通模型同样如此。上表的普通模型策略适用于会进入转换器的空响应（例如 HTTP 200）。
+直接调用本库 `responseBodyConverter()` 的测试不代表这些服务入口的行为。
 
 网络异常不走 `emptyResponsePolicy`：
 
@@ -36,6 +55,8 @@ SafeParserConfig(emptyResponsePolicy = EmptyResponsePolicy.DelegateToGson)
 
 默认不开启原始 JSON 捕获，避免大响应额外占用内存。排障时可以临时开启：
 
+以下片段放在函数内；类型来自 `io.github.logan.gsonsafeparser`。配置需要传给 `GsonSafeParser.parseSafe<T>(json, config)`、`GsonSafeParser.fromJson(..., config)`、Parser 或 Retrofit 工厂。**只创建 config，或只调用 `GsonSafeParser.create(config).fromJson(...)`，不会建立原文捕获上下文。** `rawJson` 可能包含敏感数据，不要把整段内容长期写入线上日志。
+
 ```kotlin
 SafeParserConfig(
     captureRawJsonInCallbacks = true,
@@ -48,12 +69,13 @@ SafeParserConfig(
 ```
 
 `rawJson` 是本次解析捕获到的原始响应，`rawJsonTruncated` 表示内容是否因为超过上限被截断。
+嵌套 Retrofit 调用会隔离每次转换的上下文；捕获关闭或超限跳过时为 `null`，不会继承外层响应原文。
 
 raw JSON 捕获按场景处理：
 
 | 场景 | 结果 |
 | --- | --- |
-| 普通 Gson 解析 | 按 UTF-8 字节数安全截断，不会切断中文、emoji 或其他多字节字符。 |
+| `GsonSafeParser.fromJson` / `parseSafe` / Parser 入口 | 按 UTF-8 字节数安全截断，不会切断中文、emoji 或其他多字节字符。 |
 | Retrofit 已知长度响应 | `contentLength` 超过上限时跳过捕获，事件里会有 `skipReason=ContentLengthExceedsLimit`。 |
 | gzip、chunked 或缺少 `Content-Length` | 先做有界探测；未超限就捕获，超限就跳过，并记录 `skipReason=UnknownLengthExceedsLimit`。 |
 
@@ -161,9 +183,10 @@ SafeParserConfig(skippedPlatformTypePrefixes = setOf("android."))
 
 Bean 没有声明的字段不会被自动注入。推荐做法：
 
-1. 在统一响应外层保留 `JsonObject raw`。
-2. 使用 OkHttp 拦截器记录原始响应。
-3. 在业务模型中显式声明需要透传的字段。
+1. 先将整个响应解析为 `JsonObject` / `JsonElement`，保留这棵 JSON 树，再按需转换成业务模型。
+2. 或在业务模型中显式声明需要透传的字段。
+
+仅在模型里加一个 `raw` 属性，不会自动收集其他未声明字段；它只对应 JSON 本身的 `raw` 字段。需要自动收集额外字段时，使用自定义 `TypeAdapter`。记录网络原文是排障手段，不会替模型保存这些字段。
 
 ## 10. Gson 版本兼容
 
@@ -213,3 +236,5 @@ val check = GsonSafeParser.integrationCheck(SafeParserConfig.production())
 5. 如果项目选择 `android.enableR8.fullMode=false`，仍要保留业务模型 keep；这个开关不能恢复已经被混淆或裁剪的字段和构造信息。
 
 详细配置见 [Android 混淆配置](android-proguard.md)。
+
+`testReleaseUnitTest` 运行 release 变体的本地 JVM 测试，不会运行最终经过 R8 的 APK。验证混淆结果需要在设备或模拟器上运行实际 release APK，执行模型探针，并与 debug 使用同一份 JSON 对照。

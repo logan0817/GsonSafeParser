@@ -2,6 +2,34 @@
 
 All notable changes are summarized here. Detailed bilingual release notes stay under `docs/`.
 
+## Unreleased
+
+### 1.0.5 release candidate
+
+The current source and local artifacts target **1.0.5**, which has not been published to Maven Central. Public installation examples continue to use **1.0.4** until publication is confirmed.
+
+1. Preserves field-level `@JsonAdapter` serialization when a value has a scalar or custom runtime adapter, keeping masking and protocol conversion intact.
+2. Honors explicitly included `transient` fields through the caller's Gson exclusion rules. Static fields remain excluded by SafeParser.
+3. Closes Retrofit response bodies when probing, observation, or conversion fails, including Unit/Void responses.
+4. Keeps Retrofit raw JSON capture on the official converter path, preserving configured strictness, full-consumption checks, charset, and BOM handling.
+5. Adds an opt-in low-level `withRawJsonContext` bridge for third-party converters; context remains bounded and is restored after nested calls or failures.
+6. Fixes safe Boolean-to-String conversion and preserves the actual numeric token in root mismatch events.
+7. Skips blank numeric Map keys instead of turning them into `0` or `null`, for both object and array-entry Map encodings.
+8. Applies Gson 2.13.2's number length and scale limits to safe decimal/integer/Boolean conversion and the default dynamic-number strategy, avoiding excessive BigInteger expansion.
+9. Rejects malformed escapes and truncated documents instead of swallowing syntax errors or repeatedly retrying an unreadable array element.
+10. Preserves following fields after a consumed invalid character; isolates rejected collection elements and bad object/primitive array elements without discarding valid neighbors.
+11. Honors explicit-null reads by caller adapters, and preserves runtime subtype fields when only a deserializer is registered or values are stored in arrays.
+12. Applies Map key privacy policies to nested paths, inferred field names and shape-coercion events, including numeric-key failure reasons.
+13. Isolates Retrofit raw JSON contexts when capture is disabled or skipped, and tests actual service calls rather than only invoking converters directly.
+14. Clarifies that Retrofit's built-in Unit/Void conversion and HTTP 204/205 handling take precedence over SafeParser empty-response policies.
+15. Isolates raw JSON, Map paths, and event collectors while invoking observers, including observer-failure callbacks; independent nested parses no longer leak outer bodies or pollute outer result snapshots.
+16. Skips malformed array-entry Map keys without manufacturing null keys, and isolates container insertion failures separately from caller-adapter read failures.
+17. Probes actual response bytes even when a Retrofit body declares zero length, preserving content supplied by interceptors and propagating read failures.
+18. Verifies Maven local artifacts against actual publication coordinates and the configured local repository; regenerates OSV scan inputs on every invocation to avoid stale dependency versions.
+19. Updates the bilingual release checklist to separate JVM tests, minified Android execution, independent AAR consumption, and unpublished version preparation.
+
+Candidate notes: [中文](docs/release-notes-1.0.5.md) / [English](docs/en/release-notes-1.0.5.md)
+
 ## 1.0.4
 
 Custom adapter boundary and open-source release readiness update.

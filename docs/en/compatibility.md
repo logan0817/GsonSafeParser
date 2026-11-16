@@ -12,12 +12,14 @@ Start with the short version:
 4. Retrofit network or transport read failures are not JSON mismatches or empty responses; do not hide them with `emptyResponsePolicy`.
 5. Legacy projects should not go straight to production. Validate them against the matrix below first.
 
+Safe Reflective honors the caller's field exclusion rules, including explicitly included `transient` fields. Static fields remain excluded; types that require static field binding should use a custom adapter or `@SafeParseDelegateToGson`.
+
 ## 1. Version Matrix
 
 | Area | Verified version and meaning |
 | --- | --- |
 | Artifact | Android AAR. Plain JVM projects cannot consume it as a normal JVM jar; Android projects can use it directly. |
-| Library | `1.0.4` is the current stable release; `1.0.0` is the first public compatibility baseline. |
+| Library | `1.0.4` is the current stable release; current source targets the unpublished `1.0.5` candidate; `1.0.0` is the first public compatibility baseline. |
 | Android `minSdk` | `minSdk 23` is a hard boundary. Apps below 23 may fail AAR merge or runtime validation. |
 | Android `compileSdk` | `compileSdk 36` is the build baseline. Run full validation if your project uses a lower value. |
 | JDK | `JDK 17` is a hard boundary. JDK 8 / 11 build chains are risky for Java 17 artifacts. |

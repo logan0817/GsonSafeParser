@@ -2,106 +2,107 @@
 
 [中文](README.md)
 
-This directory contains minimal copyable examples. They are documentation snippets instead of a new Gradle submodule, so the current Android AAR publishing structure stays unchanged.
+Each Kotlin example is a standalone `.kt` file containing imports, models, and `fun main()`. Copy one at a time. Run `main()` in the Android module, or move its body into an existing debug entry point. These examples do not add a Gradle module.
 
-## Example Dependencies
+For repository and dependency placement, start with [Getting Started](../docs/en/getting-started.md#1-add-a-dependency): confirm `mavenCentral()` in `settings.gradle.kts`, choose either core or retrofit in `app/build.gradle.kts`, and sync Gradle. The Retrofit module already includes core.
 
-Plain Gson examples only need core:
+These basic APIs target published **1.0.4**. New stability fixes in the working source are listed under [Unreleased](../CHANGELOG.md#unreleased); source test results do not establish that Maven 1.0.4 contains those fixes.
 
-```kotlin
-implementation("io.github.logan0817:gson-safe-parser-core:1.0.4")
-```
+## 1. Choose an example
 
-Retrofit examples only need retrofit, which brings core transitively:
-
-```kotlin
-implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.4")
-```
-
-## 1. Choose An Example By Goal
-
-| Goal | Example | What You Will See |
-| --- | --- | --- |
-| Verify field-level fallback only | [Plain Gson Minimal Example](#2-plain-gson-minimal-example) | The outer object keeps parsing when `data` receives an array |
-| Get parse events with the value | [Events And Contract Report](#3-events-and-contract-report) | `parseSafe<T>()`, `events`, and `contractReport()` |
-| Integrate Retrofit | [Retrofit Minimal Example](#4-retrofit-minimal-example) | `GsonSafeConverterFactory.create()` |
-| Explicit object-array coercion | [JSON Shape Coercion](#5-json-shape-coercion) | `@SafeParseShapeCoercion` |
-| Add CI self-checks | [CI Integration Self-Check](#6-ci-integration-self-check) | `diagnostics()` and `integrationCheck()` |
+| Goal | Example |
+| --- | --- |
+| Retain outer fields when an object field has the wrong shape | [Plain Gson Minimal Example](#2-plain-gson-minimal-example) |
+| Get the value, events, and problem path | [Events And Contract Report](#3-events-and-contract-report) |
+| Configure the Retrofit factory | [Retrofit Minimal Example](#4-retrofit-minimal-example) |
+| Enable object/array coercion on a known field | [JSON Shape Coercion](#5-json-shape-coercion) |
+| Run built-in probes without network access | [CI Integration Self-Check](#6-ci-integration-self-check) |
 
 ## 2. Plain Gson Minimal Example
 
+Requires only `io.github.logan0817:gson-safe-parser-core:1.0.4`:
+
 ```kotlin
 import io.github.logan.gsonsafeparser.GsonSafeParser
 
-data class ApiResponse(
-    val code: Int = 0,
-    val data: User = User()
-)
+data class ApiResponse(val code: Int = 0, val data: User = User())
+data class User(val id: Long = 0L, val name: String = "local")
 
-data class User(
-    val id: Long = 0L,
-    val name: String = "local"
-)
-
-val json = """{"code":200,"data":[]}"""
-val gson = GsonSafeParser.create()
-val response = gson.fromJson(json, ApiResponse::class.java)
-
-check(response.code == 200)
-check(response.data == User())
+fun main() {
+    val json = """{"code":200,"data":[]}"""
+    val gson = GsonSafeParser.create()
+    val response = requireNotNull(gson.fromJson(json, ApiResponse::class.java))
+    check(response.code == 200)
+    check(response.data == User())
+    println(response)
+}
 ```
 
-This example verifies one boundary: `data` expects a JSON object but receives a JSON array. GsonSafeParser falls back only for the `data` field, and the outer `code` value keeps parsing.
+Expected output: `ApiResponse(code=200, data=User(id=0, name=local))`. When `data` expects an object but receives an array, its constructed default survives and the outer `code` remains 200.
+
+For generic lists, use `parser.fromJsonSafe<List<User>>(json)` instead of `List::class.java`, which loses the element type. See the [complete parser and generic example](../docs/en/getting-started.md#3-reuse-a-parser-and-retain-generic-types).
 
 ## 3. Events And Contract Report
 
-The snippet below reuses the `ApiResponse` / `User` models from section 2. Copy those models first when pasting this snippet alone.
+This example includes its own models and does not depend on the preceding file:
 
 ```kotlin
 import io.github.logan.gsonsafeparser.GsonSafeParser
+import io.github.logan.gsonsafeparser.SafeParserEvent
 import io.github.logan.gsonsafeparser.contractReport
 import io.github.logan.gsonsafeparser.parseSafe
 
-val result = GsonSafeParser.parseSafe<ApiResponse>("""{"code":200,"data":[]}""")
+data class ApiResponse(val code: Int = 0, val data: User = User())
+data class User(val id: Long = 0L, val name: String = "anonymous")
 
-println(result.value)
-println(result.events)
-println(result.contractReport().toBackendMarkdown())
+fun main() {
+    val json = """{"code":200,"data":[]}"""
+    val result = GsonSafeParser.parseSafe<ApiResponse>(json)
+    val mismatch = result.events.single() as SafeParserEvent.TypeMismatch
+    println(result.value)
+    println(mismatch.detail.path)
+    println(result.contractReport().hasIssues)
+}
 ```
 
-This example verifies that the parsed value, parse events, and backend-facing contract report come from the same parse result. `contractReport()` does not parse JSON again and does not mutate the business value.
+Expected lines: `ApiResponse(code=200, data=User(id=0, name=anonymous))`, `$.data`, and `true`. Call `result.contractReport().toBackendMarkdown()` inside the function for a backend-facing report. Generating the report does not parse JSON again.
+
+Direct `gson.fromJson(...)` calls do not automatically attach raw JSON, even if capture is enabled in the config. Use a capture-enabled Parser, `parseSafe`, or Retrofit entry instead; see [Troubleshooting](../docs/en/troubleshooting.md).
 
 ## 4. Retrofit Minimal Example
 
+Requires only `io.github.logan0817:gson-safe-parser-retrofit:1.0.4`. Replace an existing `GsonConverterFactory.create(...)` with the Safe factory; do not retain both Gson factories on the same Retrofit instance.
+
 ```kotlin
-import io.github.logan.gsonsafeparser.SafeParserConfig
 import io.github.logan.gsonsafeparser.retrofit.GsonSafeConverterFactory
-import com.google.gson.GsonBuilder
+import retrofit2.Call
 import retrofit2.Retrofit
+import retrofit2.http.GET
 
-val retrofit = Retrofit.Builder()
-    .baseUrl("https://example.com/")
-    .addConverterFactory(GsonSafeConverterFactory.create())
-    .build()
+data class ApiResponse(val code: Int = 0)
+
+interface ApiService {
+    @GET("profile")
+    fun profile(): Call<ApiResponse>
+}
+
+fun main() {
+    val retrofit = Retrofit.Builder()
+        .baseUrl("https://example.com/")
+        .addConverterFactory(GsonSafeConverterFactory.create())
+        .build()
+    val service = retrofit.create(ApiService::class.java)
+    println(service is ApiService)
+}
 ```
 
-If the project already owns a shared `GsonBuilder`:
+Expected output: `true`. The example configures a URL and creates an interface proxy. It calls neither `execute()` nor `enqueue()`, so it sends no network request.
 
-```kotlin
-val config = SafeParserConfig.production()
-val builder = GsonBuilder().serializeNulls()
-
-val retrofit = Retrofit.Builder()
-    .baseUrl("https://example.com/")
-    .addConverterFactory(GsonSafeConverterFactory.create(builder, config))
-    .build()
-```
-
-This example verifies that Retrofit response bodies use Gson with Safe Adapter registration. Offline state, cancellation, connection reset, and TLS failure still return to Retrofit / OkHttp; they are not treated as empty responses or field mismatches.
+For an existing builder, use `GsonSafeConverterFactory.create(builder, config)`. For an existing Gson, use `GsonSafeConverterFactory.create(gson, config)` after registering `.enableSafeParser(config)` when creating that Gson. The latter overload does not add registration. See the [complete existing-Gson example](../docs/en/getting-started.md#4-integrate-an-existing-gsonbuilder-or-gson).
 
 ## 5. JSON Shape Coercion
 
-The snippet below reuses the `User` model from section 2. Copy that model first when pasting this snippet alone.
+Enable this only when the field's contract accepts reading the first object from an array. Default settings do not coerce objects and arrays:
 
 ```kotlin
 import io.github.logan.gsonsafeparser.GsonSafeParser
@@ -109,45 +110,56 @@ import io.github.logan.gsonsafeparser.SafeParseShapeCoercion
 import io.github.logan.gsonsafeparser.ShapeCoercionPolicy
 import io.github.logan.gsonsafeparser.parseSafe
 
+data class User(val id: Long = 0L, val name: String = "")
+
 data class FlexibleResponse(
     @field:SafeParseShapeCoercion(ShapeCoercionPolicy.ObjectFromFirstArrayItem)
     val data: User? = null
 )
 
-val result = GsonSafeParser.parseSafe<FlexibleResponse>(
-    """{"data":[{"id":1,"name":"remote"}]}"""
-)
-
-println(result.value?.data)
-println(result.events)
+fun main() {
+    val result = GsonSafeParser.parseSafe<FlexibleResponse>(
+        """{"data":[{"id":1,"name":"remote"}]}"""
+    )
+    println(result.value?.data)
+    println(result.events.size)
+}
 ```
 
-This example verifies that an object field can explicitly read the first object from an array. This capability is disabled by default and should only be used on fields where the business contract accepts that recovery rule.
+Expected output: `User(id=1, name=remote)` and `1`. The event records explicit shape coercion. Likewise, opt into `PrimitiveParsingPolicy.Safe` only when the application accepts scalar fallback; see [Configuration](../docs/en/configuration.md).
 
 ## 6. CI Integration Self-Check
 
 ```kotlin
 import io.github.logan.gsonsafeparser.GsonSafeParser
 import io.github.logan.gsonsafeparser.SafeParserConfig
+import io.github.logan.gsonsafeparser.integrationCheck
 
-val diagnostics = GsonSafeParser.diagnostics(SafeParserConfig.production())
-check(diagnostics.hasErrors.not()) {
-    diagnostics.checks.joinToString(separator = "\n")
-}
-
-val integrationCheck = GsonSafeParser.integrationCheck(SafeParserConfig.production())
-check(integrationCheck.hasErrors.not()) {
-    integrationCheck.checks.joinToString(separator = "\n")
+fun main() {
+    val config = SafeParserConfig.production()
+    val diagnostics = GsonSafeParser.diagnostics(config)
+    check(diagnostics.hasErrors.not()) {
+        diagnostics.checks.joinToString("\n")
+    }
+    val integrationCheck = GsonSafeParser.integrationCheck(config)
+    check(integrationCheck.hasErrors.not()) {
+        integrationCheck.checks.joinToString("\n")
+    }
+    println("Self-check passed")
 }
 ```
 
-This example verifies whether the current Gson version, kotlin-reflect setup, Safe Adapter registration, event stream, and contract report path are ready for adoption. It does not access the network and does not require an Android device.
+A successful run prints `Self-check passed`. Default checks parse built-in probes only. Passing `modelProbes` also parses the named application models. Callbacks execute synchronously on the parsing thread; shared logging or event containers must be thread safe.
+
+A JVM test or `testReleaseUnitTest` does not prove that R8 preserves your models. Follow [Android ProGuard](../docs/en/android-proguard.md), then run model probes with real application JSON inside an actual minified APK.
 
 ## 7. Continue Reading
 
 | Topic | Document |
 | --- | --- |
-| Choose an API entry point | [API Reference](../docs/en/api-reference.md) |
-| Full fallback scope | [Mismatch Capability Matrix](../docs/en/mismatch-capability-matrix.md) |
-| Android release obfuscation | [Android ProGuard](../docs/en/android-proguard.md) |
-| Retrofit empty responses and raw JSON | [Troubleshooting](../docs/en/troubleshooting.md) |
+| Existing Builder / Gson and generic parsing | [Getting Started](../docs/en/getting-started.md) |
+| API choices and explicit Java types | [API Reference](../docs/en/api-reference.md) |
+| Field recovery, roots, and exception boundaries | [Mismatch Capability Matrix](../docs/en/mismatch-capability-matrix.md) |
+| Retrofit empty bodies and raw JSON | [Troubleshooting](../docs/en/troubleshooting.md) |
+
+Syntax errors, truncated JSON, caller-adapter exceptions, and Retrofit network failures still propagate. Recovery must not disguise them as successful application data.

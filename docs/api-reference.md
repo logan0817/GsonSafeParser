@@ -4,6 +4,18 @@
 
 这份文档面向已经决定接入 GsonSafeParser 的开发者。它只回答 3 件事：1. 该用哪个入口 2. 每个 API 做什么 3. 出错时会兜底、回退还是外抛。
 
+第一次使用请先看[快速开始](getting-started.md)，那里有完整 import、模型、调用代码和预期结果。本页用于查方法，不必从头读完。
+
+| 你现在要做什么 | 先记住这个入口 |
+| --- | --- |
+| 替换原来的 `Gson()` | `GsonSafeParser.create()`，后续继续 `gson.fromJson(...)` |
+| 同时拿到结果和恢复记录 | `GsonSafeParser.parseSafe<T>(json)`，看 `value` 和 `events` |
+| 接入 Retrofit | `GsonSafeConverterFactory.create()`，替换普通 Gson 转换器 |
+
+下文短片段用于展示 API；除完整模型示例外，调用语句放在函数内，`json`、`ApiResponse` 沿用第 2 节。Kotlin 扩展函数需显式导入：`parseSafe`、`fromJsonSafe`、`enableSafeParser`、`contractReport` 均来自 `io.github.logan.gsonsafeparser`。
+
+标为低层 API 的 `withRawJsonContext` / `dispatchEvent` 用于框架桥接，普通业务无需调用。新接口和修复的发布状态以 [Unreleased](../CHANGELOG.md#unreleased) 为准。
+
 ## 1. 入口速查
 
 先按手里有什么选入口：从零创建 Gson 用 `GsonSafeParser.create(config)`；已有 `GsonBuilder` 用 `GsonBuilder.enableSafeParser(config)` 或 `GsonSafeParser.parser(builder, config)`；已有创建好的 `Gson`，先确认它已经注册 Safe Adapter，再用 `parserWithExternalGson(gson, config)`；Retrofit 统一走 `GsonSafeConverterFactory.create(...)`。
@@ -147,6 +159,42 @@ val retrofit = Retrofit.Builder()
 | `parser.fromJsonSafe<T>(json)` | `T?` | 高频复用 Parser |
 | `parser.parseSafe<T>(json)` | `SafeParseResult<T>` | 高频复用 Parser，同时收集事件 |
 
+### 3.6 Java 调用：显式传入类型
+
+下面是完整 `JavaExample.java`，依赖与 Kotlin 相同。调用 `main` 后应输出 `200` 和 `1`；Android 不会自动执行此入口，可从现有单元测试调用。
+
+```java
+import io.github.logan.gsonsafeparser.GsonSafeParser;
+import io.github.logan.gsonsafeparser.SafeParseResult;
+import io.github.logan.gsonsafeparser.SafeParserConfig;
+
+public class JavaExample {
+    public static class User {
+        public long id = 0;
+    }
+
+    public static class ApiResponse {
+        public int code = 0;
+        public User data = new User();
+    }
+
+    public static void main(String[] args) {
+        GsonSafeParser.Parser parser = GsonSafeParser.INSTANCE.parser(new SafeParserConfig());
+        SafeParseResult<ApiResponse> result = parser.parseSafe(
+            "{\"code\":200,\"data\":[]}", ApiResponse.class
+        );
+        ApiResponse response = result.getValue();
+        if (response == null || response.code != 200 || response.data == null) {
+            throw new AssertionError("Unexpected parse result");
+        }
+        System.out.println(response.code);
+        System.out.println(result.getEvents().size());
+    }
+}
+```
+
+Java 的 `List<User>` 等泛型使用 `new com.google.gson.reflect.TypeToken<java.util.List<User>>() {}.getType()` 传入 `parser.parseSafe(json, type)`，不要只传 `List.class`。
+
 ## 4. 配置速查
 
 | 配置 | 默认值与修改时机 |
@@ -188,6 +236,42 @@ val retrofit = Retrofit.Builder()
 | 契约报告 | `result.contractReport()` | 输出给客户端、后端或 CI 的结构化问题报告 |
 | 环境诊断 | `GsonSafeParser.diagnostics()` | 检查 GsonBuilder 内部字段、kotlin-reflect 和配置风险 |
 | 集成自检 | `GsonSafeParser.integrationCheck()` | 在 CI 里验证 Safe Adapter、事件和报告链路 |
+| 转换器 raw JSON 上下文 | `GsonSafeParser.withRawJsonContext(...)` | 仅供 Retrofit 等低级转换器传递有限 raw JSON 观察内容，不改变原生解析严格性 |
+
+`withRawJsonContext(json, config, block)` 需要 `@OptIn(GsonSafeParserLowLevelApi::class)`。它只在当前线程执行 `block` 期间绑定观察内容，沿用捕获开关和 UTF-8 字节上限，嵌套调用或异常退出后恢复旧上下文。它不会解析 JSON、注册 Adapter 或吞异常；第三方转换器仍负责原始响应的读取和关闭。
+
+<details>
+<summary>展开：检查自己的业务模型</summary>
+
+默认 `integrationCheck()` 只检查库内置样例。下面完整示例额外验证一个业务模型，成功输出 `Model probe passed`。实际项目替换为关键响应模型、真实 JSON 和预期字段：
+
+```kotlin
+import io.github.logan.gsonsafeparser.GsonSafeModelProbe
+import io.github.logan.gsonsafeparser.GsonSafeParser
+import io.github.logan.gsonsafeparser.SafeParserConfig
+import io.github.logan.gsonsafeparser.integrationCheck
+
+data class ReleaseResponse(val code: Int = 0)
+
+fun main() {
+    val probe = GsonSafeModelProbe(
+        name = "releaseResponse",
+        json = """{"code":200}""",
+        type = ReleaseResponse::class.java,
+        expectedFields = mapOf("code" to 200)
+    )
+    val result = GsonSafeParser.integrationCheck(
+        config = SafeParserConfig.production(),
+        modelProbes = listOf(probe)
+    )
+    check(result.hasErrors.not()) { result.checks.joinToString("\n") }
+    println("Model probe passed")
+}
+```
+
+要验证 R8，请按混淆规则保留真实模型，并从实际 release APK 的调试入口调用这段检查。仅在 JVM 单测运行不能证明混淆产物正确。
+
+</details>
 
 ## 7. 推荐接入路线
 
