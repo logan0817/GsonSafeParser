@@ -4,9 +4,11 @@ All notable changes are summarized here. Detailed bilingual release notes stay u
 
 ## Unreleased
 
-### 1.0.5 release candidate
+No unreleased changes.
 
-The current source and local artifacts target **1.0.5**, which has not been published to Maven Central. Public installation examples continue to use **1.0.4** until publication is confirmed.
+## 1.0.5 - 2026-11-16
+
+Stability and reliability update, published to Maven Central.
 
 1. Preserves field-level `@JsonAdapter` serialization when a value has a scalar or custom runtime adapter, keeping masking and protocol conversion intact.
 2. Honors explicitly included `transient` fields through the caller's Gson exclusion rules. Static fields remain excluded by SafeParser.
@@ -28,7 +30,7 @@ The current source and local artifacts target **1.0.5**, which has not been publ
 18. Verifies Maven local artifacts against actual publication coordinates and the configured local repository; regenerates OSV scan inputs on every invocation to avoid stale dependency versions.
 19. Updates the bilingual release checklist to separate JVM tests, minified Android execution, independent AAR consumption, and unpublished version preparation.
 
-Candidate notes: [中文](docs/release-notes-1.0.5.md) / [English](docs/en/release-notes-1.0.5.md)
+Details: [中文](docs/release-notes-1.0.5.md) / [English](docs/en/release-notes-1.0.5.md)
 
 ## 1.0.4
 

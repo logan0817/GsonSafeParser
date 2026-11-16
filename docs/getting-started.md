@@ -2,7 +2,7 @@
 
 [English](en/getting-started.md)
 
-按下面的顺序，先让一个字段错形样例跑通，再接入业务解析。下面使用可直接安装的 **1.0.4**；当前源码的稳定性修复属于[待发布的 1.0.5 候选版](release-notes-1.0.5.md)，不包含在 Maven 上的 1.0.4 中。
+按下面的顺序，先让一个字段错形样例跑通，再接入业务解析。下面使用已发布到 Maven Central 的 **1.0.5**；从旧版本升级时，先查看[发布说明](release-notes-1.0.5.md)中的行为变化和迁移建议。
 
 ## 1. 添加依赖
 
@@ -25,7 +25,7 @@ dependencyResolutionManagement {
 
 ```kotlin
 dependencies {
-    implementation("io.github.logan0817:gson-safe-parser-core:1.0.4")
+    implementation("io.github.logan0817:gson-safe-parser-core:1.0.5")
 }
 ```
 
@@ -33,7 +33,7 @@ dependencies {
 
 ```kotlin
 dependencies {
-    implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.4")
+    implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.5")
 }
 ```
 

@@ -19,7 +19,7 @@ GsonSafeParser 的配置目标很直接：能安全兜底的字段由库处理�
 | 想知道哪个字段被恢复 | 用 `parseSafe<T>()` 查看 `events` | 不必开启原始响应记录。 |
 | Retrofit 的空模型响应要创建默认对象 | `emptyResponsePolicy` 设为 `EmptyResponsePolicy.DefaultValue` | 仅影响进入本库转换器的空响应；见[空响应说明](troubleshooting.md#1-retrofit-空响应)。 |
 
-本页按当前 `1.0.5` 候选源码说明。数组逐项恢复、嵌套 Map 路径脱敏等新修复见[候选版说明](release-notes-1.0.5.md)，尚未发布，不能据此认为 Maven 上的 `1.0.4` 已包含这些修改。
+本页适用于已发布的 `1.0.5`。数组逐项恢复、嵌套 Map 路径脱敏等修复见[发布说明](release-notes-1.0.5.md)；使用旧版本时，请先确认对应版本的行为边界。
 
 ### 示例：只开启基础类型恢复
 

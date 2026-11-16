@@ -6,7 +6,7 @@ Run this checklist before every new release. Verify parsing behavior, Android AA
 
 `Unreleased` in `CHANGELOG.md` contains changes that have not been published. Choose the target version before updating build versions, the Demo version, dependency examples, and bilingual release notes. An existing version number or successful local verification does not mean the changes have been published.
 
-The current target is the **1.0.5 candidate**, with Demo `versionName 1.0.5` / `versionCode 6`. During candidate preparation, README and Getting Started retain the published 1.0.4 installation coordinates. See the [candidate notes](release-notes-1.0.5.md) for 1.0.5 coordinates and migration guidance.
+The current stable version is **1.0.5**, with Demo `versionName 1.0.5` / `versionCode 6`. Both modules are published to Maven Central, and public installation documentation uses 1.0.5 coordinates. See the [release notes](release-notes-1.0.5.md) for migration guidance and verification records. Future releases must still complete this checklist.
 
 ## 1. Pre-Release Verification Command
 

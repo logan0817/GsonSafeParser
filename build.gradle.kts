@@ -20,7 +20,7 @@ plugins {
 
 subprojects {
     group = "io.github.logan0817"
-    // 本地发布候选版本；公开安装文档在 Maven Central 发布确认后再切换。
+    // 当前公开发布版本，与 Demo 及安装文档保持一致。
     version = "1.0.5"
 
     plugins.withId("com.android.library") {

@@ -6,7 +6,7 @@ Each Kotlin example is a standalone `.kt` file containing imports, models, and `
 
 For repository and dependency placement, start with [Getting Started](../docs/en/getting-started.md#1-add-a-dependency): confirm `mavenCentral()` in `settings.gradle.kts`, choose either core or retrofit in `app/build.gradle.kts`, and sync Gradle. The Retrofit module already includes core.
 
-These basic APIs target published **1.0.4**. New stability fixes in the working source are listed under [Unreleased](../CHANGELOG.md#unreleased); source test results do not establish that Maven 1.0.4 contains those fixes.
+These basic APIs target published **1.0.5**. See the [1.0.5 release notes](../docs/en/release-notes-1.0.5.md) for fixes and migration guidance.
 
 ## 1. Choose an example
 
@@ -20,7 +20,7 @@ These basic APIs target published **1.0.4**. New stability fixes in the working 
 
 ## 2. Plain Gson Minimal Example
 
-Requires only `io.github.logan0817:gson-safe-parser-core:1.0.4`:
+Requires only `io.github.logan0817:gson-safe-parser-core:1.0.5`:
 
 ```kotlin
 import io.github.logan.gsonsafeparser.GsonSafeParser
@@ -71,7 +71,7 @@ Direct `gson.fromJson(...)` calls do not automatically attach raw JSON, even if 
 
 ## 4. Retrofit Minimal Example
 
-Requires only `io.github.logan0817:gson-safe-parser-retrofit:1.0.4`. Replace an existing `GsonConverterFactory.create(...)` with the Safe factory; do not retain both Gson factories on the same Retrofit instance.
+Requires only `io.github.logan0817:gson-safe-parser-retrofit:1.0.5`. Replace an existing `GsonConverterFactory.create(...)` with the Safe factory; do not retain both Gson factories on the same Retrofit instance.
 
 ```kotlin
 import io.github.logan.gsonsafeparser.retrofit.GsonSafeConverterFactory

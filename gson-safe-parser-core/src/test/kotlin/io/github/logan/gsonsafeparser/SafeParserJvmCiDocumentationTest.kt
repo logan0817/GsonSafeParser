@@ -177,16 +177,16 @@ class SafeParserJvmCiDocumentationTest {
             { assertTrue(readmeEnContent.contains("[中文](README.md)")) },
             { assertTrue(readmeContent.contains("JDK 17")) },
             { assertTrue(readmeEnContent.contains("JDK 17")) },
-            { assertTrue(readmeContent.contains("gson-safe-parser-retrofit:1.0.4")) },
-            { assertTrue(readmeEnContent.contains("gson-safe-parser-retrofit:1.0.4")) },
+            { assertTrue(readmeContent.contains("gson-safe-parser-retrofit:1.0.5")) },
+            { assertTrue(readmeEnContent.contains("gson-safe-parser-retrofit:1.0.5")) },
             { assertTrue(readmeContent.contains("docs/android-proguard.md")) },
             { assertTrue(readmeEnContent.contains("docs/en/android-proguard.md")) },
             { assertTrue(readmeEnContent.contains("docs/en/getting-started.md")) },
             { assertTrue(readmeEnContent.contains("docs/en/configuration.md")) },
             { assertTrue(readmeContent.contains("docs/mismatch-capability-matrix.md")) },
             { assertTrue(readmeEnContent.contains("docs/en/mismatch-capability-matrix.md")) },
-            { assertTrue(readmeContent.contains("docs/release-notes-1.0.4.md")) },
-            { assertTrue(readmeEnContent.contains("docs/en/release-notes-1.0.4.md")) },
+            { assertTrue(readmeContent.contains("docs/release-notes-1.0.5.md")) },
+            { assertTrue(readmeEnContent.contains("docs/en/release-notes-1.0.5.md")) },
             { assertTrue(changelogContent.contains("docs/release-notes-1.0.3.md")) },
             { assertTrue(changelogContent.contains("docs/en/release-notes-1.0.3.md")) },
             { assertTrue(changelogContent.contains("docs/release-notes-1.0.2.md")) },
@@ -532,12 +532,9 @@ class SafeParserJvmCiDocumentationTest {
         )
     }
 
-    /**
-     * 候选版尚未公开时，构建与 Demo 使用目标版本，公开安装示例仍必须指向可获取的稳定版。
-     * 发布确认后再一起切换安装示例，避免新手复制候选坐标后无法同步依赖。
-     */
+    /** 公开发布确认后，构建、Demo、安装示例与发布状态必须一起更新。 */
     @Test
-    fun `candidate artifacts and published installation snippets declare their separate versions`() {
+    fun `published artifacts and installation snippets declare the same version`() {
         val rootBuildContent = projectRoot().resolve("build.gradle.kts").readText()
         val demoBuildContent = projectRoot().resolve("demo-app/build.gradle.kts").readText()
         val chineseReadme = projectRoot().resolve("README.md").readText()
@@ -548,8 +545,8 @@ class SafeParserJvmCiDocumentationTest {
             .find(rootBuildContent)
             ?.groupValues
             ?.get(1)
-        val publishedVersion = "1.0.4"
-        val candidateNotes = listOf(
+        val publishedVersion = "1.0.5"
+        val releaseNotes = listOf(
             projectRoot().resolve("docs/release-notes-$version.md").readText(),
             projectRoot().resolve("docs/en/release-notes-$version.md").readText()
         )
@@ -558,28 +555,36 @@ class SafeParserJvmCiDocumentationTest {
             chineseReadme,
             englishReadme,
             chineseGettingStarted,
-            englishGettingStarted
+            englishGettingStarted,
+            projectRoot().resolve("examples/README.md").readText(),
+            projectRoot().resolve("examples/README_EN.md").readText()
         )
 
         assertAll(
-            { assertEquals("1.0.5", version) },
+            { assertEquals(publishedVersion, version) },
             { assertTrue(demoBuildContent.contains("versionName = \"$version\"")) },
             { assertTrue(demoBuildContent.contains("versionCode = 6")) },
             { assertTrue(chineseReadme.contains("docs/release-notes-$version.md")) },
             { assertTrue(englishReadme.contains("docs/en/release-notes-$version.md")) },
-            { assertTrue(chineseReadme.contains("尚未发布到 Maven Central")) },
-            { assertTrue(englishReadme.contains("has not been published to Maven Central")) },
+            { assertTrue(chineseReadme.contains("已发布到 Maven Central")) },
+            { assertTrue(englishReadme.contains("available from Maven Central")) },
             {
                 publicDocs.forEach { content ->
                     assertTrue(content.contains("gson-safe-parser-core:$publishedVersion"))
                     assertTrue(content.contains("gson-safe-parser-retrofit:$publishedVersion"))
+                    assertTrue(!content.contains("gson-safe-parser-core:1.0.4"))
+                    assertTrue(!content.contains("gson-safe-parser-retrofit:1.0.4"))
                 }
             },
             {
-                candidateNotes.forEach { content ->
+                releaseNotes.forEach { content ->
                     assertTrue(content.contains("gson-safe-parser-core:$version"))
                     assertTrue(content.contains("gson-safe-parser-retrofit:$version"))
                 }
+            },
+            {
+                val security = projectRoot().resolve("SECURITY.md").readText()
+                assertTrue(security.contains("| `$publishedVersion` | 当前维护版本 |"))
             }
         )
     }

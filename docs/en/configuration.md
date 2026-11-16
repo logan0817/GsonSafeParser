@@ -19,7 +19,7 @@ This document covers config fields, constructor policy, presets, events, contrac
 | Find out which field was recovered | Read `events` from `parseSafe<T>()` | Raw response capture is not required. |
 | An empty Retrofit model response should create a default object | Set `emptyResponsePolicy` to `EmptyResponsePolicy.DefaultValue` | Only affects responses reaching this converter; see [empty responses](troubleshooting.md#1-empty-retrofit-responses). |
 
-This page describes the current `1.0.5` candidate source. Fixes such as per-item array recovery and nested Map path redaction are documented in the [candidate notes](release-notes-1.0.5.md) and remain unpublished; do not assume the Maven `1.0.4` artifacts include them.
+This page describes the published `1.0.5` release. Fixes such as per-item array recovery and nested Map path redaction are documented in the [release notes](release-notes-1.0.5.md). Check the corresponding version's behavior boundaries when using an older release.
 
 ### Example: Enable Only Primitive Recovery
 

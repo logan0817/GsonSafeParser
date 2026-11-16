@@ -19,7 +19,7 @@ Safe Reflective honors the caller's field exclusion rules, including explicitly 
 | Area | Verified version and meaning |
 | --- | --- |
 | Artifact | Android AAR. Plain JVM projects cannot consume it as a normal JVM jar; Android projects can use it directly. |
-| Library | `1.0.4` is the current stable release; current source targets the unpublished `1.0.5` candidate; `1.0.0` is the first public compatibility baseline. |
+| Library | `1.0.5` is the current stable release; `1.0.0` is the first public compatibility baseline. |
 | Android `minSdk` | `minSdk 23` is a hard boundary. Apps below 23 may fail AAR merge or runtime validation. |
 | Android `compileSdk` | `compileSdk 36` is the build baseline. Run full validation if your project uses a lower value. |
 | JDK | `JDK 17` is a hard boundary. JDK 8 / 11 build chains are risky for Java 17 artifacts. |

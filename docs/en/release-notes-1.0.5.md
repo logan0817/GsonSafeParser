@@ -1,14 +1,14 @@
-# 1.0.5 Release Notes (Candidate)
+# 1.0.5 Release Notes
 
 [中文](../release-notes-1.0.5.md)
 
-**Status: `1.0.5` is not yet published. The current stable Maven Central version remains `1.0.4`.** These notes describe the candidate source changes. A local build, test run, or publication to a temporary repository does not constitute a public release.
+**Status: `1.0.5` was published to Maven Central on November 16, 2026.** Both modules' public AARs, POMs, module metadata, sources, and javadoc were downloaded and checked. Both AARs exactly match the locally signed publication artifacts, and their GPG signatures passed verification.
 
 `1.0.5` focuses on reliable parsing recovery, observer callbacks, and Retrofit conversion. Default configuration and dependency versions remain unchanged. Some behavior changes, including propagating syntax errors that were previously swallowed and skipping Map inputs that produced artificial keys, require regression coverage before upgrading.
 
 ## Upgrading From 1.0.4
 
-| Scenario | Candidate behavior and migration guidance |
+| Scenario | 1.0.5 behavior and migration guidance |
 | --- | --- |
 | Blank or malformed Map keys | Blank numeric Map keys no longer become `0` or `null`; their entries are skipped in both object and array-entry forms. Array-entry keys whose shapes are rejected by built-in adapters are also skipped without manufacturing `null` keys. Explicit JSON `null` keys still depend on support from the target Map and adapter. Do not rely on previously manufactured keys. |
 | Invalid escapes or truncated JSON | Syntax errors propagate instead of being treated as successful field or element recovery. Array parsing no longer repeatedly retries an unreadable element. Keep normal parse-failure handling at the call site. |
@@ -54,9 +54,9 @@ See [compatibility](compatibility.md) and [Android obfuscation configuration](an
 
 This API does not parse JSON, register adapters, change strictness, swallow exceptions, or close the converter's original response. Ordinary application code should keep using existing entry points. See the [API reference](api-reference.md#6-observation-and-reports) for the full contract.
 
-## Candidate Coordinates And Local Verification
+## Dependency Coordinates And Local Verification
 
-The following `1.0.5` coordinates are **only for use after public release, or when consuming candidate artifacts from a temporary local Maven repository**. Until publication, keep using `1.0.4` from Maven Central. Select one dependency in the application module; the Retrofit module already includes core transitively:
+The following `1.0.5` coordinates are available from Maven Central. Select one dependency in the application module; the Retrofit module already includes core transitively:
 
 ```kotlin
 dependencies {
@@ -94,9 +94,11 @@ The following checks were completed on November 16, 2026. Stability fixes and ve
 | Vulnerability scan | OSV Scanner 2.3.8 scanned 15 runtime dependencies and reported no vulnerabilities |
 | Remote publication task graph | `releaseToMavenCentral --dry-run` passed; only the task graph was checked, with no remote publication |
 | Remote CI | CI #25 for commit `21a0c64` passed all dependency scanning, Debug / Release tests, lint, builds, and publication artifact checks |
-| Central deployment | Both modules passed signing, upload, and Central validation; deployment `3b792422-2216-4ead-aad4-c6ebcb45c77f` was submitted for public release and is awaiting public repository synchronization |
+| Central deployment | Both modules passed signing, upload, and Central validation; deployment `3b792422-2216-4ead-aad4-c6ebcb45c77f` reached `PUBLISHED` |
+| Public Maven artifacts | Downloaded ten primary artifacts across both modules from Maven Central; AAR contents match local publication artifacts, GPG signatures are valid, and POM / module coordinates are correct |
+| Independent Maven Central consumer | The temporary consumer resolved both 1.0.5 modules exclusively from Maven Central and passed the Release build, minification, and lint without a temporary Maven repository or `project(...)` dependencies |
 
-Central returned a warning that the organization's monthly `Release Count` limit was exceeded, with a reset date of **2026-12-01**. The public-release request was accepted, but the observed state remained `PUBLISHING` and neither module could be resolved from the public repository. This does not establish a successful release. Check the existing deployment and public repository before attempting recovery to avoid duplicate uploads.
+Central initially returned organization publishing-usage warnings. The final state was `PUBLISHED`, public artifacts were verified, and the warning changed to a grace period through **2026-12-16**. Before future releases, maintainers should review organization usage to avoid quota restrictions affecting publication.
 
 SHA-256 of this round's Demo Release APK:
 
@@ -104,4 +106,4 @@ SHA-256 of this round's Demo Release APK:
 0826d6f8b13839ecd4ca8205450df6a2bc8e3e33e99dc0c9cb5a1e8c4dfe3c30
 ```
 
-Still pending: confirm the final Central publication state and independently resolve the artifacts from Maven Central, then switch public installation examples. Device testing covered the Android 13 and Android 16 devices above, not other models or Android versions. Release JVM tests and `assembleRelease` do not replace actual execution; successful signing, upload, and validation do not establish public artifact availability.
+Device testing covered the Android 13 and Android 16 devices above, not other models or Android versions. Release JVM tests and `assembleRelease` do not replace actual execution. Public installation examples now consistently use 1.0.5.

@@ -11,7 +11,7 @@
 
 例如，代码需要 `"data":{"id":1}`，接口偶尔却返回 `"data":[]`。原生 Gson 可能让整次解析失败；GsonSafeParser 会尽量隔离到 `data`，并提供事件告诉你哪里出了问题。
 
-**现在安装：使用下面的 1.0.4。** 当前源码已准备为 [1.0.5 候选版](docs/release-notes-1.0.5.md)，但尚未发布到 Maven Central；新修复不包含在 1.0.4 中。
+**当前稳定版：1.0.5，已发布到 Maven Central。** 按下面的步骤添加依赖；从旧版本升级时，先查看 [1.0.5 发布说明](docs/release-notes-1.0.5.md)中的行为变化和迁移建议。
 
 ## 1. 添加依赖，只选一种
 
@@ -23,7 +23,7 @@
 
 ```kotlin
 dependencies {
-    implementation("io.github.logan0817:gson-safe-parser-core:1.0.4")
+    implementation("io.github.logan0817:gson-safe-parser-core:1.0.5")
 }
 ```
 
@@ -31,7 +31,7 @@ dependencies {
 
 ```kotlin
 dependencies {
-    implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.4")
+    implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.5")
 }
 ```
 
@@ -161,7 +161,7 @@ val gson = GsonBuilder()
 | 对象、集合或 Map 字段的结构与模型不符 | 尽量只处理当前字段；字段有构造默认值时优先保留，无法安全恢复时仍可能失败。 |
 | `Int`、`Boolean`、`String` 等基础值不合法 | 默认交回 Gson，仍可能抛异常。需要容错时先看[配置说明](docs/configuration.md)，再决定是否开启安全基础值解析。 |
 | 顶层需要对象却收到数组或数字 | 通常返回 `null`，不会凭空生成完整业务对象。调用方仍要处理空值。 |
-| JSON 损坏、自定义 Adapter 抛错、请求失败或取消 | 属于应当暴露的错误；库不承诺把它们转成默认值。1.0.4 的已知修复见下方版本说明。 |
+| JSON 损坏、自定义 Adapter 抛错、请求失败或取消 | 属于应当暴露的错误；库不承诺把它们转成默认值。具体边界见下方版本说明。 |
 | Retrofit 收到空响应体 | 默认普通业务模型返回 `null`；`Unit` / `Void` 由 Retrofit 内置转换器处理。具体边界见[排障指南](docs/troubleshooting.md#1-retrofit-空响应)。 |
 
 对象和数组也不会默认相互转换。确实需要“数组取第一个对象”或“对象包装成单元素集合”时，再看[形态转换配置](docs/configuration.md)和[支持范围](docs/mismatch-capability-matrix.md)。
@@ -183,10 +183,9 @@ val gson = GsonBuilder()
 
 版本与修复记录：
 
-- [1.0.4 发布说明](docs/release-notes-1.0.4.md)：上面依赖示例对应的版本。
-- [1.0.5 候选版说明](docs/release-notes-1.0.5.md)：本地候选产物、修复内容和升级注意事项，尚未公开发布。
+- [1.0.5 发布说明](docs/release-notes-1.0.5.md)：上面依赖示例对应的版本，包含修复内容、升级注意事项和实际验证记录。
 - [CHANGELOG](CHANGELOG.md)：包含历史版本与尚未发布的 `Unreleased` 修复。
-- 当前源码的语法边界、容器逐项恢复、Adapter 优先级及 Retrofit 可靠性修复属于待发布的 1.0.5。使用 1.0.4 的项目应先用真实响应验证，发布后再按版本说明升级。
+- 1.0.5 已包含语法边界、容器逐项恢复、Adapter 优先级及 Retrofit 可靠性修复；从 1.0.4 或更早版本升级时，请按发布说明用真实响应回归验证。
 
 ## 致谢与许可
 

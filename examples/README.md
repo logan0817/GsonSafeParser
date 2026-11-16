@@ -6,7 +6,7 @@
 
 安装仓库应放在哪里、依赖如何选择，先看[快速开始](../docs/getting-started.md#1-添加依赖)：在 `settings.gradle.kts` 中确认 `mavenCentral()`，在 `app/build.gradle.kts` 中只选择 core 或 retrofit 一种依赖并同步 Gradle。Retrofit 已传递依赖 core。
 
-本文基本用法适用于已发布的 **1.0.4**。当前源码的新稳定性修复记录在 [Unreleased](../CHANGELOG.md#unreleased)，不要把源码测试结果视为 Maven 1.0.4 的修复承诺。
+本文基本用法适用于已发布的 **1.0.5**。修复内容和升级注意事项见 [1.0.5 发布说明](../docs/release-notes-1.0.5.md)。
 
 ## 1. 按目标选择
 
@@ -20,7 +20,7 @@
 
 ## 2. 普通 Gson 最小示例
 
-只需要 `io.github.logan0817:gson-safe-parser-core:1.0.4`：
+只需要 `io.github.logan0817:gson-safe-parser-core:1.0.5`：
 
 ```kotlin
 import io.github.logan.gsonsafeparser.GsonSafeParser
@@ -71,7 +71,7 @@ fun main() {
 
 ## 4. Retrofit 最小示例
 
-只需要 `io.github.logan0817:gson-safe-parser-retrofit:1.0.4`。已有 `GsonConverterFactory.create(...)` 时，将其替换为 Safe 工厂，不要在同一 Retrofit 同时保留两个 Gson 工厂。
+只需要 `io.github.logan0817:gson-safe-parser-retrofit:1.0.5`。已有 `GsonConverterFactory.create(...)` 时，将其替换为 Safe 工厂，不要在同一 Retrofit 同时保留两个 Gson 工厂。
 
 ```kotlin
 import io.github.logan.gsonsafeparser.retrofit.GsonSafeConverterFactory

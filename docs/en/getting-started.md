@@ -2,7 +2,7 @@
 
 [中文](../getting-started.md)
 
-First run a field-mismatch example, then connect your application parsing. The examples below use the available **1.0.4** release. Stability fixes in the current source belong to the [unpublished 1.0.5 candidate](release-notes-1.0.5.md) and are not included in Maven's 1.0.4 artifacts.
+First run a field-mismatch example, then connect your application parsing. The examples below use **1.0.5**, available from Maven Central. Before upgrading, review behavior changes and migration guidance in the [release notes](release-notes-1.0.5.md).
 
 ## 1. Add a dependency
 
@@ -25,7 +25,7 @@ For manual Gson calls:
 
 ```kotlin
 dependencies {
-    implementation("io.github.logan0817:gson-safe-parser-core:1.0.4")
+    implementation("io.github.logan0817:gson-safe-parser-core:1.0.5")
 }
 ```
 
@@ -33,7 +33,7 @@ For Retrofit:
 
 ```kotlin
 dependencies {
-    implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.4")
+    implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.5")
 }
 ```
 

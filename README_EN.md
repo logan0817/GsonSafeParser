@@ -11,7 +11,7 @@
 
 For example, your model expects `"data":{"id":1}`, but an endpoint sometimes returns `"data":[]`. Native Gson may fail the entire parse. GsonSafeParser tries to isolate the problem to `data` and provides events that explain what happened.
 
-**To install now, use 1.0.4 below.** The current source targets the [1.0.5 release candidate](docs/en/release-notes-1.0.5.md), which has not been published to Maven Central. Its new fixes are not included in 1.0.4.
+**Current stable version: 1.0.5, available from Maven Central.** Follow the dependency setup below. Before upgrading, review behavior changes and migration guidance in the [1.0.5 release notes](docs/en/release-notes-1.0.5.md).
 
 ## 1. Add one dependency
 
@@ -23,7 +23,7 @@ Open the module file that will use the library, usually **`app/build.gradle.kts`
 
 ```kotlin
 dependencies {
-    implementation("io.github.logan0817:gson-safe-parser-core:1.0.4")
+    implementation("io.github.logan0817:gson-safe-parser-core:1.0.5")
 }
 ```
 
@@ -31,7 +31,7 @@ dependencies {
 
 ```kotlin
 dependencies {
-    implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.4")
+    implementation("io.github.logan0817:gson-safe-parser-retrofit:1.0.5")
 }
 ```
 
@@ -161,7 +161,7 @@ Keep your existing naming rules, adapters, and other settings, then continue usi
 | An object, collection, or Map field has the wrong JSON structure | Tries to isolate the affected field and preserve its constructed default. Parsing can still fail if recovery cannot be done safely. |
 | An `Int`, `Boolean`, `String`, or other basic value is invalid | Delegates to Gson, which may throw. Read [configuration](docs/en/configuration.md) before enabling safe primitive parsing. |
 | A root object is expected, but the response is an array or number | Usually returns `null` instead of inventing a complete business object. Callers must still handle null. |
-| JSON is damaged, a custom adapter throws, or a request fails or is cancelled | These errors should remain visible; the library does not promise to turn them into defaults. See the version notes below for known fixes to 1.0.4. |
+| JSON is damaged, a custom adapter throws, or a request fails or is cancelled | These errors should remain visible; the library does not promise to turn them into defaults. See the version notes below for the exact boundaries. |
 | Retrofit receives an empty body | Ordinary models return `null` by default; Retrofit handles `Unit` / `Void` through built-in converters. See [empty response rules](docs/en/troubleshooting.md#1-empty-retrofit-responses). |
 
 Objects and arrays are not converted into each other by default. If you need “take the first object from an array” or “wrap an object in a one-item collection,” read [shape-conversion configuration](docs/en/configuration.md) and the [supported cases](docs/en/mismatch-capability-matrix.md).
@@ -183,10 +183,9 @@ Objects and arrays are not converted into each other by default. If you need “
 
 Versions and fixes:
 
-- [1.0.4 release notes](docs/en/release-notes-1.0.4.md): the version used by the dependency examples above.
-- [1.0.5 candidate notes](docs/en/release-notes-1.0.5.md): local candidate artifacts, fixes, and migration guidance; not yet publicly released.
+- [1.0.5 release notes](docs/en/release-notes-1.0.5.md): the version used by the dependency examples above, including fixes, migration guidance, and verification records.
 - [CHANGELOG](CHANGELOG.md): previous versions and fixes that have not been published under `Unreleased`.
-- Syntax boundaries, item-level container recovery, adapter priority, and Retrofit reliability fixes in the current source target the unpublished 1.0.5 candidate. Validate real responses when using 1.0.4, then follow the release notes when upgrading after publication.
+- 1.0.5 includes syntax boundary, item-level container recovery, adapter priority, and Retrofit reliability fixes. Regress real responses against the release notes when upgrading from 1.0.4 or earlier.
 
 ## Credits and license
 

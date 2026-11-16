@@ -1,14 +1,14 @@
-# 1.0.5 发布说明（候选版）
+# 1.0.5 发布说明
 
 [English](en/release-notes-1.0.5.md)
 
-**状态：`1.0.5` 待发布。Maven Central 当前稳定版仍为 `1.0.4`。** 本文描述本次候选源码的变化，本地构建、测试或发布到临时仓库均不表示已经公开发布。
+**状态：`1.0.5` 已于 2026-11-16 发布到 Maven Central。** core 和 retrofit 的公开 AAR、POM、module metadata、sources、javadoc 均已下载核验；两个 AAR 与本地签名产物完全一致，GPG 签名验证通过。
 
 `1.0.5` 重点修复解析恢复、观察回调和 Retrofit 转换的可靠性问题。默认配置与依赖版本保持不变，但过去被错误吞掉的语法错误、被转换成假键的 Map 输入等行为会改变，升级前应覆盖下面的回归场景。
 
 ## 从 1.0.4 升级时需要关注
 
-| 场景 | 1.0.5 候选版行为与迁移建议 |
+| 场景 | 1.0.5 行为与迁移建议 |
 | --- | --- |
 | Map 键为空白或形状错误 | 数字 Map 的空白键不再变成 `0` 或 `null`；对象形式与数组 entry 形式都会跳过该条目。数组 entry 中内建 Adapter 无法接受的键形状也会跳过，不制造 `null` 键。显式 JSON `null` 键仍取决于目标 Map 和 Adapter 是否支持。不要依赖过去生成的假键。 |
 | 非法转义、截断 JSON | 语法错误向外抛出，不能靠字段或元素兜底转换成功；数组读取也不会反复重试无法读取的元素。调用方应沿用正常的解析失败处理。 |
@@ -54,9 +54,9 @@
 
 该接口不解析 JSON、不注册 Adapter、不改变严格性、不吞异常，也不负责关闭转换器的原始响应。普通业务继续使用现有入口；完整约定见 [API 参考](api-reference.md#6-观测与报告)。
 
-## 候选版坐标与本地验证
+## 依赖坐标与本地验证
 
-以下 `1.0.5` 坐标**仅用于正式发布后接入，或消费本地临时 Maven 仓库中的候选产物**。公开发布前，从 Maven Central 接入请继续使用 `1.0.4`。应用模块只选一个依赖；Retrofit 模块已传递依赖 core：
+以下 `1.0.5` 坐标已可从 Maven Central 接入。应用模块只选一个依赖；Retrofit 模块已传递依赖 core：
 
 ```kotlin
 dependencies {
@@ -94,9 +94,11 @@ git diff --cached --check
 | 漏洞扫描 | OSV Scanner 2.3.8 扫描 15 个运行时依赖，未报告漏洞 |
 | 远程发布任务图 | `releaseToMavenCentral --dry-run` 通过，仅检查任务图，未执行远程发布 |
 | 远端 CI | 提交 `21a0c64` 的 CI #25 全部通过，覆盖漏洞扫描、Debug / Release 单测、lint、构建及发布产物校验 |
-| Central 部署 | 两个模块完成签名、上传和 Central 校验；部署 `3b792422-2216-4ead-aad4-c6ebcb45c77f` 已提交公开发布，当前仍在等待公开仓库同步 |
+| Central 部署 | 两个模块完成签名、上传和 Central 校验；部署 `3b792422-2216-4ead-aad4-c6ebcb45c77f` 最终状态为 `PUBLISHED` |
+| 公开 Maven 产物 | 两个模块共 10 个主产物已从 Maven Central 下载；AAR 内容与本地发布产物一致，GPG 签名验证通过，POM / module 坐标正确 |
+| Maven Central 独立消费 | 临时消费工程仅从 Maven Central 解析两个 1.0.5 模块，Release 构建、混淆及 lint 通过；未使用临时 Maven 仓库或 `project(...)` |
 
-Central 在本轮返回组织月度 `Release Count` 超限警告，提示额度于 **2026-12-01** 重置。公开发布请求已受理，但检查时状态仍为 `PUBLISHING`，公开仓库尚不能解析两个模块；不能据此认定发布成功。后续应先检查现有部署与公开仓库状态，再决定是否需要恢复操作，避免重复上传。
+发布过程中 Central 曾返回组织月度额度警告。最终状态为 `PUBLISHED`，公开产物已核验；额度提示更新为宽限期至 **2026-12-16**。后续发布前维护者应检查组织用量，避免额度限制影响下一次发布。
 
 本轮 Demo Release APK 的 SHA-256：
 
@@ -104,4 +106,4 @@ Central 在本轮返回组织月度 `Release Count` 超限警告，提示额度�
 0826d6f8b13839ecd4ca8205450df6a2bc8e3e33e99dc0c9cb5a1e8c4dfe3c30
 ```
 
-仍待完成：确认 Central 最终发布状态并完成 Maven Central 独立解析验证，随后切换公开安装示例。实机覆盖上述 Android 13 与 Android 16 设备，不能视为其他机型或 Android 版本也已实测。Release JVM 单测和 `assembleRelease` 不能替代实际运行；签名、上传和校验通过也不代表公开依赖已经可用。
+实机覆盖上述 Android 13 与 Android 16 设备，不能视为其他机型或 Android 版本也已实测。Release JVM 单测和 `assembleRelease` 不能替代实际运行。公开安装示例已统一切换到 1.0.5。

@@ -6,7 +6,7 @@
 
 `CHANGELOG.md` 的 `Unreleased` 表示尚未发布的改动。发布前先确定目标版本，再统一更新构建版本、Demo 版本、依赖示例及中英文发布说明；不要把已有版本号或本地验证通过当成已经发布。
 
-当前目标为 **1.0.5 候选版**，Demo 为 `versionName 1.0.5` / `versionCode 6`。候选阶段 README 和快速开始仍给出已发布的 1.0.4 安装坐标；1.0.5 坐标及升级说明见[候选版说明](release-notes-1.0.5.md)。
+当前稳定版本为 **1.0.5**，Demo 为 `versionName 1.0.5` / `versionCode 6`。两个模块已发布到 Maven Central，公开安装文档使用 1.0.5 坐标；升级说明与验证记录见[发布说明](release-notes-1.0.5.md)。后续版本仍需完成本清单。
 
 ## 1. 发布前验证命令
 
